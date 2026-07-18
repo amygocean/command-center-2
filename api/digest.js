@@ -17,7 +17,8 @@ const PROJECTS = [
   ["1214196027560612", "New/Revamped Restaurant Training"],
   ["1216476678698201", "Academy WhatsApp"],
   ["1216637913085208", "Day to Day"],
-  ["1216638197844781", "Volume Drivers"]
+  ["1216638197844781", "Volume Drivers"],
+  ["1213806179626680", "Store Visits"]
 ];
 
 export default async function handler(req, res) {

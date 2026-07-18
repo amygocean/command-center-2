@@ -34,10 +34,6 @@ const DEMO_TASKS = [
   _mk(CC_PROJECT,"Shoot Day 15 – Upselling scenarios FOH",{section:SEC.shoot,due:_d(24),assignee:"u-jess",
     notes:"Roleplay clips for the upselling course. Need 2 waiters + manager."}),
   _mk(CC_PROJECT,"Shoot Day 13 – Winter wrap-up",{section:SEC.shoot,due:_d(-9),done:true}),
-  // prep kit for shoot 15 (partially done)
-  _mk(CC_PROJECT,"「prep」 Lock the shot list — what are we actually filming? — Shoot Day 15 – Upselling scenarios FOH",{section:SEC.plan,due:_d(10),assignee:"u-amy",done:true}),
-  _mk(CC_PROJECT,"「prep」 Confirm recipes / source material received & verified — Shoot Day 15 – Upselling scenarios FOH",{section:SEC.plan,due:_d(12),assignee:"u-jess"}),
-  _mk(CC_PROJECT,"「prep」 Draft the supplier brief (✨ Studio can help) — Shoot Day 15 – Upselling scenarios FOH",{section:SEC.plan,due:_d(14),assignee:"u-amy"}),
   // planned content
   _mk(CC_PROJECT,"Edit brief: Mojito + Lemon & Mint Cooler clips",{section:SEC.plan,due:_d(2),assignee:"u-amy"}),
   _mk(CC_PROJECT,"Storyboard: Golden Crunch California Roll pop-ups",{section:SEC.plan,due:_d(4),assignee:"u-jess"}),
@@ -54,7 +50,8 @@ const DEMO_TASKS = [
   _mk("1214196027560535","Sushi course: chopstick plating reshoots list",{due:_d(15),assignee:"u-jess"}),
   _mk("1214196027560535","Wrong-answer analysis: menu quiz",{due:_d(-1),assignee:"u-amy"}),
   // ---- Revamp ----
-  _mk(REVAMP_PROJECT,"Store revamp: Menlyn reopening pack",{due:_d(11)}),
+  _mk(REVAMP_PROJECT,"Menlyn Park — new store",{due:_d(12)}),
+  _mk(REVAMP_PROJECT,"Ballito Junction — new store",{due:_d(27)}),
   // ---- Day to Day ----
   _mk(PB.proj,"Chase LMS provider re: completion bug",{section:SEC.day,due:_d(0),assignee:"u-cait"}),
   _mk(PB.proj,"Send OB Fit July report to EXCO",{section:SEC.day,due:_d(0),assignee:"u-jess"}),
@@ -76,22 +73,40 @@ const DEMO_TASKS = [
   // ---- Volume Drivers campaign board ----
   _mk("1216638197844781","Volume Drivers: upsell scripts v2",{due:_d(19),assignee:"u-cait"}),
   _mk("1216638197844781","Volume Drivers: leaderboard mechanics",{due:_d(26),assignee:"u-amy"}),
-  // ---- WhatsApp communities ----
-  _mk(WA_PROJECT,"Menu quiz Friday: win a spot prize 🏆",{section:SEC.foh1,due:_d(1),notes:"#purpose:course"}),
-  _mk(WA_PROJECT,"Menu quiz Friday: win a spot prize 🏆",{section:SEC.foh2,due:_d(1),notes:"#purpose:course"}),
-  _mk(WA_PROJECT,"Reminder: Summer Menu course closes Sunday",{section:SEC.mgmt,due:_d(2),notes:"#purpose:reminder"}),
-  _mk(WA_PROJECT,"Voice note: perfect plating in 40 seconds",{section:SEC.sushi,due:_d(3),notes:"#purpose:practice"}),
-  _mk(WA_PROJECT,"Shout-out: Zambezi crew smashed the incentive 🎉",{section:SEC.foh1,due:_d(0),notes:"#purpose:celebrate"}),
-  _mk(WA_PROJECT,"Poll: which station needs the next Skills Booster?",{section:SEC.boh,due:_d(4),notes:"#purpose:question"}),
-  _mk(WA_PROJECT,"Sauce ladle compliance — 3 common mistakes",{section:SEC.boh,due:_d(6),notes:"#purpose:practice"}),
-  _mk(WA_PROJECT,"Masterclass invite: coaching the new menu",{section:SEC.mgmt,due:_d(8),notes:"#purpose:info"}),
-  _mk(WA_PROJECT,"Winter menu recap sent ✓",{section:SEC.foh1,due:_d(-3),done:true,notes:"#purpose:info"}),
-  _mk(WA_PROJECT,"OB Fit check-in voice note",{section:SEC.sushi,due:_d(-1),done:true,notes:"#purpose:practice"}),
-  // deliberately busy day to show the 🔥 flag
-  _mk(WA_PROJECT,"Quiz teaser",{section:SEC.foh1,due:_d(5),notes:"#purpose:course"}),
-  _mk(WA_PROJECT,"Quiz round 1",{section:SEC.foh1,due:_d(5),notes:"#purpose:course"}),
-  _mk(WA_PROJECT,"Quiz round 2",{section:SEC.foh1,due:_d(5),notes:"#purpose:course"}),
-  _mk(WA_PROJECT,"Quiz winners announcement",{section:SEC.foh1,due:_d(5),notes:"#purpose:celebrate"})
+  // ---- WhatsApp Academy: the software board ----
+  _mk(WA_PROJECT,"Learners in Cyprus can't open module 3 videos",{due:_d(-11),assignee:"u-jess"}),
+  _mk(WA_PROJECT,"Completion data not syncing for two stores",{due:_d(-4),assignee:"u-jess"}),
+  _mk(WA_PROJECT,"Request: add Bar/Deli role to menu navigation",{due:_d(3)}),
+  // ---- X Force bugs board ----
+  _mk(BUGS_PROJECT,"Quiz score shows 0% when learner passes on retry",{due:_d(-18)}),
+  _mk(BUGS_PROJECT,"Certificates render with wrong store name",{due:_d(-6)}),
+  _mk(BUGS_PROJECT,"Menu button unresponsive on older Androids",{due:_d(-2)}),
+  // ---- trainer visits board ----
+  _mk(VISITS_PROJECT,"Menlyn Park — opening training",{due:_d(9),assignee:"u-cait",notes:"trainer: Cameron"}),
+  _mk(VISITS_PROJECT,"Gateway — follow-up visit",{due:_d(4),notes:"trainer: Charlotte"}),
+  _mk(VISITS_PROJECT,"Canal Walk — assessment visit",{due:_d(16),notes:"trainer: Norman"}),
+  _mk(VISITS_PROJECT,"Zambezi — training visit",{due:_d(-40),done:true,notes:"trainer: Given"}),
+  _mk(VISITS_PROJECT,"Eastgate — training visit",{due:_d(-300),done:true,notes:"trainer: Mandla"}),
+  _mk(VISITS_PROJECT,"Sea Point — training visit",{due:_d(-260),done:true,notes:"trainer: Tebogo"}),
+  // ---- community messages (the new board) ----
+  _mk("demo-msg","Menu quiz Friday: win a spot prize 🏆",{section:SEC.foh1,due:_d(1),notes:"#purpose:course"}),
+  _mk("demo-msg","Menu quiz Friday: win a spot prize 🏆",{section:SEC.foh2,due:_d(1),notes:"#purpose:course"}),
+  _mk("demo-msg","Reminder: Summer Menu course closes Sunday",{section:SEC.mgmt,due:_d(2),notes:"#purpose:reminder"}),
+  _mk("demo-msg","Voice note: perfect plating in 40 seconds",{section:SEC.sushi,due:_d(3),notes:"#purpose:practice"}),
+  _mk("demo-msg","Shout-out: Zambezi crew smashed the incentive 🎉",{section:SEC.foh1,due:_d(0),notes:"#purpose:celebrate"}),
+  _mk("demo-msg","Poll: which station needs the next Skills Booster?",{section:SEC.boh,due:_d(4),notes:"#purpose:question"}),
+  _mk("demo-msg","Sauce ladle compliance — 3 common mistakes",{section:SEC.boh,due:_d(6),notes:"#purpose:practice"}),
+  _mk("demo-msg","Masterclass invite: coaching the new menu",{section:SEC.mgmt,due:_d(8),notes:"#purpose:info"}),
+  _mk("demo-msg","Winter menu recap sent ✓",{section:SEC.foh1,due:_d(-3),done:true,notes:"#purpose:info"}),
+  _mk("demo-msg","Quiz teaser",{section:SEC.foh1,due:_d(5),notes:"#purpose:course"}),
+  _mk("demo-msg","Quiz round 1",{section:SEC.foh1,due:_d(5),notes:"#purpose:course"}),
+  _mk("demo-msg","Quiz round 2",{section:SEC.foh1,due:_d(5),notes:"#purpose:course"}),
+  _mk("demo-msg","Quiz winners announcement",{section:SEC.foh1,due:_d(5),notes:"#purpose:celebrate"}),
+  // ---- Amy's PR pipeline ----
+  _mk("demo-pr","Pitch: CLO magazine — WhatsApp-first frontline learning",{section:{gid:"pr-1",name:"Pitched"}}),
+  _mk("demo-pr","Jess speaker one-pager + photos",{section:{gid:"pr-2",name:"In progress"}}),
+  _mk("demo-pr","HR Indaba CFP — From Courses to Capability",{section:{gid:"pr-0",name:"Idea"}}),
+  _mk("demo-pr","L&D podcast guest spot (delivered June)",{section:{gid:"pr-3",name:"Delivered"}})
 ];
 
 // Curriculum board
@@ -107,7 +122,15 @@ async function demoCall(tool,args){
     case "get_tasks":
       if(args.project===CURRICULUM_PROJECT) return {data:DEMO_CURRICULUM};
       return {data:DEMO_TASKS.filter(t=>t._proj===args.project).map(t=>({...t}))};
-    case "get_project": return {data:{name:"Demo board",sections:[SEC.mgmt,SEC.foh1,SEC.foh2,SEC.boh,SEC.sushi].map(s=>({gid:s.gid,name:s.name}))}};
+    case "get_project": {
+      if(args.project_id==="demo-pr") return {data:{name:"PR & Positioning",sections:[["pr-0","Idea"],["pr-1","Pitched"],["pr-2","In progress"],["pr-3","Delivered"]].map(([g,n])=>({gid:g,name:n}))}};
+      return {data:{name:"Demo board",sections:[SEC.mgmt,SEC.foh1,SEC.foh2,SEC.boh,SEC.sushi].map(s=>({gid:s.gid,name:s.name}))}};
+    }
+    case "get_my_tasks": {
+      const mt=DEMO_MYTASKS[args.person]||[];
+      if(args.completed_since) return {data:DEMO_DONE[args.person]||[]};
+      return {data:mt};
+    }
     case "get_task": {
       const t=DEMO_TASKS.find(x=>x.gid===args.task_id)||{};
       return {data:{notes:t.notes||"",comments:[{text:"Looks great — let's lock it in 🎬",created_at:new Date().toISOString(),created_by:{name:"Jessica Pallister"}}]}};
@@ -135,7 +158,11 @@ async function demoCall(tool,args){
       return {data:{}};
     }
     case "create_section": return {data:{gid:"s-new-"+Date.now(),name:args.name}};
-    case "create_project": return {data:{gid:"demo-proj-"+Date.now(),name:args.name}};
+    case "create_project": {
+      const gid="demo-proj-"+Date.now();
+      const made=(args.sections||[]).map((sc,i)=>({gid:gid+"-s"+i,name:sc.sectionName}));
+      return {data:{gid,name:args.name,sections_created:{succeeded:made}}};
+    }
     case "add_comment": return {data:{}};
     default: return {data:[]};
   }
@@ -155,4 +182,47 @@ async function demoAI(prompt){
   if(/WhatsApp community activity/i.test(prompt))
     return "TL;DR: Lively week in this community — the menu quiz drove the most replies, and three crew members asked the same question about the new futomaki prep.\n\nThemes:\n• Confusion: cucumber vs zucchini swap (asked 3×)\n• High energy on the quiz + prize\n• Two stores asked for the plating video link again\n\nNeeds action:\n• Post a pinned answer on the futomaki swap\n• Re-share the plating video link\n\nVibe: engaged and upbeat 🔥";
   return "• Film a 40-second 'perfect plate' hero clip for each reworked dish, pop-up text on every swapped ingredient\n• Upselling side-by-side: same table, two takes — scripted vs natural, crew vote on which lands\n• 15-second teaser for WhatsApp: 'guess what changed on this plate' with Friday reveal";
+}
+
+
+/* ---- demo My Tasks (per girl) ---- */
+function _mt(name,due,project){ return {gid:"mt-"+(_dgid++),name,due_on:due||null,completed:false,notes:"",permalink_url:"https://app.asana.com/demo",projects:[{name:project||"Content & Comms"}]}; }
+const DEMO_MYTASKS={
+  amy:[
+    _mt("Edit brief: Mojito + Lemon & Mint Cooler clips",_d(2)),
+    _mt("Send OB Fit July report to EXCO",_d(0),"Day to Day"),
+    _mt("Upload new recipes from culinary email",_d(1),"Day to Day"),
+    _mt("Book studio lights for Shoot Day 14",_d(2),"Day to Day"),
+    _mt("Speaker website wireframe",_d(9),"PR"),
+    _mt("Placeholder: quarterly planning doc",null,"Day to Day"),
+    _mt("Order teleprompter stand",null,"Day to Day")
+  ],
+  caitlin:[
+    _mt("Chase X Force re: completion bug",_d(0),"WhatsApp Academy"),
+    _mt("Queue next week's community messages",_d(1),"Community Messages"),
+    _mt("Allergen flashcards refresh",_d(8),"Menu Training"),
+    _mt("Volume Drivers: upsell scripts v2",_d(19),"Volume Drivers")
+  ],
+  jess:[
+    _mt("Storyboard: Golden Crunch pop-ups",_d(3)),
+    _mt("Approve trainer schedule for Menlyn opening",_d(4),"Store Visits"),
+    _mt("Manager Masterclass: coaching the new menu",_d(13)),
+    _mt("Fix duplicate learner records (Max)",_d(7),"Day to Day"),
+    _mt("Sushi course: chopstick plating reshoots",_d(15),"Menu Training")
+  ]
+};
+function _dn(name,daysAgo){ const d=new Date(); d.setDate(d.getDate()-daysAgo); return {gid:"dn-"+(_dgid++),name,completed:true,completed_at:d.toISOString()}; }
+const DEMO_DONE={
+  amy:[_dn("Winter Menu FOH course shipped",8),_dn("Q2 EXCO report delivered",35),_dn("Shoot Day 13 wrapped & delivered",9),_dn("OB Rewards launch comms",70)],
+  caitlin:[_dn("June community calendar executed",12),_dn("Menu quiz series (4 weeks)",20),_dn("X Force certificate bug chased to fix",28)],
+  jess:[_dn("Winter Menu sushi courses QA'd",11),_dn("Trainer onboarding pack",45),_dn("Max data health pass",18)]
+};
+
+function demoPitch(){
+  return {picks:[
+    {outlet:"Chief Learning Officer",type:"publication",url:"https://example.com/clo",angle:"How a 3-person team trains 2,000 frontline workers through WhatsApp",why:"Runs frontline-learning features monthly"},
+    {outlet:"The Learning & Development Podcast",type:"podcast",url:"https://example.com/ldpod",angle:"From Courses to Capability — Jess on deskless learning that reaches the floor",why:"Host actively booking S2 guests"},
+    {outlet:"HR Future (SA)",type:"publication",url:"https://example.com/hrfuture",angle:"December-readiness: how OB makes crew peak-fit",why:"SA audience, loves franchise stories"},
+    {outlet:"ATD International Conference CFP",type:"conference",url:"https://example.com/atd",angle:"WhatsApp as an LMS: inclusive learning for multilingual crews",why:"CFP closes next month"}
+  ]};
 }

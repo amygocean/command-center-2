@@ -285,7 +285,7 @@ function purposeOf(t){
 
 /* ---- write-backs ---- */
 async function reschedule(gid,dateStr){
-  const t=state.tasks.find(x=>x.gid===gid); if(!t) return;
+  const t=findTask(gid); if(!t) return;
   const prev=t.due; t.due=dateStr; renderCalendar(); renderPeople(); renderCommunities();
   try{ await call("update_tasks",{tasks:[{task:gid,due_on:dateStr}]}); toast("Rescheduled → "+dateStr); renderGreeting(); }
   catch(e){ t.due=prev; renderCalendar(); toast("Failed: "+e.message); }
@@ -301,7 +301,7 @@ async function reassign(gid,personGid){
   }catch(e){ t.assignee=prev; renderPeople(); toast("Failed: "+e.message); }
 }
 async function toggleDone(gid,val){
-  const t=state.tasks.find(x=>x.gid===gid); if(!t) return;
+  const t=findTask(gid); if(!t) return;
   t.completed=val; renderAll();
   if(val){ if(t.isComms){ confetti(); toast(pick(SENT_LINES)); } else { toast(pick(DONE_LINES)); if(t.isShoot) confetti(); } }
   else toast("Back in play");
@@ -466,7 +466,8 @@ function moveTabInk(){
 
 function renderAll(){
   renderSub(); renderGreeting(); renderChips(); renderPersonToggles();
-  renderCalendar(); renderPeople(); renderStudio(); renderCommunities();
+  renderCalendar(); renderGirls(); renderStudio(); renderCommunities();
+  renderStores(); renderPlatform(); prTabVisibility(); renderMentionBadge();
   computeSuggestions();
 }
 
@@ -479,6 +480,9 @@ async function init(){
   document.getElementById("btnSettings").onclick=openSettings;
   document.getElementById("btnCampaign").onclick=openCampaign;
   document.getElementById("btnTray").onclick=()=>toggleTray();
+  document.getElementById("btnAt").onclick=()=>openMentions();
+  const prTab=document.querySelector('[data-tab="pr"]');
+  if(prTab) prTab.addEventListener("click",()=>loadPr());
   document.getElementById("btnGenIdeas").onclick=()=>generateAllUpcoming();
   document.getElementById("btnFriday").onclick=openFriday;
   document.getElementById("showDone").onchange=e=>{ state.showDone=e.target.checked; renderAll(); };
@@ -495,7 +499,10 @@ async function init(){
     state.me = {gid:"u-amy", name:"Amy Gray"};
     cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));   // in-memory only — don't touch saved config
     cfg.people = ["u-amy","u-cait","u-jess"];
+    cfg.msgBoard = "demo-msg";
+    cfg.prBoard = "demo-pr";
     saveCfg = ()=>{};
+    GIRLS[0].gid="u-amy"; GIRLS[1].gid="u-cait"; GIRLS[2].gid="u-jess";
     document.getElementById("loginGate").style.display="none";
     document.getElementById("app").style.display="";
     loadAll(); requestAnimationFrame(moveTabInk);

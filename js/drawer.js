@@ -3,7 +3,7 @@
    ================================================================ */
 
 function openDrawer(gid){
-  const t=state.tasks.find(x=>x.gid===gid); if(!t) return;
+  const t=findTask(gid); if(!t) return;
   const w=document.getElementById("drawerWrap"), d=document.getElementById("drawer");
   const peopleOpts='<option value="unassigned">Unassigned</option>'+
     state.users.map(u=>'<option value="'+u.gid+'"'+(t.assignee&&t.assignee.gid===u.gid?" selected":"")+'>'+esc(u.name)+'</option>').join("");
@@ -27,18 +27,29 @@ function openDrawer(gid){
       '<button class="btn '+(t.completed?"ghost":"teal")+'" id="dDone">'+(t.completed?"Reopen":(t.isComms?"Sent ✓":"✓ Done"))+'</button>'+
       '<button class="btn ghost" id="dOpen">Asana ↗</button>'+
     '</div>'+
-    '<div class="cmts"><label>Comments</label><div id="dCmts" class="cmts-list"><span class="spin"></span></div>'+
-      '<div class="additem" style="margin-top:8px"><input id="dCmtInput" placeholder="Add a comment…"><button class="btn primary" id="dCmtBtn">Post</button></div></div>';
+    '<div class="cmts"><label>Comments — type @ to mention anyone</label><div id="dCmts" class="cmts-list"><span class="spin"></span></div>'+
+      '<div class="additem" style="margin-top:8px;position:relative"><input id="dCmtInput" placeholder="Add a comment… use @ to mention" autocomplete="off">'+
+      '<div id="atDrop" class="at-drop" style="display:none"></div>'+
+      '<button class="btn primary" id="dCmtBtn">Post</button></div></div>';
   w.style.display="block"; requestAnimationFrame(()=>w.classList.add("open"));
   loadTaskDetail(gid);
+  wireMentionInput(d.querySelector("#dCmtInput"), d.querySelector("#atDrop"));
   d.querySelector("#dCmtBtn").onclick=async()=>{
     const inp=d.querySelector("#dCmtInput"), txt=inp.value.trim(); if(!txt) return;
     const b=d.querySelector("#dCmtBtn"); b.disabled=true;
-    try{ await call("add_comment",{task_id:gid,text:txt}); inp.value=""; toast("Comment added"); loadTaskDetail(gid); }
+    try{
+      const {html,hasMentions,mentioned}=buildMentionHtml(txt);
+      if(hasMentions) await call("add_comment",{task_id:gid,text:html,html:true});
+      else await call("add_comment",{task_id:gid,text:txt});
+      logMentions(mentioned, t);
+      inp.value=""; toast("Comment added"); loadTaskDetail(gid);
+    }
     catch(e){ toast("Failed: "+e.message); }
     b.disabled=false;
   };
-  d.querySelector("#dCmtInput").onkeydown=e=>{ if(e.key==="Enter") d.querySelector("#dCmtBtn").click(); };
+  d.querySelector("#dCmtInput").onkeydown=e=>{
+    if(e.key==="Enter" && document.getElementById("atDrop").style.display==="none") d.querySelector("#dCmtBtn").click();
+  };
   d.querySelector("#dProject").onchange=async(e)=>{
     const proj=e.target.value, wrap=d.querySelector("#dSecWrap"), sel=d.querySelector("#dSection");
     if(proj===t.projectGid){ wrap.style.display="none"; return; }
@@ -283,4 +294,101 @@ function openCampaign(){
       }catch(e){ btn.disabled=false; btn.textContent="Create it all in Asana"; toast("Failed: "+e.message); }
     };
   };
+}
+
+
+/* ================================================================
+   @MENTIONS — real Asana mentions from the comment box.
+   Tokens look like @[Name](gid) while typing; on post they become
+   Asana rich-text mentions, and the girls get an in-app badge.
+   ================================================================ */
+function wireMentionInput(inp, drop){
+  if(!inp||!drop) return;
+  let matches=[];
+  const close=()=>{ drop.style.display="none"; matches=[]; };
+  inp.addEventListener("input",()=>{
+    const caret=inp.selectionStart;
+    const before=inp.value.slice(0,caret);
+    const m=before.match(/@([\w ]{0,20})$/);
+    if(!m){ close(); return; }
+    const q=m[1].toLowerCase();
+    matches=state.users.filter(u=>u.name.toLowerCase().includes(q)).slice(0,6);
+    if(!matches.length){ close(); return; }
+    drop.innerHTML=matches.map((u,i)=>'<div class="at-opt'+(i===0?" on":"")+'" data-gid="'+u.gid+'">'+esc(u.name)+'</div>').join("");
+    drop.style.display="block";
+    drop.querySelectorAll(".at-opt").forEach(el=>el.onmousedown=e=>{
+      e.preventDefault();
+      pickMention(inp, el.dataset.gid, m[1].length);
+      close();
+    });
+  });
+  inp.addEventListener("keydown",e=>{
+    if(drop.style.display==="none") return;
+    const opts=[...drop.querySelectorAll(".at-opt")];
+    let ix=opts.findIndex(o=>o.classList.contains("on"));
+    if(e.key==="ArrowDown"){ e.preventDefault(); opts[ix]&&opts[ix].classList.remove("on"); opts[(ix+1)%opts.length].classList.add("on"); }
+    else if(e.key==="ArrowUp"){ e.preventDefault(); opts[ix]&&opts[ix].classList.remove("on"); opts[(ix-1+opts.length)%opts.length].classList.add("on"); }
+    else if(e.key==="Enter"||e.key==="Tab"){
+      e.preventDefault();
+      const on=opts.find(o=>o.classList.contains("on"))||opts[0];
+      const q=(inp.value.slice(0,inp.selectionStart).match(/@([\w ]{0,20})$/)||["",""])[1];
+      pickMention(inp, on.dataset.gid, q.length);
+      close();
+    }
+    else if(e.key==="Escape") close();
+  });
+  inp.addEventListener("blur",()=>setTimeout(close,150));
+}
+function pickMention(inp, gid, qLen){
+  const u=state.users.find(x=>x.gid===gid); if(!u) return;
+  const caret=inp.selectionStart;
+  const token="@["+u.name+"]("+gid+") ";
+  inp.value=inp.value.slice(0,caret-qLen-1)+token+inp.value.slice(caret);
+  inp.focus();
+  const pos=caret-qLen-1+token.length;
+  inp.setSelectionRange(pos,pos);
+}
+function buildMentionHtml(txt){
+  const mentioned=[];
+  let hasMentions=false;
+  const html=esc(txt).replace(/@\[([^\]]+)\]\((\d+)\)/g,(_,name,gid)=>{
+    hasMentions=true; mentioned.push({gid,name});
+    return '<a data-asana-gid="'+gid+'"/>';
+  });
+  return {html,hasMentions,mentioned};
+}
+function logMentions(mentioned, task){
+  if(!mentioned||!mentioned.length) return;
+  const girls=mentioned.filter(m=>GIRLS.some(g=>g.gid===m.gid));
+  if(!girls.length) return;
+  girls.forEach(m=>{
+    state.keeper.mentions.unshift({to:m.gid, from:(state.me&&state.me.name)||"someone",
+      taskGid:task.gid, taskName:task.name, at:new Date().toISOString()});
+  });
+  state.keeper.mentions=state.keeper.mentions.slice(0,50);
+  saveKeeper(); renderMentionBadge();
+}
+function myMentions(){
+  if(!state.me) return [];
+  return (state.keeper.mentions||[]).filter(m=>m.to===state.me.gid ||
+    (DEMO && state.me.gid==="u-amy" && m.to===GIRLS[0].gid));
+}
+function renderMentionBadge(){
+  const b=document.getElementById("atBadge"); if(!b) return;
+  const seen=localStorage.getItem("ob_at_seen")||"";
+  const unseen=myMentions().filter(m=>m.at>seen).length;
+  b.textContent=unseen; b.style.display=unseen?"flex":"none";
+}
+function openMentions(){
+  const list=myMentions();
+  localStorage.setItem("ob_at_seen", new Date().toISOString());
+  renderMentionBadge();
+  showModal('<h2>Mentions</h2>'+
+    (list.length?list.slice(0,15).map(m=>'<div class="f-row" data-gid="'+m.taskGid+'">'+
+      '<span>'+esc(m.from)+' mentioned you on <b>'+esc(m.taskName)+'</b></span>'+
+      '<span class="f-meta">'+new Date(m.at).toLocaleDateString()+'</span></div>').join("")
+    :'<div class="empty">No mentions yet. Very peaceful.</div>')+
+    '<div class="drawer-actions"><button class="btn ghost" data-close>Close</button></div>');
+  wireModalClose();
+  document.querySelectorAll("#modal .f-row[data-gid]").forEach(r=>r.onclick=()=>{ closeModal(); openDrawer(r.dataset.gid); });
 }
