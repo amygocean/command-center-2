@@ -8,7 +8,7 @@ function occasionsNear(date,win){
   return [...asana,...app].filter(o=>Math.abs((o.d-date)/864e5)<=win).sort((a,b)=>a.d-b.d);
 }
 
-let studioAll=false;   // false = only the next 3 shoots; true = everything incl. past
+let studioAll=false;   // false = only the next upcoming shoot; true = every future and past shoot
 function shootMeta(s){
   const loc=(s.notes||"").match(/(?:^|\n)📍\s*(.+)/);
   const tm=(s.notes||"").match(/(?:^|\n)🕐\s*(.+)/);
@@ -28,9 +28,10 @@ function renderStudio(){
     box.innerHTML='<div class="empty">No shoot days on the radar. Hit <b>+ Add shoot</b> and let\'s roll 🎬</div>';
     renderShootTodos(); renderEvents(); renderBriefs(); wireStudioAdd(); return;
   }
-  const shown = studioAll ? [...upcoming, ...past] : upcoming.slice(0,3);
-  const hiddenCount = studioAll ? 0 : Math.max(0,upcoming.length-3)+past.length;
-  let html="";
+  const collapsedCount=upcoming.length?1:0;
+  const shown=studioAll?[...upcoming,...past]:upcoming.slice(0,1);
+  const hiddenCount=studioAll?0:Math.max(0,upcoming.length-1)+past.length;
+  let html=!studioAll&&!upcoming.length?'<div class="empty">No upcoming shoot days. Choose <b>Show more</b> to see previous shoots.</div>':"";
   shown.forEach((s,i)=>{
     const d=pd(s.due), days=daysTo(s.due), isPast=days<0;
     const when=isPast?"":days===0?"today":days===1?"tomorrow!":"in "+days+" days";
@@ -54,7 +55,7 @@ function renderStudio(){
     '</div>';
   });
   html += studioAll
-    ? (allShoots.length>3?'<button class="btn ghost sm view-more" id="studioLess">Show fewer</button>':'')
+    ? (allShoots.length>collapsedCount?'<button class="btn ghost sm view-more" id="studioLess">Show only the next shoot</button>':'')
     : (hiddenCount>0?'<button class="btn ghost sm view-more" id="studioMore">View more ('+hiddenCount+' more)</button>':'');
   box.innerHTML=html;
   box.querySelectorAll(".sc-open").forEach(b=>b.onclick=()=>openDrawer(b.dataset.gid));

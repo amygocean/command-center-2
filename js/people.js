@@ -10,6 +10,22 @@ function girlCfg(key){ return state.keeper.girls[key]; }
 function isMe(key){ const g=GIRLS.find(x=>x.key===key); return state.me && g && state.me.gid===g.gid; }
 function myKey(){ const g=GIRLS.find(x=>state.me && x.gid===state.me.gid); return g?g.key:null; }
 
+/* The Girls column widths are a local UI preference.  We store proportional
+   weights rather than pixels so the layout still adapts to another screen. */
+const GIRLS_LANE_SIZE_KEY="ob-girls-lane-sizes-v1";
+let girlsLaneSizes=(()=>{
+  try{ return JSON.parse(localStorage.getItem(GIRLS_LANE_SIZE_KEY)||"{}")||{}; }
+  catch(_){ return {}; }
+})();
+function girlLaneWeight(key){
+  const n=Number(girlsLaneSizes[key]);
+  return Number.isFinite(n)&&n>0?n:1;
+}
+function saveGirlLaneSizes(){
+  try{ localStorage.setItem(GIRLS_LANE_SIZE_KEY,JSON.stringify(girlsLaneSizes)); }
+  catch(_){ /* localStorage can be unavailable in strict/private browsers */ }
+}
+
 function visibleGirlTasks(key){
   const gc=girlCfg(key);
   return state.myTasks[key].filter(t=>{
@@ -91,21 +107,22 @@ function renderGirls(){
     if(err==="no_pat") body='<div class="empty" style="padding:30px 8px">Not connected yet.<br>Add <b>'+g.key.toUpperCase()+'_PAT</b> in Vercel → redeploy, and '+esc(g.name)+"'s My Tasks appear here.</div>";
     else if(err) body='<div class="empty">Couldn\'t load: '+esc(err)+'</div>';
 
-    html+='<div class="lane glane" data-key="'+g.key+'">'+
+    html+='<div class="lane glane" data-key="'+g.key+'" data-resize-key="'+g.key+'" style="--lane-weight:'+girlLaneWeight(g.key)+'">'+
       '<div class="lane-h"><span class="avatar" style="--hue:'+(GIRLS.indexOf(g)*70)+'">'+g.name[0]+g.name[1].toUpperCase()+'</span>'+
       '<span class="nm">'+esc(g.name)+'</span>'+
       '<button class="lmode" data-addsec="'+g.key+'">+ section</button>'+
       '<span class="ct">'+all.filter(t=>!gc.hidden.includes(t.gid)).length+'</span></div>'+
       '<div class="lane-body">'+body+
       '<div class="qadd"><input class="qadd-name" data-key="'+g.key+'" placeholder="+ quick task…">'+
-      '<button class="qadd-btn" data-key="'+g.key+'">Add</button></div></div></div>';
+      '<button class="qadd-btn" data-key="'+g.key+'">Add</button></div></div>'+
+      '<button class="lane-resizer" type="button" aria-label="Resize '+esc(g.name)+' task column" title="Drag to resize · double-click to reset"></button></div>';
   });
 
   // unassigned pool from the boards — only in "Everyone" view
   const pool=girlsFocus?[]:state.tasks.filter(t=>!t.assignee && !t.completed &&
     !t.isOccasion&&!t.isNote&&!t.isPassion&&!t.isKeeper&&!t.isShot&&!t.isBrief&&
     !t.isComms&&!t.isVisit&&!t.isOpening&&!t.isBug&&!t.isPlaceholder);
-  if(!girlsFocus) html+='<div class="lane glane pool"><div class="lane-h"><span class="nm">Up for grabs</span><span class="ct">'+pool.length+'</span></div>'+
+  if(!girlsFocus) html+='<div class="lane glane pool" data-resize-key="pool" style="--lane-weight:'+girlLaneWeight("pool")+'"><div class="lane-h"><span class="nm">Up for grabs</span><span class="ct">'+pool.length+'</span></div>'+
     '<div class="lane-body"><p class="hint" style="margin:4px 0 8px">Unassigned on the boards — drag onto a girl to hand it out.</p>'+
     (pool.length?pool.slice(0,15).map(t=>
       '<div class="card gcard" draggable="true" data-gid="'+t.gid+'" data-pool="1">'+
@@ -113,7 +130,7 @@ function renderGirls(){
       '<div class="cmeta"><span class="dot" style="background:'+t.projectColor+'"></span>'+esc(t.projectName)+
       (t.due?'<span>'+pd(t.due).toDateString().slice(4,10)+'</span>':'')+'</div></div></div>').join("")
     :'<div class="empty">'+pick(EMPTY_LINES)+'</div>')+
-    '</div></div>';
+    '</div><button class="lane-resizer" type="button" aria-label="Resize the up for grabs column" title="Drag to resize · double-click to reset"></button></div>';
 
   board.innerHTML=html;
   wireGirls(board);
@@ -208,6 +225,96 @@ function wireGirls(board){
   });
   const tc=document.getElementById("btnTrophy");
   if(tc && !tc.dataset.wired){ tc.dataset.wired="1"; tc.onclick=openTrophy; }
+  wireGirlLaneResize(board);
+}
+
+/* Dragging one divider enlarges that lane while the remaining lanes give up
+   space proportionally.  Widths are saved as ratios, so rerendering a task or
+   resizing the browser does not throw the user's layout away. */
+function wireGirlLaneResize(board){
+  const handles=[...board.querySelectorAll(".lane-resizer")];
+  handles.forEach(handle=>{
+    const lane=handle.closest(".glane");
+    if(!lane || lane===board.lastElementChild){ handle.hidden=true; return; }
+
+    handle.onpointerdown=e=>{
+      if(window.matchMedia("(max-width: 960px)").matches) return;
+      e.preventDefault(); e.stopPropagation();
+
+      const lanes=[...board.querySelectorAll(".glane")];
+      const targetIndex=lanes.indexOf(lane);
+      if(targetIndex<0 || lanes.length<2) return;
+
+      const startX=e.clientX;
+      const startWidths=lanes.map(el=>el.getBoundingClientRect().width);
+      const minWidths=lanes.map(el=>{
+        const n=parseFloat(getComputedStyle(el).minWidth);
+        return Number.isFinite(n)?n:180;
+      });
+      const otherIndexes=lanes.map((_,i)=>i).filter(i=>i!==targetIndex);
+      const growCapacity=otherIndexes.reduce((sum,i)=>sum+Math.max(0,startWidths[i]-minWidths[i]),0);
+      const shrinkCapacity=Math.max(0,startWidths[targetIndex]-minWidths[targetIndex]);
+      const oldCursor=document.body.style.cursor;
+
+      lanes.forEach((el,i)=>{ el.style.flex="0 0 "+startWidths[i]+"px"; });
+      document.body.classList.add("lane-resize-active");
+      handle.classList.add("active");
+      handle.setPointerCapture(e.pointerId);
+
+      const move=ev=>{
+        const delta=Math.max(-shrinkCapacity,Math.min(growCapacity,ev.clientX-startX));
+        const next=[...startWidths];
+        next[targetIndex]=startWidths[targetIndex]+delta;
+
+        if(delta>0){
+          const capacities=otherIndexes.map(i=>Math.max(0,startWidths[i]-minWidths[i]));
+          const total=capacities.reduce((a,b)=>a+b,0)||1;
+          otherIndexes.forEach((i,j)=>{ next[i]=startWidths[i]-delta*(capacities[j]/total); });
+        }else if(delta<0){
+          const released=-delta;
+          const total=otherIndexes.reduce((sum,i)=>sum+startWidths[i],0)||1;
+          otherIndexes.forEach(i=>{ next[i]=startWidths[i]+released*(startWidths[i]/total); });
+        }
+
+        lanes.forEach((el,i)=>{ el.style.flexBasis=Math.max(minWidths[i],next[i])+"px"; });
+      };
+
+      const finish=()=>{
+        const finalWidths=lanes.map(el=>el.getBoundingClientRect().width);
+        const average=finalWidths.reduce((a,b)=>a+b,0)/finalWidths.length||1;
+        lanes.forEach((el,i)=>{
+          const key=el.dataset.resizeKey;
+          const weight=Math.max(.35,finalWidths[i]/average);
+          if(key) girlsLaneSizes[key]=Number(weight.toFixed(4));
+          el.style.removeProperty("flex");
+          el.style.setProperty("--lane-weight",weight);
+        });
+        saveGirlLaneSizes();
+        document.body.classList.remove("lane-resize-active");
+        document.body.style.cursor=oldCursor;
+        handle.classList.remove("active");
+        handle.removeEventListener("pointermove",move);
+        handle.removeEventListener("pointerup",finish);
+        handle.removeEventListener("pointercancel",finish);
+      };
+
+      handle.addEventListener("pointermove",move);
+      handle.addEventListener("pointerup",finish);
+      handle.addEventListener("pointercancel",finish);
+    };
+
+    handle.ondblclick=e=>{
+      e.preventDefault(); e.stopPropagation();
+      board.querySelectorAll(".glane").forEach(el=>{
+        const key=el.dataset.resizeKey;
+        if(key) delete girlsLaneSizes[key];
+        el.style.removeProperty("flex");
+        el.style.setProperty("--lane-weight",1);
+      });
+      saveGirlLaneSizes();
+      toast("Column widths reset");
+    };
+  });
 }
 
 async function assignToGirl(gid,key,fromPool){

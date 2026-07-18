@@ -33,23 +33,41 @@ function stepCursor(dir){
 }
 
 function renderChips(){
-  const box=document.getElementById("projectChips"); box.innerHTML="";
-  cfg.projects.forEach(p=>{
-    const c=document.createElement("span");
-    c.className="chip"+(p.on?"":" off");
-    c.innerHTML='<span class="dot" style="background:'+p.color+'"></span>'+esc(p.name);
-    c.onclick=()=>{ p.on=!p.on; saveCfg(); renderChips(); loadAll(); };
-    box.appendChild(c);
-  });
-  // layer toggles
-  const mk=(id,label,on,fn)=>{
-    const c=document.createElement("span");
-    c.className="chip layer"+(on?"":" off"); c.innerHTML=label;
-    c.onclick=fn; box.appendChild(c);
+  const box=document.getElementById("projectChips"); if(!box) return;
+  box.innerHTML='<div class="chip-group chip-project-group"><span class="chip-group-label">Projects</span><div class="chip-row" data-chip-row="projects"></div></div>'+
+    '<div class="chip-group chip-layer-group"><span class="chip-group-label">Layers</span><div class="chip-row" data-chip-row="layers"></div></div>';
+  const projectRow=box.querySelector('[data-chip-row="projects"]');
+  const layerRow=box.querySelector('[data-chip-row="layers"]');
+
+  const makeButton=(className,on,html,label,fn)=>{
+    const c=document.createElement("button");
+    c.type="button";
+    c.className=className+(on?"":" off");
+    c.setAttribute("aria-pressed",String(!!on));
+    c.setAttribute("aria-label",label);
+    c.innerHTML=html;
+    c.onclick=fn;
+    return c;
   };
-  mk("lc","💬 comms layer",cfg.showComms,()=>{ cfg.showComms=!cfg.showComms; saveCfg(); renderChips(); renderCalendar(); });
-  mk("lo","🎉 occasions",cfg.showOccasions,()=>{ cfg.showOccasions=!cfg.showOccasions; saveCfg(); renderChips(); renderCalendar(); });
-  mk("ls","stores & visits",cfg.showStores,()=>{ cfg.showStores=!cfg.showStores; saveCfg(); renderChips(); renderCalendar(); });
+
+  cfg.projects.forEach(p=>{
+    projectRow.appendChild(makeButton(
+      "chip project-chip",p.on,
+      '<span class="dot" style="background:'+p.color+'"></span><span>'+esc(p.name)+'</span>',
+      (p.on?"Hide ":"Show ")+p.name,
+      ()=>{ p.on=!p.on; saveCfg(); renderChips(); loadAll(); }
+    ));
+  });
+
+  const layer=(icon,label,on,fn)=>layerRow.appendChild(makeButton(
+    "chip layer",on,
+    '<span class="chip-icon" aria-hidden="true">'+icon+'</span><span>'+esc(label)+'</span>',
+    (on?"Hide ":"Show ")+label,
+    fn
+  ));
+  layer("💬","Comms",cfg.showComms,()=>{ cfg.showComms=!cfg.showComms; saveCfg(); renderChips(); renderCalendar(); });
+  layer("🎉","Occasions",cfg.showOccasions,()=>{ cfg.showOccasions=!cfg.showOccasions; saveCfg(); renderChips(); renderCalendar(); });
+  layer("📍","Stores & visits",cfg.showStores,()=>{ cfg.showStores=!cfg.showStores; saveCfg(); renderChips(); renderCalendar(); });
 }
 
 function renderPersonToggles(){
