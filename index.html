@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0A3D62">
+<title>Academy Command Center</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<!--
+  Ocean Basket Academy — Command Center v2 "Ocean Light"
+  ------------------------------------------------------------------
+  A live dashboard over Asana for the Academy crew (Amy, Caitlin, Jess).
+  Reads a configurable set of Asana projects on every load and writes
+  changes straight back.
+
+  MAP OF THE CODE (each file does one job):
+    styles.css          the "Ocean Light" design system
+    js/data.js          Asana ids, occasions, brief template, defaults
+    js/core.js          state, config, API plumbing, boot, greeting,
+                        suggestions tray, confetti
+    js/calendar.js      zoomable calendar (day → scrollable year)
+    js/people.js        crew lanes + shared priority ordering
+    js/content.js       Studio: shoots, prep kits, AI ideas & briefs
+    js/communities.js   WhatsApp planner, mini-cal, insights
+    js/drawer.js        task drawer + modals (add / settings / campaign)
+    js/friday.js        the Friday Huddle
+    js/demo.js          ?demo=1 canned data for previews & demos
+
+  All Asana calls go through POST /api/asana; AI through POST /api/ai.
+-->
+
+<!-- Login gate -->
+<div id="loginGate" class="gate" style="display:none">
+  <div class="logo">OB</div>
+  <h1>Academy Command Center</h1>
+  <p>Sign in with your Ocean Basket Asana account and the whole ocean opens up — live boards, the calendar, shoots and communities.</p>
+  <a class="btn glow" href="/api/auth/login" style="text-decoration:none;padding:13px 24px;font-size:15px">Sign in with Asana</a>
+</div>
+
+<div id="app">
+  <div id="toast" class="toast"></div>
+
+  <!-- ============ HEADER ============ -->
+  <header class="hdr">
+    <div class="hdr-title">
+      <div class="logo">OB</div>
+      <div>
+        <h1>Academy Command Center</h1>
+        <p id="sub">Waking up…</p>
+      </div>
+    </div>
+    <div class="hdr-actions">
+      <button class="btn ghost" id="btnTray" title="Suggestions">💡<span id="trayBadge"></span></button>
+      <button class="btn ghost" id="btnFriday" title="The Friday Huddle">Huddle</button>
+      <button class="btn ghost" id="btnCampaign" title="Add campaign">+ Campaign</button>
+      <button class="btn ghost" id="btnSettings" title="Settings">⚙︎</button>
+      <button class="btn primary" id="btnAdd">+ Add task</button>
+      <a class="btn ghost" id="btnSignout" href="/api/auth/logout" title="Sign out" style="text-decoration:none">↪</a>
+    </div>
+  </header>
+
+  <!-- suggestions tray -->
+  <div id="tray"><h3>The sidekick noticed…</h3><div id="trayList"></div></div>
+
+  <!-- ============ GREETING DECK ============ -->
+  <div id="greeting"></div>
+
+  <!-- ============ TABS ============ -->
+  <nav class="tabs">
+    <button class="tab active" data-tab="calendar">Calendar</button>
+    <button class="tab" data-tab="people">The Girls</button>
+    <button class="tab" data-tab="studio">Studio</button>
+    <button class="tab" data-tab="communities">Communities</button>
+    <button class="tab" data-tab="news">News</button>
+    <span id="tabInk"></span>
+  </nav>
+
+  <!-- ============ CALENDAR ============ -->
+  <section id="tab-calendar" class="tabpane active">
+    <div class="toolbar">
+      <div class="zoomwrap">
+        <button class="zoombtn" id="zoomIn" title="Zoom in — more detail">＋</button>
+        <div class="views">
+          <span id="zoomThumb"></span>
+          <button class="vbtn" data-view="day">Day</button>
+          <button class="vbtn" data-view="week">Week</button>
+          <button class="vbtn active" data-view="month">Month</button>
+          <button class="vbtn" data-view="quarter">Quarter</button>
+          <button class="vbtn" data-view="year">Year</button>
+        </div>
+        <button class="zoombtn" id="zoomOut" title="Zoom out — big picture">－</button>
+      </div>
+      <div class="nav">
+        <button class="btn ghost sm" id="navPrev">‹</button>
+        <button class="btn ghost sm" id="navToday">Today</button>
+        <button class="btn ghost sm" id="navNext">›</button>
+        <span id="periodLabel" class="period"></span>
+      </div>
+      <div class="filters">
+        <div id="personToggles" class="ptoggles"></div>
+        <label class="chk"><input type="checkbox" id="showDone"> done too</label>
+      </div>
+    </div>
+    <div id="projectChips" class="chips"></div>
+    <div id="curriculumBar" class="curric"></div>
+    <div id="calendar" class="cal"></div>
+  </section>
+
+  <!-- ============ THE CREW ============ -->
+  <section id="tab-people" class="tabpane">
+    <p class="hint">Everyone gets a lane: tasks, notes and side quests. Flip a lane between date order and your own priority order — drag cards to shuffle, the whole crew sees it. Drag a card onto another lane to hand it over. Hover a card and tick to complete.</p>
+    <div id="peopleBoard" class="board"></div>
+  </section>
+
+  <!-- ============ STUDIO ============ -->
+  <section id="tab-studio" class="tabpane">
+    <p class="hint">Every shoot day in one place. <b>Prep kit</b> lays the runway (brief → scripts → teleprompter → final check, all dated back from the shoot). <b>Ideas</b> pitches content tied to the OB Fit month and live campaigns. <b>Draft brief</b> writes the Content Go brief in our house format — you approve everything before it lands in Asana.</p>
+    <button class="btn glow" id="btnGenIdeas">✨ Ideas for all upcoming shoots</button>
+    <div id="shootList" class="shootlist"></div>
+
+    <div class="stud-h"><span>Events</span>
+      <span class="qadd" style="margin:0;max-width:420px;flex:1">
+        <input class="qadd-name" id="evName" placeholder="e.g. Masterclass: coaching the new menu">
+        <input type="date" class="qadd-date" id="evDate" style="width:auto">
+        <button class="qadd-btn" id="evAdd">Add</button>
+      </span>
+    </div>
+    <p class="hint">Masterclasses, workshops, webinars and forums. They star themselves on the calendar; each one gets a nudge if nothing's queued in Communities.</p>
+    <div id="eventList"></div>
+
+    <div class="stud-h"><span>Brief library</span></div>
+    <p class="hint">Every supplier brief, with a status you click to advance: drafted → sent to Content Go → delivered.</p>
+    <div id="briefList"></div>
+
+    <div class="stud-h"><span>Wrong-answer digest</span></div>
+    <p class="hint">Paste a Max or quiz export and get the most-missed questions, the pattern behind them, and Skills Booster suggestions you can approve into tasks.</p>
+    <textarea id="maxPaste" placeholder="Paste the wrong-answer / quiz results export here…" style="width:100%;min-height:110px;border:none;background:var(--fill);border-radius:14px;padding:12px;font-family:var(--font);font-size:12px;resize:vertical"></textarea>
+    <div style="margin-top:8px"><button class="btn glow" id="maxDigest">Digest it</button></div>
+    <div id="maxOut" style="margin-top:14px;display:none"></div>
+  </section>
+
+  <!-- ============ COMMUNITIES ============ -->
+  <section id="tab-communities" class="tabpane">
+    <div class="comm-top">
+      <div id="commLegend" class="ptoggles"></div>
+    </div>
+    <div class="comm-grid">
+      <div class="comm-col">
+        <h3 class="comm-h"><span>The month's messages</span>
+          <span class="nav"><button class="btn ghost sm" id="wcPrev">‹</button>
+          <span id="wcLabel" class="period" style="min-width:110px;font-size:13px"></span>
+          <button class="btn ghost sm" id="wcNext">›</button></span></h3>
+        <div id="commCal" class="cal"></div>
+        <div class="hint" style="margin-top:8px">🔥 means more than 3 messages to one community in a day — easy, tiger.</div>
+      </div>
+      <div class="comm-col">
+        <h3 class="comm-h">Plan a message</h3>
+        <div class="qadd" style="margin:0">
+          <input class="qadd-name" id="waName" placeholder="What's Caitlin sending?">
+          <input type="date" class="qadd-date" id="waDate" style="width:auto">
+        </div>
+        <div id="commTargets"></div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <select id="waPurpose"></select>
+          <button class="qadd-btn" id="waAdd">Queue it</button>
+        </div>
+        <h3 class="comm-h" style="margin-top:16px">Going out next</h3>
+        <div id="waList"></div>
+      </div>
+    </div>
+    <div class="comm-grid" style="margin-top:14px">
+      <div class="comm-col">
+        <h3 class="comm-h">The numbers</h3>
+        <div id="commInsights"></div>
+      </div>
+      <div class="comm-col">
+        <h3 class="comm-h">Friday ritual: read the room</h3>
+        <p class="hint">Every Friday: WhatsApp ⋮ → More → Export chat (without media) per community, paste it here, get the TL;DR — themes, questions, anything needing a reply.</p>
+        <select id="waPasteComm"></select>
+        <textarea id="waPaste" placeholder="Paste the exported chat text here…"></textarea>
+        <button class="btn glow" id="waSummarise" style="margin-top:8px">Read the room</button>
+        <div id="waSummary" class="ideabox" style="margin-top:10px;display:none"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ NEWS ============ -->
+  <section id="tab-news" class="tabpane">
+    <div class="news-head">
+      <p class="hint" style="margin:0">The week in our world — learning &amp; development, AI at work, org development, internal comms, productivity and the rest. Curated fresh each week; refresh any time.</p>
+      <button class="btn ghost sm" id="newsRefresh">Refresh</button>
+    </div>
+    <div id="newsBody"></div>
+  </section>
+</div>
+
+<!-- drawer + modal + friday -->
+<div id="drawerWrap" class="drawer-wrap" style="display:none">
+  <div class="drawer-scrim" data-close></div>
+  <div class="drawer" id="drawer"></div>
+</div>
+<div id="modalWrap" class="modal-wrap" style="display:none">
+  <div class="modal-scrim" data-close></div>
+  <div class="modal" id="modal"></div>
+</div>
+<div id="fridayWrap"></div>
+<div id="runWrap"></div>
+
+<script src="/js/data.js"></script>
+<script src="/js/core.js"></script>
+<script src="/js/demo.js"></script>
+<script src="/js/calendar.js"></script>
+<script src="/js/people.js"></script>
+<script src="/js/content.js"></script>
+<script src="/js/communities.js"></script>
+<script src="/js/drawer.js"></script>
+<script src="/js/friday.js"></script>
+<script src="/js/news.js"></script>
+</body>
+</html>

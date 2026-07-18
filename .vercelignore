@@ -1,0 +1,6 @@
+.claude
+.agents
+serve.cjs
+skills-lock.json
+DEPLOY-STEP-BY-STEP.md
+.DS_Store

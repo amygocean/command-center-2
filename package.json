@@ -1,0 +1,8 @@
+{
+  "name": "ob-academy-command-center",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ocean Basket Academy Command Center — hosted web app (Asana + AI), deployable on Vercel.",
+  "engines": { "node": ">=18" }
+}

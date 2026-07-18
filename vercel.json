@@ -1,0 +1,6 @@
+{
+  "cleanUrls": true,
+  "crons": [
+    { "path": "/api/digest", "schedule": "30 5 * * 1-5" }
+  ]
+}

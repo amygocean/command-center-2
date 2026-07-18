@@ -1,0 +1,54 @@
+// ------------------------------------------------------------------
+//  /api/ai  —  replaces the old window.cowork.askClaude() bridge.
+//  Takes { prompt, data } and returns { text }.
+//  Uses OpenAI if OPENAI_API_KEY is set, otherwise Anthropic if
+//  ANTHROPIC_API_KEY is set. The key stays server-side (never in the
+//  browser). If neither is set, AI features simply report "off".
+// ------------------------------------------------------------------
+import { readSession } from "./_lib.js";
+
+async function readBody(req){
+  if(req.body && typeof req.body==="object") return req.body;
+  const chunks=[]; for await (const c of req) chunks.push(c);
+  try { return JSON.parse(Buffer.concat(chunks).toString()||"{}"); } catch { return {}; }
+}
+
+export default async function handler(req,res){
+  if(req.method!=="POST"){ res.status(405).json({error:"POST only"}); return; }
+  if(!readSession(req)){ res.status(401).json({error:"not authenticated"}); return; }
+
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  if(!openaiKey && !anthropicKey){ res.status(200).json({ text:"(AI is turned off — set OPENAI_API_KEY or ANTHROPIC_API_KEY.)" }); return; }
+
+  const { prompt, data } = await readBody(req);
+  const content = prompt + "\n\nDATA:\n" + JSON.stringify(data||[]);
+
+  try {
+    let text = "";
+    if(openaiKey){
+      const r = await fetch("https://api.openai.com/v1/chat/completions", {
+        method:"POST",
+        headers:{ "Authorization":"Bearer "+openaiKey, "content-type":"application/json" },
+        body: JSON.stringify({
+          model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+          max_tokens: 700,
+          messages:[{ role:"user", content }]
+        })
+      });
+      const j = await r.json();
+      if(!r.ok){ res.status(502).json({ error:(j.error&&j.error.message)||"OpenAI error" }); return; }
+      text = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content || "").trim();
+    } else {
+      const r = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{ "x-api-key":anthropicKey, "anthropic-version":"2023-06-01", "content-type":"application/json" },
+        body: JSON.stringify({ model: process.env.AI_MODEL || "claude-sonnet-5", max_tokens:700, messages:[{ role:"user", content }] })
+      });
+      const j = await r.json();
+      if(!r.ok){ res.status(502).json({ error:(j.error&&j.error.message)||"AI error" }); return; }
+      text = (j.content||[]).map(b=>b.text||"").join("").trim();
+    }
+    res.status(200).json({ text });
+  } catch(e){ res.status(500).json({ error:e.message }); }
+}
