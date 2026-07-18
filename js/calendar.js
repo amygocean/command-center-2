@@ -6,18 +6,21 @@
 const VIEWS = ["day","week","month","quarter","year"];
 
 function wireCalendarControls(){
-  document.querySelectorAll(".vbtn").forEach(b=>b.onclick=()=>setView(b.dataset.view));
-  document.getElementById("zoomOut").onclick=()=>zoom(1);
-  document.getElementById("zoomIn").onclick=()=>zoom(-1);
+  const sl=document.getElementById("zoomSlider");
+  if(sl){
+    sl.addEventListener("input",()=>setView(VIEWS[+sl.value]));
+    sl.value=VIEWS.indexOf(state.view);
+  }
+  document.querySelectorAll(".ztick").forEach(t=>t.onclick=()=>setView(t.dataset.v));
   document.getElementById("navPrev").onclick=()=>stepCursor(-1);
   document.getElementById("navNext").onclick=()=>stepCursor(1);
   document.getElementById("navToday").onclick=()=>{ state.cursor=new Date(); renderCalendar(); };
 }
-function setView(v){ state.view=v; cfg.view=v; saveCfg(); renderCalendar(); }
-function zoom(dir){ // +1 zooms out (day→year), -1 zooms in
-  const i=VIEWS.indexOf(state.view);
-  const n=Math.min(VIEWS.length-1, Math.max(0, i+dir));
-  if(n!==i) setView(VIEWS[n]);
+function setView(v){
+  const from=VIEWS.indexOf(state.view), to=VIEWS.indexOf(v);
+  if(from===to) return;
+  state.view=v; cfg.view=v; saveCfg();
+  renderCalendar(to>from?"zout":"zin");
 }
 function stepCursor(dir){
   const c=state.cursor;
@@ -46,6 +49,7 @@ function renderChips(){
   };
   mk("lc","💬 comms layer",cfg.showComms,()=>{ cfg.showComms=!cfg.showComms; saveCfg(); renderChips(); renderCalendar(); });
   mk("lo","🎉 occasions",cfg.showOccasions,()=>{ cfg.showOccasions=!cfg.showOccasions; saveCfg(); renderChips(); renderCalendar(); });
+  mk("ls","stores & visits",cfg.showStores,()=>{ cfg.showStores=!cfg.showStores; saveCfg(); renderChips(); renderCalendar(); });
 }
 
 function renderPersonToggles(){
@@ -76,24 +80,52 @@ function renderCurriculumBar(){
 }
 
 function renderCalendar(dir){
-  document.querySelectorAll(".vbtn").forEach(b=>b.classList.toggle("active",b.dataset.view===state.view));
-  moveZoomThumb();
+  const sl=document.getElementById("zoomSlider");
+  if(sl && +sl.value!==VIEWS.indexOf(state.view)) sl.value=VIEWS.indexOf(state.view);
+  document.querySelectorAll(".ztick").forEach(t=>t.classList.toggle("on",t.dataset.v===state.view));
   renderCurriculumBar();
   const cal=document.getElementById("calendar");
   const lbl=document.getElementById("periodLabel");
   const c=state.cursor;
-  cal.classList.remove("slide-l","slide-r","fade-in"); void cal.offsetWidth;
-  if(dir===1) cal.classList.add("slide-l"); else if(dir===-1) cal.classList.add("slide-r"); else cal.classList.add("fade-in");
+  cal.classList.remove("slide-l","slide-r","fade-in","zoom-in","zoom-out"); void cal.offsetWidth;
+  if(dir===1) cal.classList.add("slide-l");
+  else if(dir===-1) cal.classList.add("slide-r");
+  else if(dir==="zin") cal.classList.add("zoom-in");
+  else if(dir==="zout") cal.classList.add("zoom-out");
+  else cal.classList.add("fade-in");
   if(state.view==="month"){ lbl.textContent=MO[c.getMonth()]+" "+c.getFullYear(); cal.innerHTML=monthHTML(c); wireMonth(); }
   else if(state.view==="week"){ renderWeek(cal,lbl,c); }
   else if(state.view==="day"){ renderDay(cal,lbl,c); }
-  else if(state.view==="quarter"){ renderRange(cal,lbl,c,3,"Quarter"); }
+  else if(state.view==="quarter"){ renderQuarter(cal,lbl,c); }
   else if(state.view==="year"){ renderYear(cal,lbl,c); }
 }
-function moveZoomThumb(){
-  const seg=document.querySelector(".views"), act=document.querySelector(".vbtn.active"), th=document.getElementById("zoomThumb");
-  if(!seg||!act||!th) return;
-  th.style.left=act.offsetLeft+"px"; th.style.width=act.offsetWidth+"px";
+
+/* stores layers: openings (amber) + trainer visits (violet) */
+function storesOn(dt){
+  if(!cfg.showStores) return [];
+  return state.tasks.filter(t=>(t.isVisit||t.isOpening) && !t.completed && t.due && sameDay(pd(t.due),dt));
+}
+function storePillHTML(t){
+  const col=t.isOpening?LAYER.opening:LAYER.visit;
+  const tag=t.isOpening?"HO":(t.assignee?firstName(t.assignee.name):"visit");
+  return '<span class="pill store'+(t.isOpening?" open-store":"")+'" data-gid="'+t.gid+'" style="--pc:'+col+'" title="'+esc(t.name)+(t.isOpening?" · handover":" · trainer visit")+'">'+
+    '<i class="pdot"></i><b class="st-tag">'+esc(tag)+'</b>'+esc(t.name)+'</span>';
+}
+
+/* quarter: three months side by side, same mini grids as the year */
+function renderQuarter(cal,lbl,c){
+  const y=c.getFullYear();
+  const startM=Math.floor(c.getMonth()/3)*3;
+  lbl.textContent="Q"+(startM/3+1)+" "+y+" · "+MO[startM].slice(0,3)+"–"+MO[startM+2].slice(0,3);
+  let html='<div class="quarter-grid">';
+  for(let m=startM;m<startM+3;m++) html+=miniMonthHTML(y,m);
+  cal.innerHTML=html+'</div>';
+  cal.querySelectorAll(".mini h4").forEach(h=>h.onclick=()=>{
+    state.cursor=new Date(y,+h.dataset.m,1); setView("month");
+  });
+  cal.querySelectorAll(".mini .md").forEach(d=>{
+    if(d.dataset.date) d.onclick=()=>{ state.cursor=pd(d.dataset.date); setView("day"); };
+  });
 }
 
 /* ---- pills ---- */
@@ -128,6 +160,7 @@ function monthHTML(c){
     occ.slice(0,2).forEach(o=>html+='<span class="occ" title="'+esc(o.name)+(o.reg?' · '+o.reg:'')+'">'+esc(o.name)+'</span>');
     const busy = cfg.showComms && commsBusy(dt);
     if(busy) html+='<span class="busyflag" title="More than 3 messages to one community today">🔥 busy comms day</span>';
+    storesOn(dt).slice(0,2).forEach(t=>html+=storePillHTML(t));
     tks.slice(0,4).forEach(t=>html+=pillHTML(t));
     comms.slice(0,2).forEach(t=>html+=commsPillHTML(t));
     const extra=(tks.length-4)+(comms.length>2?comms.length-2:0);
@@ -171,9 +204,10 @@ function renderWeek(cal,lbl,c){
     html+='<div class="col'+(sameDay(dt,today)?" today":"")+'" data-date="'+iso(dt)+'"><h4>'+DOW[i]+" "+dt.getDate()+'</h4><div class="body">';
     campaignsOn(dt).forEach(c2=>html+='<div class="cbar" style="background:'+c2.color+'">'+esc(c2.name)+'</div>');
     occ.forEach(o=>html+='<span class="occ">'+esc(o.name)+'</span>');
+    storesOn(dt).forEach(t=>html+=storePillHTML(t));
     tks.forEach(t=>html+=pillHTML(t));
     comms.forEach(t=>html+=commsPillHTML(t));
-    if(!occ.length&&!tks.length&&!comms.length) html+='<span class="empty">—</span>';
+    if(!occ.length&&!tks.length&&!comms.length&&!storesOn(dt).length) html+='<span class="empty">—</span>';
     html+='</div></div>';
   }
   cal.innerHTML=html+'</div>';
@@ -188,7 +222,8 @@ function renderDay(cal,lbl,c){
   let html='<div class="daylist">';
   campaignsOn(c).forEach(c2=>html+='<div class="cbar" style="background:'+c2.color+'">Campaign: '+esc(c2.name)+'</div>');
   occ.forEach(o=>html+='<span class="occ">'+esc(o.name)+'</span>');
-  if(!tks.length&&!comms.length) html+='<div class="empty">'+pick(EMPTY_LINES)+'</div>';
+  storesOn(c).forEach(t=>html+=storePillHTML(t));
+  if(!tks.length&&!comms.length&&!storesOn(c).length) html+='<div class="empty">'+pick(EMPTY_LINES)+'</div>';
   tks.forEach(t=>html+=cardHTML(t));
   comms.forEach(t=>html+=commsPillHTML(t));
   cal.innerHTML=html+'</div>';
@@ -252,6 +287,7 @@ function miniMonthHTML(y,m){
     const dayTasks=vt.filter(t=>t.due===dstr);
     const shoots=dayTasks.filter(t=>t.isShoot).length;
     const comms=cfg.showComms?state.tasks.filter(t=>t.isComms&&!t.isKeeper&&t.due===dstr).length:0;
+    const stores=cfg.showStores?state.tasks.filter(t=>(t.isVisit||t.isOpening)&&!t.completed&&t.due===dstr).length:0;
     const occ=cfg.showOccasions&&(OCCASIONS_APP.some(o=>o.date===dstr)||state.tasks.some(t=>t.isOccasion&&t.due===dstr));
     const camp=campaignsOn(dt).length>0;
     let cls="md"; if(sameDay(dt,today)) cls+=" now"; if(camp) cls+=" camp";
@@ -259,6 +295,7 @@ function miniMonthHTML(y,m){
     if(shoots) dots+='<i class="yd shoot"></i>';
     else if(dayTasks.length) dots+='<i class="yd t'+Math.min(3,dayTasks.length)+'"></i>';
     if(comms) dots+='<i class="yd wa"></i>';
+    if(stores) dots+='<i class="yd store"></i>';
     if(occ) dots+='<i class="yd occ"></i>';
     cells+='<span class="'+cls+'" data-date="'+dstr+'" title="'+dstr+(dayTasks.length?' · '+dayTasks.length+' task(s)':'')+(shoots?' · 🎬':'')+'">'+d+dots+'</span>';
   }

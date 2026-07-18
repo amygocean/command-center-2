@@ -103,9 +103,42 @@ export default async function handler(req, res){
         out = await asanaFetch(req,res,`/projects/${args.project_id}/sections`, { method:"POST", body:{ data:{ name: args.name } } });
         break;
 
-      case "add_comment":
-        out = await asanaFetch(req,res,`/tasks/${args.task_id}/stories`, { method:"POST", body:{ data:{ text: args.text } } });
+      case "add_comment": {
+        const data = args.html
+          ? { html_text: "<body>" + args.text + "</body>" }
+          : { text: args.text };
+        out = await asanaFetch(req,res,`/tasks/${args.task_id}/stories`, { method:"POST", body:{ data } });
         break;
+      }
+
+      // Each person's real Asana "My Tasks", read with their own PAT
+      // (AMY_PAT / CAITLIN_PAT / JESS_PAT env vars — never in the code).
+      case "get_my_tasks": {
+        const pats = { amy: process.env.AMY_PAT, caitlin: process.env.CAITLIN_PAT, jess: process.env.JESS_PAT };
+        const pat = pats[args.person];
+        if(!pat){ out = { data: [], no_pat: true }; break; }
+        const patFetch = async (path) => {
+          const r = await fetch(`https://app.asana.com/api/1.0${path}`, { headers: { Authorization: `Bearer ${pat}` } });
+          const j = await r.json();
+          if(!r.ok) throw Object.assign(new Error((j.errors&&j.errors[0]&&j.errors[0].message)||"Asana error"), { status: r.status });
+          return j;
+        };
+        const utl = await patFetch(`/users/me/user_task_list?workspace=${WORKSPACE}`);
+        const listGid = utl.data && utl.data.gid;
+        if(!listGid){ out = { data: [] }; break; }
+        const fields = "name,due_on,completed,completed_at,notes,permalink_url,projects.name";
+        const q = args.completed_since
+          ? `?completed_since=${encodeURIComponent(args.completed_since)}&limit=100&opt_fields=${fields}`
+          : `?completed_since=now&limit=100&opt_fields=${fields}`;
+        let tasks = [], offset = null, pages = 0;
+        do {
+          const page = await patFetch(`/user_task_lists/${listGid}/tasks${q}${offset?`&offset=${offset}`:""}`);
+          tasks = tasks.concat(page.data || []);
+          offset = page.next_page ? page.next_page.offset : null;
+        } while(offset && ++pages < 5);
+        out = { data: tasks };
+        break;
+      }
 
       default:
         res.status(400).json({ error:"unknown tool: "+tool }); return;

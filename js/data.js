@@ -15,7 +15,17 @@ const PB = {
   notes:  "1216638289537804",   // Notes       (kept OFF the calendar)
   passion:"1216637913044078"    // Passion Projects (kept OFF the calendar)
 };
-const WA_PROJECT = "1216476678698201";   // Academy WhatsApp (Communities planner)
+const WA_PROJECT = "1216476678698201";   // WhatsApp Academy — the software/platform board (X Force)
+const BUGS_PROJECT = "1216593621076084";  // X Force bugs & errors board
+const VISITS_PROJECT = "1213806179626680";// trainer store-visits board
+const AMY_GID = "1213414176761459";       // PR tab is Amy-only
+const GIRLS = [
+  {key:"amy",     gid:"1213414176761459", name:"Amy"},
+  {key:"caitlin", gid:"1213630129003527", name:"Caitlin"},
+  {key:"jess",    gid:"1213630128899336", name:"Jess"}
+];
+const STICKY_COLORS = ["#FFF3B0","#FFD6E0","#D4F0DB","#D6E9FF","#EBDDFF"];
+const LAYER = { opening:"#E8A013", visit:"#6C5CE7" };
 const ACADEMY_TEAM = "1213626139926485"; // team new campaigns are created in
 const REVAMP_PROJECT = "1214196027560612"; // store-revamp placeholders
 const CURRICULUM_PROJECT = "1216652752864537";
@@ -112,18 +122,6 @@ const OCCASIONS_APP = [
   {date:"2027-11-26", name:"Black Friday",            flag:"🛍",  reg:"Global"}
 ];
 
-// ---- Shoot prep kit -----------------------------------------------------
-// The anti-haphazard machine: standard runway of prep tasks, created
-// relative to the shoot date. offset = days BEFORE the shoot.
-const PREP_KIT = [
-  {offset:14, name:"Lock the shot list — what are we actually filming?", who:"amy"},
-  {offset:12, name:"Confirm recipes / source material received & verified", who:"jess"},
-  {offset:10, name:"Draft the supplier brief (Studio can help)", who:"amy"},
-  {offset:7,  name:"Send brief to Content Go + confirm crew & call time", who:"amy"},
-  {offset:5,  name:"Scripts final + loaded on teleprompter", who:"jess"},
-  {offset:2,  name:"Props, plates, people & location confirmed — final once-over", who:"amy"}
-];
-
 // ---- Supplier brief template -------------------------------------------
 // Distilled from real briefs (Zambezi incentive, Franchisee Forum,
 // Winter Menu sushi rework). This is both the AI scaffold and the
@@ -212,5 +210,8 @@ const DEFAULT_CFG = {
   pageCap: 6,
   view: "month",
   showComms: true,
-  showOccasions: true
+  showOccasions: true,
+  showStores: true,
+  msgBoard: null,   // the Community Messages board — created from the app
+  prBoard: null     // Amy's PR & Positioning board — created from the app
 };

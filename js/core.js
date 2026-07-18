@@ -23,6 +23,12 @@ function loadCfg(){
         if(s.showOccasions===undefined) s.showOccasions = true;
         s._m4=true;
       }
+      if(!s._m5){ // v3: platform/messages split, stores layers, PR
+        if(s.msgBoard===undefined) s.msgBoard=null;
+        if(s.prBoard===undefined) s.prBoard=null;
+        if(s.showStores===undefined) s.showStores=true;
+        s._m5=true;
+      }
       if(!s.campaigns) s.campaigns=[];
       localStorage.setItem(LS_KEY, JSON.stringify(s));
       return s;
@@ -46,8 +52,10 @@ const state = {
   curriculum: CURRICULUM_DEFAULT.slice(),
   waSections: null,    // {communityName: sectionGid} once ensured
   orderKeeper: null,   // gid of the shared dashboard-state task
-  order: {},           // personGid -> [taskGids] shared priority order
-  laneMode: {},        // personGid -> 'date' | 'order'
+  order: {},           // legacy board-lane order (kept for migration)
+  keeper: {},          // full shared state: girls sections, corkboard, mentions
+  myTasks: {amy:[],caitlin:[],jess:[]},   // each person's real Asana My Tasks
+  myTasksErr: {},      // person -> error/no_pat flag
   suggestions: [],     // computed after load
   dismissed: JSON.parse(localStorage.getItem("ob_dismissed")||"{}")
 };
@@ -98,7 +106,11 @@ async function fetchProject(p){
         isOccasion: (sec&&sec.gid===SEC_OCC),
         isNote: (sec&&sec.gid===PB.notes),
         isPassion: (sec&&sec.gid===PB.passion),
-        isComms: p.gid===WA_PROJECT,
+        isComms: !!cfg.msgBoard && p.gid===cfg.msgBoard,
+        isPlatform: p.gid===WA_PROJECT,
+        isBug: p.gid===BUGS_PROJECT,
+        isVisit: p.gid===VISITS_PROJECT,
+        isOpening: p.gid===REVAMP_PROJECT && !!t.due_on,
         isEvent: /masterclass|workshop|webinar|forum/i.test(t.name||""),
         isPrep: /^「prep」/.test(t.name||""),
         isShot: /^「shot」/.test(t.name||""),
@@ -120,12 +132,21 @@ async function loadAll(){
       const u = await call("get_users",{limit:100});
       state.users = (u.data||[]).filter(x=>x.email && !/team\.asana\.com$/.test(x.email));
     }
-    const active = cfg.projects.filter(p=>p.on);
+    const active = cfg.projects.filter(p=>p.on).slice();
+    // always-on hidden boards: trainer visits + X Force bugs (+ messages board once created)
+    const hidden = [
+      {gid:VISITS_PROJECT, name:"Store Visits",  color:LAYER.visit},
+      {gid:BUGS_PROJECT,   name:"X Force Bugs",  color:"#B03A2E"}
+    ];
+    if(cfg.msgBoard && !active.some(p=>p.gid===cfg.msgBoard))
+      hidden.push({gid:cfg.msgBoard, name:"Community Messages", color:"#7A5FB0"});
+    hidden.forEach(h=>{ if(!active.some(p=>p.gid===h.gid)) active.push(h); });
     const results = await Promise.all(active.map(fetchProject));
     const map = new Map();
     results.flat().forEach(t=>{ if(!map.has(t.gid)) map.set(t.gid,t); });
     state.tasks = [...map.values()];
     readOrderKeeper();
+    loadMyTasks(); // async — re-renders The Girls when each list lands
     state.loading = false;
     computeSuggestions();
     renderAll();
@@ -158,14 +179,21 @@ async function loadCurriculum(){
 function readOrderKeeper(){
   const k = state.tasks.find(t=>t.isKeeper);
   if(k){ state.orderKeeper = k.gid;
-    try{ const j = JSON.parse(k.notes||"{}"); state.order = j.order||{}; }catch(e){ state.order={}; }
+    try{ state.keeper = JSON.parse(k.notes||"{}")||{}; }catch(e){ state.keeper={}; }
   }
+  state.order = state.keeper.order||{};
+  if(!state.keeper.girls) state.keeper.girls={};
+  GIRLS.forEach(g=>{ if(!state.keeper.girls[g.key])
+    state.keeper.girls[g.key]={sections:[{id:"top3",name:"Top 3 right now",taskIds:[]}], order:[], hidden:[], private:[]}; });
+  if(!state.keeper.cork) state.keeper.cork=[];
+  if(!state.keeper.mentions) state.keeper.mentions=[];
 }
-let orderSaveTimer = null;
-function saveOrder(){
-  clearTimeout(orderSaveTimer);
-  orderSaveTimer = setTimeout(async ()=>{
-    const notes = JSON.stringify({order:state.order});
+let keeperTimer = null;
+function saveKeeper(){
+  clearTimeout(keeperTimer);
+  keeperTimer = setTimeout(async ()=>{
+    state.keeper.order = state.order;
+    const notes = JSON.stringify(state.keeper);
     try{
       if(state.orderKeeper){
         await call("update_tasks",{tasks:[{task:state.orderKeeper, notes}]});
@@ -173,8 +201,30 @@ function saveOrder(){
         const r = await call("create_tasks",{tasks:[{name:"⚙️ dashboard-state (do not delete)", project_id:PB.proj, section_id:PB.notes, notes}]});
         state.orderKeeper = r.data&&r.data[0]&&r.data[0].gid;
       }
-    }catch(e){ /* order still works locally this session */ }
-  }, 800);
+    }catch(e){ /* still works locally this session */ }
+  }, 700);
+}
+const saveOrder = saveKeeper; // legacy callers
+
+/* ---- each person's Asana My Tasks (via their PAT, server-side) ---- */
+async function loadMyTasks(){
+  await Promise.all(GIRLS.map(async g=>{
+    try{
+      const r = await call("get_my_tasks",{person:g.key});
+      state.myTasksErr[g.key] = r.no_pat ? "no_pat" : null;
+      state.myTasks[g.key] = (r.data||[]).filter(t=>!t.completed).map(t=>({
+        gid:t.gid, name:t.name, notes:t.notes||"", due:t.due_on||null,
+        completed:false, url:t.permalink_url,
+        projectName:(t.projects&&t.projects[0]&&t.projects[0].name)||"My Tasks",
+        projectColor:"#5BC4BF", assignee:{gid:g.gid,name:g.name}, my:g.key
+      }));
+    }catch(e){ state.myTasksErr[g.key]=e.message; state.myTasks[g.key]=[]; }
+    if(typeof renderGirls==="function") renderGirls();
+  }));
+}
+function findTask(gid){
+  return state.tasks.find(x=>x.gid===gid) ||
+    GIRLS.map(g=>state.myTasks[g.key]).flat().find(x=>x.gid===gid);
 }
 
 /* ---- small utilities ---- */
@@ -198,6 +248,7 @@ function visibleTasks(){
     if(t.isOccasion||t.isNote||t.isPassion||t.isKeeper) return false;
     if(t.isShot||t.isBrief) return false;             // live in Studio, not on the calendar
     if(t.isComms) return false;                       // comms render as their own layer
+    if(t.isVisit||t.isOpening||t.isBug) return false; // stores + platform have their own layers/tabs
     if(!state.showDone && t.completed) return false;
     if(pf.length){
       if(!t.assignee) return pf.includes("unassigned");
@@ -321,13 +372,13 @@ function dismissKey(id){ return id; }
 function dismissSuggestion(id){ state.dismissed[id]=Date.now(); localStorage.setItem("ob_dismissed",JSON.stringify(state.dismissed)); computeSuggestions(); renderTray(); }
 function computeSuggestions(){
   const out=[]; const today=todayD();
-  // 1. shoots inside 14 days without a prep kit
-  state.tasks.filter(t=>t.isShoot&&!t.completed&&t.due).forEach(s=>{
-    const d=daysTo(s.due); if(d<0||d>21) return;
-    const preps = state.tasks.filter(p=>p.isPrep && p.name.includes(s.name));
-    if(!preps.length){
-      out.push({id:"prep-"+s.gid, icon:"", label:`“${s.name}” is ${humanWhen(d)} and has no prep kit`, action:"Spin up prep kit", run:()=>createPrepKit(s.gid)});
-    }
+  // 1. store openings a month from HO with no training visit scheduled
+  state.tasks.filter(t=>t.isOpening&&!t.completed&&t.due).forEach(o=>{
+    const d=daysTo(o.due); if(d<0||d>31) return;
+    const oWords=(o.name||"").toLowerCase().split(/\W+/).filter(x=>x.length>3);
+    const hasVisit=state.tasks.some(v=>v.isVisit&&v.due&&Math.abs(pd(v.due)-pd(o.due))<21*864e5&&
+      oWords.some(wd=>(v.name||"").toLowerCase().includes(wd)));
+    if(!hasVisit) out.push({id:"ho-"+o.gid, icon:"", label:`“${o.name}” hands over ${humanWhen(d)} — has training been scheduled?`, action:null});
   });
   // 2. shoots inside 14 days with no brief in the library
   state.tasks.filter(t=>t.isShoot&&!t.completed&&t.due).forEach(s=>{
