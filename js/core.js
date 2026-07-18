@@ -146,10 +146,18 @@ async function loadAll(){
     results.flat().forEach(t=>{ if(!map.has(t.gid)) map.set(t.gid,t); });
     state.tasks = [...map.values()];
     readOrderKeeper();
+    if(state._demoSeed) state._demoSeed();
     loadMyTasks(); // async — re-renders The Girls when each list lands
     state.loading = false;
-    computeSuggestions();
-    renderAll();
+    // Asana data is in — rendering is separate so a UI hiccup never
+    // masquerades as an Asana outage (usually a stale cached .js file).
+    try {
+      computeSuggestions();
+      renderAll();
+    } catch(rerr){
+      console.error("render error:", rerr);
+      toast("Display hiccup: "+rerr.message+" — try a hard refresh (⌘⇧R / Ctrl+Shift+R)");
+    }
     loadCurriculum(); // async, re-renders the bar when done
   }catch(e){
     state.loading=false; state.error=e.message; renderSub();
@@ -171,7 +179,7 @@ async function loadCurriculum(){
         if(ix>=0){ cur[ix] = {t:m[2].trim(), d:(t.notes||"").split("\n")[0]||cur[ix].d, q:cur[ix].q, biz:cur[ix].biz, gid:t.gid}; found++; }
       }
     });
-    if(found){ state.curriculum = cur; renderCurriculumBar(); }
+    if(found){ state.curriculum = cur; renderCurriculumBar(); if(typeof renderCurriculum==="function") renderCurriculum(); }
   }catch(e){ /* fallback stays */ }
 }
 
@@ -187,6 +195,8 @@ function readOrderKeeper(){
     state.keeper.girls[g.key]={sections:[{id:"top3",name:"Top 3 right now",taskIds:[]}], order:[], hidden:[], private:[]}; });
   if(!state.keeper.cork) state.keeper.cork=[];
   if(!state.keeper.mentions) state.keeper.mentions=[];
+  if(!state.keeper.ideas) state.keeper.ideas={};   // shootGid -> [{id,text,by,at}] — the brainstorm
+  if(!state.keeper.fuel) state.keeper.fuel={};     // shootGid -> source material for ✨ Ideas
 }
 let keeperTimer = null;
 function saveKeeper(){
@@ -466,7 +476,7 @@ function moveTabInk(){
 
 function renderAll(){
   renderSub(); renderGreeting(); renderChips(); renderPersonToggles();
-  renderCalendar(); renderGirls(); renderStudio(); renderCommunities();
+  renderCalendar(); renderGirls(); renderStudio(); renderCurriculum(); renderCommunities();
   renderStores(); renderPlatform(); prTabVisibility(); renderMentionBadge();
   computeSuggestions();
 }
@@ -503,6 +513,15 @@ async function init(){
     cfg.prBoard = "demo-pr";
     saveCfg = ()=>{};
     GIRLS[0].gid="u-amy"; GIRLS[1].gid="u-cait"; GIRLS[2].gid="u-jess";
+    state._demoSeed = ()=>{ // brainstorm seeds once keeper exists
+      const shoot=state.tasks.find(t=>t.isShoot&&t.name.includes("Shoot Day 14"));
+      if(shoot && !(state.keeper.ideas[shoot.gid]||[]).length){
+        state.keeper.ideas[shoot.gid]=[
+          {id:"di1",text:"Waiter POV: one table, full upsell, no script",by:"Caitlin",at:iso(todayD())},
+          {id:"di2",text:"Side-by-side: old plating vs new plating, 15 sec",by:"Amy",at:iso(todayD())}
+        ];
+      }
+    };
     document.getElementById("loginGate").style.display="none";
     document.getElementById("app").style.display="";
     loadAll(); requestAnimationFrame(moveTabInk);

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A3D62">
 <title>Academy Command Center</title>
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/styles.css?v=20260718b">
 </head>
 <body>
 <!--
@@ -72,7 +72,8 @@
   <nav class="tabs">
     <button class="tab active" data-tab="calendar">Calendar</button>
     <button class="tab" data-tab="people">The Girls</button>
-    <button class="tab" data-tab="studio">Studio</button>
+    <button class="tab" data-tab="studio">Studio &amp; Events</button>
+    <button class="tab" data-tab="curriculum">Curriculum</button>
     <button class="tab" data-tab="stores">Training &amp; New Stores</button>
     <button class="tab" data-tab="platform">WhatsApp Academy</button>
     <button class="tab" data-tab="communities">Communities</button>
@@ -118,17 +119,42 @@
       <p class="hint" style="margin:0">Straight from everyone's Asana My Tasks. Drag to prioritise, drop into sections (make your own), — hides noise, 🔒 keeps a task just for you. Drag "up for grabs" tasks onto a lane to assign them.</p>
       <button class="btn ghost sm" id="btnTrophy">Trophy cabinet</button>
     </div>
+    <div class="girls-filter" id="girlsFilter"></div>
     <div class="girls-wrap">
       <aside id="corkboard" class="corkboard"></aside>
       <div id="girlsBoard" class="board girls-board"></div>
     </div>
   </section>
 
-  <!-- ============ STUDIO ============ -->
+  <!-- ============ STUDIO & EVENTS ============ -->
   <section id="tab-studio" class="tabpane">
-    <p class="hint">Every shoot day in one place. <b>Shot list</b> holds the deliverables and feeds the brief word-for-word. <b>Ideas</b> pitches content tied to the OB Fit month and live campaigns. <b>Draft brief</b> writes the Content Go brief in our house format — you approve everything before it lands in Asana.</p>
-    <button class="btn glow" id="btnGenIdeas">✨ Ideas for all upcoming shoots</button>
-    <div id="shootList" class="shootlist"></div>
+    <p class="hint">Every shoot day and event in one place. <b>Shot list</b> holds the deliverables and feeds the brief word-for-word. <b>Ideas</b> pitches content tied to the OB Fit month and live campaigns. <b>Draft brief</b> writes the Content Go brief in our house format — you approve everything before it lands in Asana.</p>
+    <div class="stud-h"><span>Shoot days</span>
+      <span style="display:flex;gap:8px">
+        <button class="btn ghost sm" id="btnAddShoot">+ Add shoot</button>
+        <button class="btn glow" id="btnGenIdeas">✨ Ideas for all upcoming shoots</button>
+      </span>
+    </div>
+    <div id="addShootForm" class="add-shoot" style="display:none">
+      <input id="shName" placeholder="Shoot name — e.g. Shoot Day 16 – Dessert heroes">
+      <div class="add-shoot-row">
+        <label>Date<input type="date" id="shDate"></label>
+        <label>Time<input type="time" id="shTime"></label>
+        <label class="grow">Location / store<input id="shLoc" placeholder="📍 e.g. Menlyn Park kitchen"></label>
+      </div>
+      <div class="add-shoot-foot">
+        <span class="hint" style="margin:0">Adds the shoot, a “send calendar invite” reminder, and a “call store manager” task for Jess.</span>
+        <button class="btn primary sm" id="shSave">Add shoot day</button>
+      </div>
+    </div>
+    <div class="studio-grid">
+      <div id="shootList" class="shootlist"></div>
+      <aside class="studio-side">
+        <div class="stud-h" style="margin-top:0"><span>Shoot to-dos</span></div>
+        <p class="hint" style="margin-top:2px">Every task tied to a shoot — briefs, shots, prep and ideas.</p>
+        <div id="shootTodos"></div>
+      </aside>
+    </div>
 
     <div class="stud-h"><span>Events</span>
       <span class="qadd" style="margin:0;max-width:420px;flex:1">
@@ -143,6 +169,25 @@
     <div class="stud-h"><span>Brief library</span></div>
     <p class="hint">Every supplier brief, with a status you click to advance: drafted → sent to Content Go → delivered.</p>
     <div id="briefList"></div>
+  </section>
+
+  <!-- ============ CURRICULUM ============ -->
+  <section id="tab-curriculum" class="tabpane">
+    <p class="hint">Where courses get planned and edited. The <b>OB Fit</b> marathon and <b>Skills Boosters</b> live here — Boosters can ship straight to a WhatsApp community. Curriculum edits sync with the Asana Curriculum board.</p>
+
+    <div class="stud-h"><span>OB Fit — the year</span>
+      <a class="btn ghost sm" id="curLink" target="_blank">Open in Asana ↗</a>
+    </div>
+    <div id="curriculumGrid" class="cur-grid"></div>
+
+    <div class="stud-h"><span>Skills Boosters</span>
+      <span class="qadd" style="margin:0;max-width:420px;flex:1">
+        <input class="qadd-name" id="sbName" placeholder="e.g. Sauce ladle sizes — the 15ml rule">
+        <button class="qadd-btn" id="sbAdd">Add booster</button>
+      </span>
+    </div>
+    <p class="hint">Short, sharp reinforcement. Ship one to a community and it drafts a message in the Communities queue.</p>
+    <div id="boosterList"></div>
 
     <div class="stud-h"><span>Wrong-answer digest</span></div>
     <p class="hint">Paste a Max or quiz export and get the most-missed questions, the pattern behind them, and Skills Booster suggestions you can approve into tasks.</p>
@@ -240,18 +285,18 @@
 <div id="fridayWrap"></div>
 <div id="runWrap"></div>
 
-<script src="/js/data.js"></script>
-<script src="/js/core.js"></script>
-<script src="/js/demo.js"></script>
-<script src="/js/calendar.js"></script>
-<script src="/js/people.js"></script>
-<script src="/js/content.js"></script>
-<script src="/js/communities.js"></script>
-<script src="/js/drawer.js"></script>
-<script src="/js/stores.js"></script>
-<script src="/js/platform.js"></script>
-<script src="/js/pr.js"></script>
-<script src="/js/friday.js"></script>
-<script src="/js/news.js"></script>
+<script src="/js/data.js?v=20260718b"></script>
+<script src="/js/core.js?v=20260718b"></script>
+<script src="/js/demo.js?v=20260718b"></script>
+<script src="/js/calendar.js?v=20260718b"></script>
+<script src="/js/people.js?v=20260718b"></script>
+<script src="/js/content.js?v=20260718b"></script>
+<script src="/js/communities.js?v=20260718b"></script>
+<script src="/js/drawer.js?v=20260718b"></script>
+<script src="/js/stores.js?v=20260718b"></script>
+<script src="/js/platform.js?v=20260718b"></script>
+<script src="/js/pr.js?v=20260718b"></script>
+<script src="/js/friday.js?v=20260718b"></script>
+<script src="/js/news.js?v=20260718b"></script>
 </body>
 </html>

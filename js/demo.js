@@ -64,6 +64,12 @@ const DEMO_TASKS = [
   _mk(PB.proj,"Idea: NFC tap-in for practical sign-offs",{section:SEC.notes,assignee:"u-amy"}),
   _mk(PB.proj,"Masterclass series on coaching",{section:SEC.passion,assignee:"u-jess"}),
   _mk(PB.proj,"Academy meme library 👀",{section:SEC.passion,assignee:"u-cait"}),
+  // an approved content idea, living under its shoot
+  _mk(CC_PROJECT,"Golden Crunch 'guess what changed' teaser",{section:SEC.plan,due:_d(6),
+    notes:"Content idea for Shoot Day 14 – Summer Menu heroes\nParked by Amy, approved "+_d(-1)}),
+  // Skills Boosters — ship one to a community from the Curriculum tab
+  _mk(CC_PROJECT,"Skills Booster: Sauce ladle sizes — the 15ml rule",{section:SEC.plan,due:_d(9),notes:"From the wrong-answer digest"}),
+  _mk(CC_PROJECT,"Skills Booster: Reworked sushi — what changed in 60 seconds",{section:SEC.plan,due:_d(12)}),
   // shot list + brief library samples
   _mk(CC_PROJECT,"「shot」 Golden Crunch Prawn California Roll — plating — Shoot Day 14 – Summer Menu heroes",{section:SEC.plan,due:_d(6),notes:"type: video\npop-up: New winter menu meal — refer to recipe"}),
   _mk(CC_PROJECT,"「shot」 Mojito + Lemon & Mint Cooler build — Shoot Day 14 – Summer Menu heroes",{section:SEC.plan,due:_d(6),notes:"type: video"}),

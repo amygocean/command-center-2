@@ -8,29 +8,54 @@ function occasionsNear(date,win){
   return [...asana,...app].filter(o=>Math.abs((o.d-date)/864e5)<=win).sort((a,b)=>a.d-b.d);
 }
 
+let studioAll=false;   // false = only the next 3 shoots; true = everything incl. past
+function shootMeta(s){
+  const loc=(s.notes||"").match(/(?:^|\n)📍\s*(.+)/);
+  const tm=(s.notes||"").match(/(?:^|\n)🕐\s*(.+)/);
+  return {loc:loc?loc[1].trim():"", time:tm?tm[1].trim():""};
+}
+function shootNotesClean(s){
+  return (s.notes||"").replace(/(?:^|\n)📍\s*.+/g,"").replace(/(?:^|\n)🕐\s*.+/g,"").trim();
+}
+
 function renderStudio(){
-  const box=document.getElementById("shootList"); if(!box) return;
+  const box=document.getElementById("shootList"); if(!box){ return; }
   const today=todayD();
-  const shoots=state.tasks.filter(t=>t.isShoot && t.due).sort((a,b)=>a.due<b.due?-1:1);
-  if(!shoots.length){ box.innerHTML='<div class="empty">No shoot days on the radar. Add one and let\'s roll 🎬</div>'; return; }
+  const allShoots=state.tasks.filter(t=>t.isShoot && t.due).sort((a,b)=>a.due<b.due?-1:1);
+  const upcoming=allShoots.filter(t=>pd(t.due)>=today);
+  const past=allShoots.filter(t=>pd(t.due)<today).sort((a,b)=>a.due<b.due?1:-1); // most recent past first
+  if(!allShoots.length){
+    box.innerHTML='<div class="empty">No shoot days on the radar. Hit <b>+ Add shoot</b> and let\'s roll 🎬</div>';
+    renderShootTodos(); renderEvents(); renderBriefs(); wireStudioAdd(); return;
+  }
+  const shown = studioAll ? [...upcoming, ...past] : upcoming.slice(0,3);
+  const hiddenCount = studioAll ? 0 : Math.max(0,upcoming.length-3)+past.length;
   let html="";
-  shoots.forEach((s,i)=>{
-    const d=pd(s.due), days=daysTo(s.due), past=days<0;
-    const when=past?"":days===0?"today":days===1?"tomorrow!":"in "+days+" days";
+  shown.forEach((s,i)=>{
+    const d=pd(s.due), days=daysTo(s.due), isPast=days<0;
+    const when=isPast?"":days===0?"today":days===1?"tomorrow!":"in "+days+" days";
     const near=occasionsNear(d,14).slice(0,3).map(o=>esc(o.name)).join(", ");
-    html+='<div class="scard'+(past?" past":"")+'" style="animation-delay:'+(i*50)+'ms">'+
+    const meta=shootMeta(s), notes=shootNotesClean(s);
+    const metaLine=(meta.time||meta.loc)?'<div class="sc-meta">'+(meta.time?'🕐 '+esc(meta.time):'')+(meta.time&&meta.loc?' · ':'')+(meta.loc?'📍 '+esc(meta.loc):'')+'</div>':'';
+    html+='<div class="scard'+(isPast?" past":"")+'" style="animation-delay:'+(i*50)+'ms">'+
       '<div class="sc-date"><span class="sc-dd">'+d.getDate()+'</span><span class="sc-mo">'+MO[d.getMonth()].slice(0,3)+'</span></div>'+
       '<div class="sc-main"><div class="sc-name">🎬 '+esc(s.name)+' <span class="sc-when">'+when+'</span>'+(s.completed?' <span class="sc-done">wrapped ✓</span>':'')+'</div>'+
-      (s.notes?'<div class="sc-notes">'+esc(s.notes.slice(0,220))+'</div>':'')+
+      metaLine+
+      (notes?'<div class="sc-notes">'+esc(notes.slice(0,220))+'</div>':'')+
       (near?'<div class="sc-occ">Around this date: '+near+'</div>':'<div class="sc-occ dimtxt">No occasions nearby</div>')+
+      (isPast?'':brainstormHTML(s))+
+      plannedHTML(s)+
       '<div class="sc-ideas" id="ideas-'+s.gid+'"></div></div>'+
       '<div class="sc-actions"><button class="btn ghost sm sc-open" data-gid="'+s.gid+'">Open</button>'+
-      (past?'':'<button class="btn ghost sm sc-shots" data-gid="'+s.gid+'">Shot list'+(shotsFor(s).length?' ('+shotsFor(s).length+')':'')+'</button>'+
+      (isPast?'':'<button class="btn ghost sm sc-shots" data-gid="'+s.gid+'">Shot list'+(shotsFor(s).length?' ('+shotsFor(s).length+')':'')+'</button>'+
              '<button class="btn ghost sm sc-run" data-gid="'+s.gid+'">Run sheet</button>'+
              '<button class="btn teal sm sc-sugg" data-gid="'+s.gid+'">✨ Ideas</button>'+
              '<button class="btn primary sm sc-brief" data-gid="'+s.gid+'">'+(briefTaskFor(s)?"Open brief":"Draft brief")+'</button>')+'</div>'+
     '</div>';
   });
+  html += studioAll
+    ? (allShoots.length>3?'<button class="btn ghost sm view-more" id="studioLess">Show fewer</button>':'')
+    : (hiddenCount>0?'<button class="btn ghost sm view-more" id="studioMore">View more ('+hiddenCount+' more)</button>':'');
   box.innerHTML=html;
   box.querySelectorAll(".sc-open").forEach(b=>b.onclick=()=>openDrawer(b.dataset.gid));
   box.querySelectorAll(".sc-sugg").forEach(b=>b.onclick=()=>suggestForShoot(b.dataset.gid));
@@ -40,8 +65,74 @@ function renderStudio(){
     if(bt) openBriefModal(bt.gid); else draftBrief(b.dataset.gid);
   });
   box.querySelectorAll(".sc-shots").forEach(b=>b.onclick=()=>openShotList(b.dataset.gid));
+  wireBrainstorm(box);
   box.querySelectorAll(".sc-run").forEach(b=>b.onclick=()=>openRunSheet(b.dataset.gid));
-  renderEvents(); renderBriefs(); wireMaxDigest();
+  const more=document.getElementById("studioMore"); if(more) more.onclick=()=>{ studioAll=true; renderStudio(); };
+  const less=document.getElementById("studioLess"); if(less) less.onclick=()=>{ studioAll=false; renderStudio(); };
+  renderShootTodos(); renderEvents(); renderBriefs(); wireStudioAdd();
+}
+
+/* ---- the "Shoot to-dos" side slot: every task tied to a shoot ---- */
+function renderShootTodos(){
+  const box=document.getElementById("shootTodos"); if(!box) return;
+  const today=todayD();
+  const shoots=state.tasks.filter(t=>t.isShoot&&t.due&&pd(t.due)>=today).sort((a,b)=>a.due<b.due?-1:1);
+  if(!shoots.length){ box.innerHTML='<div class="gph">nothing tied to an upcoming shoot yet</div>'; return; }
+  let html="";
+  shoots.forEach(s=>{
+    const rel=state.tasks.filter(t=>t.gid!==s.gid && !t.completed &&
+      ((t.notes||"").includes(s.name) || (t.name||"").includes(s.name)))
+      .sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1);
+    if(!rel.length) return;
+    html+='<div class="std-grp"><div class="std-grp-h">🎬 '+esc(s.name)+'</div>'+
+      rel.map(t=>'<div class="preprow" data-todo="'+t.gid+'"><span class="ptxt" style="font-size:12px;cursor:pointer">'+esc(t.name)+'</span>'+
+        (t.assignee?'<span class="news-meta" style="display:inline;flex-shrink:0">'+esc(firstName(t.assignee.name))+'</span>':'')+'</div>').join("")+
+      '</div>';
+  });
+  box.innerHTML=html||'<div class="gph">nothing tied to an upcoming shoot yet</div>';
+  box.querySelectorAll("[data-todo]").forEach(el=>el.onclick=()=>openDrawer(el.dataset.todo));
+}
+
+/* ---- add a shoot day (+ invite reminder + call-store-manager for Jess) ---- */
+function wireStudioAdd(){
+  const btn=document.getElementById("btnAddShoot");
+  if(btn && !btn.dataset.wired){ btn.dataset.wired="1";
+    btn.onclick=()=>{ const f=document.getElementById("addShootForm"); f.style.display=f.style.display==="none"?"block":"none"; };
+  }
+  const save=document.getElementById("shSave");
+  if(save && !save.dataset.wired){ save.dataset.wired="1";
+    save.onclick=addShootDay;
+  }
+}
+async function addShootDay(){
+  const name=(document.getElementById("shName").value||"").trim();
+  const date=document.getElementById("shDate").value;
+  const time=document.getElementById("shTime").value;
+  const loc=(document.getElementById("shLoc").value||"").trim();
+  if(!name){ toast("Name the shoot"); return; }
+  if(!date){ toast("Pick a date"); return; }
+  const noteBits=[];
+  if(loc) noteBits.push("📍 "+loc);
+  if(time) noteBits.push("🕐 "+time);
+  const jess=GIRLS.find(g=>g.key==="jess");
+  const btn=document.getElementById("shSave"); btn.disabled=true; btn.textContent="Adding…";
+  try{
+    const tasks=[{name, project_id:CC_PROJECT, section_id:SEC_SHOOT, due_on:date, notes:noteBits.join("\n")}];
+    // reminder to send the calendar invite
+    tasks.push({name:"📩 Send calendar invite — "+name, project_id:CC_PROJECT, section_id:SEC_PLAN, due_on:date,
+      notes:"Reminder: send the shoot invite to the crew for "+name+(loc?" ("+loc+")":"")});
+    // call the store manager — assigned to Jess
+    tasks.push({name:"Call store manager"+(loc?" — "+loc:""), project_id:CC_PROJECT, section_id:SEC_PLAN, due_on:date,
+      assignee:jess?jess.gid:undefined, notes:"For shoot: "+name+(loc?"\nLocation: "+loc:"")});
+    await call("create_tasks",{tasks});
+    toast("Shoot added — invite reminder + Jess's store call created 🎬");
+    // reset + close
+    document.getElementById("shName").value=""; document.getElementById("shDate").value="";
+    document.getElementById("shTime").value=""; document.getElementById("shLoc").value="";
+    document.getElementById("addShootForm").style.display="none";
+    loadAll();
+  }catch(e){ toast("Failed: "+e.message); }
+  finally{ btn.disabled=false; btn.textContent="Add shoot day"; }
 }
 
 /* ---- AI content ideas ---- */
@@ -52,13 +143,21 @@ async function suggestForShoot(gid){
   const mo=pd(s.due).getMonth(), cur=state.curriculum[mo];
   const win=pd(s.due).valueOf();
   const camps=(cfg.campaigns||[]).filter(c=>{ const a=pd(c.start)-14*864e5, b=pd(c.due)+14*864e5; return win>=a&&win<=b; }).map(c=>({name:c.name,start:c.start,end:c.due}));
+  const fuelEl=document.querySelector('.fuel[data-gid="'+gid+'"]');
+  const fuel=(fuelEl&&fuelEl.value)||state.keeper.fuel[gid]||"";
+  const ownIdeas=(state.keeper.ideas[gid]||[]).map(i=>i.text);
+  const already=plannedFor(s).map(t=>t.name);
   const payload={brand:"Ocean Basket — seafood restaurant franchise (South Africa & Cyprus). Warm, family, value, fresh seafood. Content is TRAINING content for restaurant crew, delivered via Articulate courses and WhatsApp.",
-    shoot_day:{name:s.name,date:s.due,notes:s.notes||""}, nearby_occasions:near,
+    shoot_day:{name:s.name,date:s.due,notes:s.notes||""},
+    source_material_from_team:fuel||"(none provided)",
+    the_teams_own_brainstorm:ownIdeas,
+    ideas_already_planned_do_not_repeat:already,
+    nearby_occasions:near,
     ob_fit_curriculum_this_month:{month:MO[mo],focus:cur.t,detail:cur.d,assessment:cur.q||null,business_focus:cur.biz||null},
     active_or_upcoming_campaigns:camps};
   try{
     const res=await askAI(
-      "You plan training content for Ocean Basket Academy (learning & development for restaurant crew — NOT consumer marketing). Suggest exactly 3 concrete, specific video ideas to capture on this shoot day. Each must tie clearly to the OB Fit curriculum focus for the month, an active/upcoming campaign, or the shoot's own notes — no generic ideas. One short punchy line each. Return only 3 bullet lines starting with '•'.",
+      "You plan training content for Ocean Basket Academy (learning & development for restaurant crew — NOT consumer marketing). Suggest exactly 3 concrete, specific video ideas to capture on this shoot day. Build on the team's source material and brainstorm where provided — extend their thinking, never repeat an idea already planned. Each idea must tie clearly to the source material, the OB Fit curriculum focus, an active campaign, or the shoot's notes — no generic ideas. One short punchy line each. Return only 3 bullet lines starting with '•'.",
       [payload]);
     const text=typeof res==="string"?res:(res.text||JSON.stringify(res));
     const ideas=text.split("\n").map(l=>l.replace(/^\s*[•\-\*\d.\)]+\s*/,"").trim()).filter(l=>l.length>2);
@@ -74,6 +173,7 @@ async function addIdeaTask(shootGid,text,btn){
   const s=state.tasks.find(x=>x.gid===shootGid); if(!s) return;
   if(btn){ btn.disabled=true; btn.textContent="…"; }
   const task={name:text,project_id:s.projectGid,due_on:s.due,notes:"Content idea for "+s.name};
+  
   if(s.projectGid===CC_PROJECT) task.section_id=SEC_PLAN;
   try{ await call("create_tasks",{tasks:[task]});
     if(btn){ btn.textContent="✓ Added"; btn.classList.remove("teal"); btn.classList.add("ghost"); }
@@ -385,4 +485,149 @@ async function runMaxDigest(){
       }catch(e){ btn2.disabled=false; btn2.textContent="+ Task"; toast("Failed: "+e.message); }
     });
   }catch(e){ out.textContent="Couldn't digest: "+e.message; }
+}
+
+
+/* ================================================================
+   THE BRAINSTORM — your own placeholder ideas per shoot, shared
+   with the girls, approved into tasks when you meet.
+   Plus the planned list: every idea task stays under its shoot.
+   ================================================================ */
+function plannedFor(s){
+  return state.tasks.filter(t=>(t.notes||"").startsWith("Content idea for "+s.name));
+}
+function plannedHTML(s){
+  const planned=plannedFor(s);
+  if(!planned.length) return "";
+  return '<div class="ins-h" style="margin-top:12px">Planned for this shoot</div>'+
+    '<div class="planned">'+planned.map(t=>
+      '<div class="preprow'+(t.completed?" done":"")+'" style="padding:6px 2px">'+
+      '<button class="pchk'+(t.completed?" on":"")+'" data-pl="'+t.gid+'">'+(t.completed?"✓":"")+'</button>'+
+      '<span class="ptxt" style="font-size:12.5px;cursor:pointer" data-plopen="'+t.gid+'">'+esc(t.name)+'</span></div>').join("")+'</div>';
+}
+function brainstormHTML(s){
+  const ideas=state.keeper.ideas[s.gid]||[];
+  const fuel=state.keeper.fuel[s.gid]||"";
+  return '<div class="ins-h" style="margin-top:12px">The brainstorm</div>'+
+    (ideas.length?ideas.map(i=>
+      '<div class="idearow"><span>'+esc(i.text)+' <span class="news-meta" style="display:inline">— '+esc(i.by)+'</span></span>'+
+      '<span style="display:flex;gap:4px;flex-shrink:0">'+
+      '<button class="btn teal sm bs-approve" data-gid="'+s.gid+'" data-id="'+i.id+'">+ Task</button>'+
+      '<button class="btn ghost sm bs-del" data-gid="'+s.gid+'" data-id="'+i.id+'">✕</button></span></div>').join("")
+    :'<div class="gph" style="margin:4px 0">no ideas parked yet — jot them here, approve them when you meet</div>')+
+    '<div class="additem" style="margin:8px 0 0"><input class="witem-input bs-input" data-gid="'+s.gid+'" placeholder="Park an idea…">'+
+    '<button class="witem-add bs-add" data-gid="'+s.gid+'">Park it</button></div>'+
+    '<textarea class="fuel" data-gid="'+s.gid+'" placeholder="Fuel for ✨ Ideas — paste recipes, source material or rough thoughts…">'+esc(fuel)+'</textarea>';
+}
+function wireBrainstorm(box){
+  box.querySelectorAll(".bs-add").forEach(b=>{
+    const inp=box.querySelector('.bs-input[data-gid="'+b.dataset.gid+'"]');
+    const go=()=>{
+      const txt=inp.value.trim(); if(!txt) return;
+      if(!state.keeper.ideas[b.dataset.gid]) state.keeper.ideas[b.dataset.gid]=[];
+      state.keeper.ideas[b.dataset.gid].push({id:"i"+Date.now(),text:txt,
+        by:firstName(state.me&&state.me.name)||"someone",at:iso(todayD())});
+      saveKeeper(); renderStudio(); toast("Parked");
+    };
+    b.onclick=go; inp.onkeydown=e=>{ if(e.key==="Enter") go(); };
+  });
+  box.querySelectorAll(".bs-del").forEach(b=>b.onclick=()=>{
+    state.keeper.ideas[b.dataset.gid]=(state.keeper.ideas[b.dataset.gid]||[]).filter(i=>i.id!==b.dataset.id);
+    saveKeeper(); renderStudio();
+  });
+  box.querySelectorAll(".bs-approve").forEach(b=>b.onclick=async()=>{
+    const list=state.keeper.ideas[b.dataset.gid]||[];
+    const idea=list.find(i=>i.id===b.dataset.id); if(!idea) return;
+    b.disabled=true; b.textContent="…";
+    const s=state.tasks.find(x=>x.gid===b.dataset.gid); if(!s) return;
+    const task={name:idea.text,project_id:s.projectGid,due_on:s.due,notes:"Content idea for "+s.name+"\nParked by "+idea.by+", approved "+iso(todayD())};
+    if(s.projectGid===CC_PROJECT) task.section_id=SEC_PLAN;
+    try{
+      await call("create_tasks",{tasks:[task]});
+      state.keeper.ideas[b.dataset.gid]=list.filter(i=>i.id!==b.dataset.id);
+      saveKeeper(); toast("Approved — it's a task now"); confetti(); loadAll();
+    }catch(e){ b.disabled=false; b.textContent="+ Task"; toast("Failed: "+e.message); }
+  });
+  box.querySelectorAll(".fuel").forEach(f=>{
+    f.onchange=()=>{ state.keeper.fuel[f.dataset.gid]=f.value; saveKeeper(); };
+  });
+  box.querySelectorAll("[data-plopen]").forEach(el=>el.onclick=()=>openDrawer(el.dataset.plopen));
+  box.querySelectorAll("[data-pl]").forEach(b=>b.onclick=()=>{
+    const t=findTask(b.dataset.pl); if(t) toggleDone(t.gid,!t.completed);
+  });
+}
+
+
+/* ================================================================
+   CURRICULUM — the OB Fit marathon, Skills Boosters (ship to a
+   community), and the wrong-answer digest. Course planning home.
+   ================================================================ */
+const SB_PROJECT="1214196027560535";   // Skills Boosters board (also used by the digest)
+function isBooster(t){ return /^\s*(?:\[[^\]]*\]\s*)?skills?\s*booster\b/i.test(t.name||""); }
+
+function renderCurriculum(){
+  const grid=document.getElementById("curriculumGrid");
+  const link=document.getElementById("curLink");
+  if(link) link.href=CURRICULUM_URL;
+  if(grid){
+    const nowMo=todayD().getMonth();
+    grid.innerHTML=state.curriculum.map((c,i)=>
+      '<div class="cur-cell'+(i===nowMo?" now":"")+'">'+
+        '<div class="cur-mo">'+MO[i].slice(0,3)+(i===nowMo?' · now':'')+'</div>'+
+        '<div class="cur-t">'+esc(c.t)+'</div>'+
+        (c.d?'<div class="cur-d">'+esc(c.d)+'</div>':'')+
+        (c.q?'<div class="cur-q">⚑ '+esc(c.q)+'</div>':'')+
+        (c.biz?'<div class="cur-biz">'+esc(c.biz)+'</div>':'')+
+      '</div>').join("")+
+      '<button class="cur-cell cur-edit" id="curEdit">✎ Edit the marathon<span class="cur-d">Opens the editor — changes sync to the Asana Curriculum board</span></button>';
+    const ed=document.getElementById("curEdit"); if(ed) ed.onclick=()=>openSettings();
+  }
+  renderBoosters(); wireBoosterAdd(); wireMaxDigest();
+}
+
+function renderBoosters(){
+  const box=document.getElementById("boosterList"); if(!box) return;
+  const boosters=state.tasks.filter(t=>isBooster(t)&&!t.completed)
+    .sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1);
+  if(!boosters.length){ box.innerHTML='<div class="empty">No Skills Boosters yet. Add one above, or generate some from the wrong-answer digest below.</div>'; return; }
+  box.innerHTML=boosters.map(t=>{
+    const nm=t.name.replace(/^skills?\s*booster:?\s*/i,"");
+    const opts='<option value="">ship to…</option>'+cfg.communities.map(c=>'<option value="'+c.key+'">'+esc(c.name)+'</option>').join("");
+    return '<div class="bst-row"><span class="bst-name" data-open="'+t.gid+'">💪 '+esc(nm)+'</span>'+
+      '<span class="bst-ship"><select class="bst-comm" data-gid="'+t.gid+'">'+opts+'</select>'+
+      '<button class="btn teal sm bst-go" data-gid="'+t.gid+'">Ship</button></span></div>';
+  }).join("");
+  box.querySelectorAll(".bst-name").forEach(el=>el.onclick=()=>openDrawer(el.dataset.open));
+  box.querySelectorAll(".bst-go").forEach(b=>b.onclick=()=>shipBooster(b.dataset.gid,box));
+}
+async function shipBooster(gid,box){
+  const t=state.tasks.find(x=>x.gid===gid); if(!t) return;
+  const sel=box.querySelector('.bst-comm[data-gid="'+gid+'"]');
+  const cKey=sel&&sel.value; if(!cKey){ toast("Pick a community to ship to"); return; }
+  const c=cfg.communities.find(x=>x.key===cKey); if(!c) return;
+  const nm=t.name.replace(/^skills?\s*booster:?\s*/i,"");
+  const btn=box.querySelector('.bst-go[data-gid="'+gid+'"]'); if(btn){ btn.disabled=true; btn.textContent="…"; }
+  try{
+    const board=await ensureMsgBoard(); if(!board){ toast("Connect a Communities board first"); return; }
+    const secMap=await ensureWASections();
+    const msg={name:"New Skills Booster: "+nm+" 💪", project_id:board, notes:"#purpose:practice\nFrom the curriculum — Skills Booster for "+esc(c.name)};
+    if(secMap&&secMap[c.name]) msg.section_id=secMap[c.name]; else msg.name="["+c.name+"] "+msg.name;
+    await call("create_tasks",{tasks:[msg]});
+    toast("Shipped to "+c.name+" — drafted in Communities"); confetti(); loadAll();
+    switchTab("communities");
+  }catch(e){ toast("Failed: "+e.message); if(btn){ btn.disabled=false; btn.textContent="Ship"; } }
+}
+function wireBoosterAdd(){
+  const b=document.getElementById("sbAdd");
+  if(!b || b.dataset.wired) return; b.dataset.wired="1";
+  const go=async()=>{
+    const inp=document.getElementById("sbName"); const nm=(inp.value||"").trim();
+    if(!nm){ toast("Name the booster"); return; }
+    try{
+      await call("create_tasks",{tasks:[{name:"Skills Booster: "+nm, project_id:SB_PROJECT, notes:"Added from the Curriculum tab, "+iso(todayD())}]});
+      inp.value=""; toast("Booster added"); loadAll();
+    }catch(e){ toast("Failed: "+e.message); }
+  };
+  b.onclick=go;
+  const inp=document.getElementById("sbName"); if(inp) inp.onkeydown=e=>{ if(e.key==="Enter") go(); };
 }

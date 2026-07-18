@@ -99,6 +99,27 @@ export default async function handler(req, res){
         out = p; break;
       }
 
+      // ---- campaigns portfolio ----
+      case "get_portfolio_items":
+        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/items?${qs({opt_fields:args.opt_fields||"name,start_on,due_on,color,notes,permalink_url"})}`);
+        break;
+
+      case "add_to_portfolio":
+        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/addItem`, { method:"POST", body:{ data:{ item: args.item } } });
+        break;
+
+      case "update_project":
+        out = await asanaFetch(req,res,`/projects/${args.project_id}`, { method:"PUT", body:{ data: args.fields||{} } });
+        break;
+
+      case "create_subtask":
+        out = await asanaFetch(req,res,`/tasks/${args.parent}/subtasks`, { method:"POST", body:{ data: args.data||{} } });
+        break;
+
+      case "get_subtasks":
+        out = await asanaFetch(req,res,`/tasks/${args.parent}/subtasks?${qs({opt_fields:"name,completed,due_on,assignee.name"})}`);
+        break;
+
       case "create_section":
         out = await asanaFetch(req,res,`/projects/${args.project_id}/sections`, { method:"POST", body:{ data:{ name: args.name } } });
         break;

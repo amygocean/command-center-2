@@ -739,6 +739,7 @@ input:focus,textarea:focus,select:focus{outline:none}
 
 /* ================= the girls ================= */
 .girls-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}
+.girls-filter{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
 .girls-wrap{display:flex;gap:26px;align-items:flex-start}
 .girls-board{flex:1;min-width:0}
 .gsec{margin-bottom:4px}
@@ -807,3 +808,46 @@ input:focus,textarea:focus,select:focus{outline:none}
 .pr-col.dragover{background:var(--fill);border-radius:12px}
 .prcard{cursor:grab}
 @media(max-width:860px){.pr-pipe{grid-template-columns:1fr 1fr}.pr-col{padding:0 10px;margin-bottom:16px}}
+
+/* ---- shoot brainstorm + fuel ---- */
+.fuel{
+  width:100%;min-height:44px;margin-top:8px;border:none;background:var(--fill);border-radius:12px;
+  padding:9px 12px;font-family:var(--font);font-size:12px;resize:vertical;color:var(--muted);
+}
+.fuel:focus{background:var(--fill-2);color:var(--ink)}
+.planned .preprow{border-top:1px solid var(--hair)}
+.planned .preprow:first-child{border-top:none}
+
+/* ---- Studio & Events: add-shoot, side slot, meta, view-more ---- */
+.add-shoot{background:var(--fill);border-radius:16px;padding:14px;margin-bottom:16px}
+.add-shoot>input{width:100%;border:none;background:var(--fill-2);border-radius:10px;padding:10px 12px;font-family:var(--font);font-size:13px;margin-bottom:10px}
+.add-shoot-row{display:flex;gap:10px;flex-wrap:wrap}
+.add-shoot-row label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--muted);flex:0 0 auto}
+.add-shoot-row label.grow{flex:1;min-width:180px}
+.add-shoot-row input{border:none;background:var(--fill-2);border-radius:10px;padding:9px 11px;font-family:var(--font);font-size:13px}
+.add-shoot-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;flex-wrap:wrap}
+.studio-grid{display:grid;grid-template-columns:1fr 280px;gap:26px;align-items:start}
+.studio-side{position:sticky;top:14px}
+.std-grp{margin-bottom:14px}
+.std-grp-h{font-size:12px;font-weight:600;color:var(--ink);margin-bottom:4px}
+.std-grp .preprow{display:flex;justify-content:space-between;gap:8px;padding:5px 0;border-top:1px solid var(--hair)}
+.sc-meta{font-size:12px;color:var(--teal);margin:2px 0 4px}
+.view-more{margin-top:6px}
+@media(max-width:860px){.studio-grid{grid-template-columns:1fr}.studio-side{position:static}}
+
+/* ---- Curriculum ---- */
+.cur-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin-bottom:8px}
+.cur-cell{background:var(--fill);border-radius:14px;padding:12px 14px;text-align:left;border:1px solid transparent}
+.cur-cell.now{border-color:var(--teal);background:var(--fill-2)}
+.cur-mo{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.cur-t{font-size:13.5px;font-weight:600;margin:3px 0 4px;color:var(--ink)}
+.cur-d{font-size:11.5px;color:var(--muted);line-height:1.45}
+.cur-cell .cur-q{font-size:11px;color:var(--gold,#B8860B);margin-top:5px}
+.cur-cell .cur-biz{font-size:11px;color:var(--teal);margin-top:3px}
+.cur-edit{cursor:pointer;display:flex;flex-direction:column;gap:4px;justify-content:center;font-weight:600;color:var(--teal);border:1px dashed var(--hair);background:transparent}
+.cur-edit:hover{background:var(--fill)}
+.bst-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid var(--hair)}
+.bst-row:first-child{border-top:none}
+.bst-name{font-size:13px;cursor:pointer}
+.bst-ship{display:flex;gap:8px;flex-shrink:0}
+.bst-comm{border:none;background:var(--fill);border-radius:10px;padding:6px 10px;font-family:var(--font);font-size:12px;color:var(--ink)}

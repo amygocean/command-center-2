@@ -22,9 +22,11 @@ export default async function handler(req, res) {
   if (!oaKey && !anKey) { res.status(200).json({ off: true, error: "Pitch radar needs OPENAI_API_KEY (or ANTHROPIC_API_KEY)." }); return; }
 
   const { context } = await readBody(req);
+  const todayStr = new Date().toISOString().slice(0,10);
   const prompt =
     "You are a PR strategist for Ocean Basket Academy — the L&D function of a seafood restaurant franchise (South Africa & Cyprus). Their external narrative: digital transformation without leaving frontline workers behind; WhatsApp-based training for deskless, multilingual restaurant crews; Jessica Pallister is being positioned as a speaker (topic: From Courses to Capability).\n\n" +
     "What they're working on right now:\n" + JSON.stringify(context || {}) + "\n\n" +
+    "Today's date is " + todayStr + ". Only suggest opportunities that are still open and in the future — never a conference, CFP or award whose date or deadline has passed; verify dates when you search.\n\n" +
     "Search the web for CURRENT, real pitching opportunities: L&D and HR publications, podcasts, conference CFPs, awards, and journalists covering frontline/deskless workforce topics. Prefer South Africa, UK and global English-language outlets. For each, craft a specific angle tied to what they're working on.\n\n" +
     "Return ONLY a JSON object:\n" +
     '{"picks":[{"outlet":"name","type":"publication|podcast|conference|award|journalist","url":"...","angle":"one-sentence tailored pitch angle","why":"one line on fit/timing"}]}\n' +

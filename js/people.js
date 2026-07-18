@@ -35,10 +35,26 @@ function girlCardHTML(t,key){
     '</span></div>';
 }
 
+let girlsFocus=null;   // null = show everyone; otherwise a GIRLS key
+function renderGirlsFilter(){
+  const box=document.getElementById("girlsFilter"); if(!box) return;
+  const chip=(label,val,active)=>'<span class="ptog'+(active?" on":"")+'" data-focus="'+val+'">'+esc(label)+'</span>';
+  let html=chip("Everyone","",girlsFocus===null);
+  GIRLS.forEach(g=>html+=chip(firstName(g.name)+(isMe(g.key)?" (me)":""),g.key,girlsFocus===g.key));
+  box.innerHTML=html;
+  box.querySelectorAll(".ptog").forEach(el=>el.onclick=()=>{
+    const v=el.dataset.focus;
+    girlsFocus=(v===""||v===girlsFocus)?null:v;
+    renderGirls();
+  });
+}
+
 function renderGirls(){
   const board=document.getElementById("girlsBoard"); if(!board) return;
+  renderGirlsFilter();
+  const lanes=girlsFocus?GIRLS.filter(g=>g.key===girlsFocus):GIRLS;
   let html='';
-  GIRLS.forEach(g=>{
+  lanes.forEach(g=>{
     const gc=girlCfg(g.key);
     const all=visibleGirlTasks(g.key);
     const err=state.myTasksErr[g.key];
@@ -85,11 +101,11 @@ function renderGirls(){
       '<button class="qadd-btn" data-key="'+g.key+'">Add</button></div></div></div>';
   });
 
-  // unassigned pool from the boards
-  const pool=state.tasks.filter(t=>!t.assignee && !t.completed &&
+  // unassigned pool from the boards — only in "Everyone" view
+  const pool=girlsFocus?[]:state.tasks.filter(t=>!t.assignee && !t.completed &&
     !t.isOccasion&&!t.isNote&&!t.isPassion&&!t.isKeeper&&!t.isShot&&!t.isBrief&&
     !t.isComms&&!t.isVisit&&!t.isOpening&&!t.isBug&&!t.isPlaceholder);
-  html+='<div class="lane glane pool"><div class="lane-h"><span class="nm">Up for grabs</span><span class="ct">'+pool.length+'</span></div>'+
+  if(!girlsFocus) html+='<div class="lane glane pool"><div class="lane-h"><span class="nm">Up for grabs</span><span class="ct">'+pool.length+'</span></div>'+
     '<div class="lane-body"><p class="hint" style="margin:4px 0 8px">Unassigned on the boards — drag onto a girl to hand it out.</p>'+
     (pool.length?pool.slice(0,15).map(t=>
       '<div class="card gcard" draggable="true" data-gid="'+t.gid+'" data-pool="1">'+
