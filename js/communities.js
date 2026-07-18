@@ -19,7 +19,33 @@ function commMsgs(){
   return state.tasks.filter(t=>t.isComms && !t.isKeeper);
 }
 
+/* the Community Messages board — created from here, mirrored in Asana */
+async function ensureMsgBoard(){
+  if(cfg.msgBoard) return cfg.msgBoard;
+  try{
+    const res=await call("create_project",{name:"Community Messages",team:ACADEMY_TEAM,color:"dark-purple",
+      default_view:"calendar",privacy_setting:"private_to_team",
+      sections:cfg.communities.map(cm=>({sectionName:cm.name}))});
+    const gid=res.data&&res.data.gid; if(!gid) throw new Error("no project id returned");
+    cfg.msgBoard=gid;
+    const secs=(res.data.sections_created&&res.data.sections_created.succeeded)||[];
+    state.waSections={}; secs.forEach(sc=>{ state.waSections[sc.name]=sc.gid; });
+    saveCfg(); confetti(); toast("Community Messages board created");
+    loadAll();
+    return gid;
+  }catch(e){ toast("Couldn't create the board: "+e.message); return null; }
+}
+function renderMsgSetup(){
+  const setup=document.getElementById("msgSetup"); if(!setup) return false;
+  if(cfg.msgBoard){ setup.style.display="none"; return false; }
+  setup.style.display="block";
+  const b=document.getElementById("msgCreate");
+  if(b && !b.dataset.wired){ b.dataset.wired="1"; b.onclick=ensureMsgBoard; }
+  return true;
+}
+
 function renderCommunities(){
+  if(renderMsgSetup()) return;
   renderCommLegend(); renderCommComposer(); renderCommCalendar(); renderCommList(); renderCommInsights();
 }
 
@@ -49,10 +75,11 @@ async function addWAMessage(){
   const name=inp.value.trim(); if(!name){toast("Type the message first");return;}
   const targets=[...document.querySelectorAll("#commTargets input:checked")].map(i=>cfg.communities.find(c=>c.key===i.value)).filter(Boolean);
   if(!targets.length){ toast("Pick at least one community"); return; }
+  const board = await ensureMsgBoard(); if(!board) return;
   const secMap = await ensureWASections();
   const notes = pr.value ? "#purpose:"+pr.value : "";
   const tasks = targets.map(c=>{
-    const t={name, project_id:WA_PROJECT, notes};
+    const t={name, project_id:board, notes};
     if(dt.value) t.due_on=dt.value;
     if(secMap && secMap[c.name]) t.section_id=secMap[c.name];
     else t.name="["+c.name+"] "+name;
@@ -68,14 +95,15 @@ async function addWAMessage(){
 async function ensureWASections(){
   if(state.waSections) return state.waSections;
   try{
-    const res=await call("get_project",{project_id:WA_PROJECT,include_sections:true,opt_fields:"sections.name"});
+    if(!cfg.msgBoard) return null;
+    const res=await call("get_project",{project_id:cfg.msgBoard,include_sections:true,opt_fields:"sections.name"});
     const secs=(res.data&&res.data.sections)||[];
     const map={};
     for(const c of cfg.communities){
       const hit=secs.find(s=>s.name.toLowerCase()===c.name.toLowerCase());
       if(hit) map[c.name]=hit.gid;
       else{
-        try{ const made=await call("create_section",{project_id:WA_PROJECT,name:c.name});
+        try{ const made=await call("create_section",{project_id:cfg.msgBoard,name:c.name});
           if(made.data&&made.data.gid) map[c.name]=made.data.gid;
         }catch(e){ /* fall back to [Name] prefix */ }
       }

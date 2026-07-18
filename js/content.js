@@ -1,15 +1,11 @@
 /* ================================================================
-   STUDIO — shoot days, prep kits, AI ideas, supplier brief drafting
+   STUDIO — shoot days, shot lists, AI ideas, supplier brief drafting
    ================================================================ */
 
 function occasionsNear(date,win){
   const asana = state.tasks.filter(t=>t.isOccasion&&t.due).map(t=>({name:t.name,d:pd(t.due)}));
   const app = OCCASIONS_APP.map(o=>({name:o.name,d:pd(o.date)}));
   return [...asana,...app].filter(o=>Math.abs((o.d-date)/864e5)<=win).sort((a,b)=>a.d-b.d);
-}
-
-function prepTasksFor(s){
-  return state.tasks.filter(p=>p.isPrep && p.name.includes(s.name));
 }
 
 function renderStudio(){
@@ -22,21 +18,11 @@ function renderStudio(){
     const d=pd(s.due), days=daysTo(s.due), past=days<0;
     const when=past?"":days===0?"today":days===1?"tomorrow!":"in "+days+" days";
     const near=occasionsNear(d,14).slice(0,3).map(o=>esc(o.name)).join(", ");
-    const preps=prepTasksFor(s);
-    const prepDone=preps.filter(p=>p.completed).length;
-    const prepHTML = past?"" :
-      preps.length
-        ? '<div class="prep"><div class="prep-track"><i style="width:'+(preps.length?Math.round(prepDone/preps.length*100):0)+'%"></i></div>'+
-          '<span class="prep-lbl">'+prepDone+'/'+preps.length+' prep done</span>'+
-          '<button class="btn ghost sm prep-view" data-gid="'+s.gid+'">checklist</button></div>'
-        : '<div class="prep none">'+(days<=14?'<span class="prep-warn">⚠ no prep kit & the clock\'s ticking</span>':'<span class="prep-lbl">no prep kit yet</span>')+
-          '<button class="btn teal sm prep-make" data-gid="'+s.gid+'">Spin up prep kit</button></div>';
     html+='<div class="scard'+(past?" past":"")+'" style="animation-delay:'+(i*50)+'ms">'+
       '<div class="sc-date"><span class="sc-dd">'+d.getDate()+'</span><span class="sc-mo">'+MO[d.getMonth()].slice(0,3)+'</span></div>'+
       '<div class="sc-main"><div class="sc-name">🎬 '+esc(s.name)+' <span class="sc-when">'+when+'</span>'+(s.completed?' <span class="sc-done">wrapped ✓</span>':'')+'</div>'+
       (s.notes?'<div class="sc-notes">'+esc(s.notes.slice(0,220))+'</div>':'')+
       (near?'<div class="sc-occ">Around this date: '+near+'</div>':'<div class="sc-occ dimtxt">No occasions nearby</div>')+
-      prepHTML+
       '<div class="sc-ideas" id="ideas-'+s.gid+'"></div></div>'+
       '<div class="sc-actions"><button class="btn ghost sm sc-open" data-gid="'+s.gid+'">Open</button>'+
       (past?'':'<button class="btn ghost sm sc-shots" data-gid="'+s.gid+'">Shot list'+(shotsFor(s).length?' ('+shotsFor(s).length+')':'')+'</button>'+
@@ -55,49 +41,7 @@ function renderStudio(){
   });
   box.querySelectorAll(".sc-shots").forEach(b=>b.onclick=()=>openShotList(b.dataset.gid));
   box.querySelectorAll(".sc-run").forEach(b=>b.onclick=()=>openRunSheet(b.dataset.gid));
-  box.querySelectorAll(".prep-make").forEach(b=>b.onclick=()=>createPrepKit(b.dataset.gid));
-  box.querySelectorAll(".prep-view").forEach(b=>b.onclick=()=>showPrepChecklist(b.dataset.gid));
   renderEvents(); renderBriefs(); wireMaxDigest();
-}
-
-/* ---- prep kit ---- */
-async function createPrepKit(shootGid){
-  const s=state.tasks.find(x=>x.gid===shootGid); if(!s||!s.due){ toast("Shoot needs a date first"); return; }
-  const shootDate=pd(s.due);
-  const whoMap={ amy:cfg.people[0], caitlin:cfg.people[1], jess:cfg.people[2] };
-  const today=todayD();
-  const tasks=PREP_KIT.map(k=>{
-    const d=new Date(shootDate); d.setDate(d.getDate()-k.offset);
-    const due = d<today ? iso(today) : iso(d);   // never create tasks in the past
-    const t={ name:"「prep」 "+k.name+" — "+s.name, project_id:s.projectGid, due_on:due,
-      notes:"Part of the prep kit for "+s.name+" ("+s.due+"). Auto-created — reshuffle freely." };
-    if(s.projectGid===CC_PROJECT) t.section_id=SEC_PLAN;
-    if(whoMap[k.who]) t.assignee=whoMap[k.who];
-    return t;
-  });
-  toast("Building the runway…");
-  try{
-    await call("create_tasks",{tasks});
-    confetti(); toast("Prep kit live — "+tasks.length+" tasks queued");
-    dismissSuggestion("prep-"+shootGid);
-    loadAll();
-  }catch(e){ toast("Failed: "+e.message); }
-}
-function showPrepChecklist(shootGid){
-  const s=state.tasks.find(x=>x.gid===shootGid); if(!s) return;
-  const preps=prepTasksFor(s).sort((a,b)=>(a.due||"")<(b.due||"")?-1:1);
-  showModal('<h2>Prep — '+esc(s.name)+'</h2>'+
-    '<div class="preplist">'+preps.map(p=>
-      '<div class="preprow'+(p.completed?" done":"")+'"><button class="pchk'+(p.completed?" on":"")+'" data-gid="'+p.gid+'">'+(p.completed?"✓":"")+'</button>'+
-      '<span class="ptxt">'+esc(p.name.replace(/^「prep」\s*/,"").replace(" — "+s.name,""))+'</span>'+
-      '<span class="pdue">'+(p.due?pd(p.due).toDateString().slice(4,10):"")+'</span></div>').join("")+'</div>'+
-    '<div class="drawer-actions"><button class="btn ghost" data-close>Close</button></div>');
-  wireModalClose();
-  document.querySelectorAll(".pchk").forEach(b=>b.onclick=async()=>{
-    const t=state.tasks.find(x=>x.gid===b.dataset.gid); if(!t) return;
-    await toggleDone(t.gid,!t.completed);
-    showPrepChecklist(shootGid);
-  });
 }
 
 /* ---- AI content ideas ---- */
@@ -251,7 +195,7 @@ function openShotList(shootGid){
    ================================================================ */
 function openRunSheet(shootGid){
   const s=state.tasks.find(x=>x.gid===shootGid); if(!s) return;
-  const shots=shotsFor(s), preps=prepTasksFor(s), bt=briefTaskFor(s);
+  const shots=shotsFor(s), bt=briefTaskFor(s);
   const done=shots.filter(t=>t.completed).length;
   const w=document.getElementById("runWrap");
   w.innerHTML=
@@ -269,9 +213,9 @@ function openRunSheet(shootGid){
               '<span class="run-txt">'+esc(shotLabel(t,s))+(meta?'<span class="run-meta">'+esc(meta)+'</span>':'')+'</span></div>';
           }).join(""):'<div class="empty">No shot list yet — build one in Studio before the day.</div>')+
         '</div>'+
-        '<div><h3 class="run-h">Before cameras roll</h3>'+
-          (preps.length?preps.map(p=>'<div class="run-prep'+(p.completed?" done":"")+'">'+(p.completed?"✓ ":"○ ")+esc(p.name.replace(/^「prep」\s*/,"").replace(" — "+s.name,""))+'</div>').join(""):'<div class="empty">No prep kit for this shoot.</div>')+
-          (bt?'<h3 class="run-h" style="margin-top:22px">Brief</h3><div class="run-prep">Status: '+esc(briefStatusOf(bt))+' · <a href="#" id="runBrief" style="color:var(--teal);font-weight:700">open</a></div>':'')+
+        '<div><h3 class="run-h">Brief</h3>'+
+          (bt?'<div class="run-prep">Status: '+esc(briefStatusOf(bt))+' · <a href="#" id="runBrief" style="color:var(--teal);font-weight:700">open</a></div>'
+             :'<div class="empty">No brief for this shoot yet — draft one in Studio.</div>')+
         '</div>'+
       '</div>'+
     '</div>';
