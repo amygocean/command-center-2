@@ -11,7 +11,12 @@ function loadCfg(){
     if(s && s.projects){
       if(!s._m1){ if(!s.people.includes("1213630128899336")) s.people.push("1213630128899336"); s._m1=true; }
       if(!s._m2){ if(!s.projects.some(p=>p.gid===PB.proj)) s.projects.push({gid:PB.proj,name:"Day to Day",color:"#E4784D",on:true}); s._m2=true; }
-      if(!s._m3){ s.campaigns=s.campaigns||[]; s._m3=true; }
+      if(!s._m3){
+        if(!s.campaigns) s.campaigns=[];
+        if(!s.campaigns.some(c=>c.gid==="1216638197844781")) s.campaigns.push({gid:"1216638197844781",name:"Volume Drivers",start:"2026-08-01",due:"2026-09-30",color:"#D9822B"});
+        if(!s.projects.some(p=>p.gid==="1216638197844781")) s.projects.push({gid:"1216638197844781",name:"Volume Drivers",color:"#D9822B",on:true});
+        s._m3=true;
+      }
       if(!s._m4){ // v2 dashboard: communities + layers
         s.communities = s.communities || COMMUNITIES_DEFAULT;
         if(s.showComms===undefined) s.showComms = true;
@@ -25,12 +30,6 @@ function loadCfg(){
         s._m5=true;
       }
       if(!s.campaigns) s.campaigns=[];
-      if(!s._m6){
-        const retired = new Set(RETIRED_CAMPAIGN_GIDS||[]);
-        s.campaigns = s.campaigns.filter(c=>!retired.has(c.gid) && !/^volume drivers$/i.test(c.name||""));
-        s.projects = s.projects.filter(p=>!retired.has(p.gid) && !/^volume drivers$/i.test(p.name||""));
-        s._m6=true;
-      }
       localStorage.setItem(LS_KEY, JSON.stringify(s));
       return s;
     }
@@ -58,17 +57,7 @@ const state = {
   myTasks: {amy:[],caitlin:[],jess:[]},   // each person's real Asana My Tasks
   myTasksErr: {},      // person -> error/no_pat flag
   suggestions: [],     // computed after load
-  dismissed: JSON.parse(localStorage.getItem("ob_dismissed")||"{}"),
-  campaignPortfolio: [],
-  campaignsLoaded: false,
-  campaignsLoading: false,
-  campaignError: null,
-  campaignSelected: null,
-  campaignSections: {},
-  campaignSectionLoading: {},
-  campaignSubtasks: {},
-  campaignExpanded: {},
-  campaignCursor: {}
+  dismissed: JSON.parse(localStorage.getItem("ob_dismissed")||"{}")
 };
 
 const DEMO = new URLSearchParams(location.search).has("demo");
@@ -143,7 +132,6 @@ async function loadAll(){
       const u = await call("get_users",{limit:100});
       state.users = (u.data||[]).filter(x=>x.email && !/team\.asana\.com$/.test(x.email));
     }
-    if(typeof syncCampaignPortfolio==="function") await syncCampaignPortfolio();
     const active = cfg.projects.filter(p=>p.on).slice();
     // always-on hidden boards: trainer visits + X Force bugs (+ messages board once created)
     const hidden = [
@@ -488,7 +476,7 @@ function moveTabInk(){
 
 function renderAll(){
   renderSub(); renderGreeting(); renderChips(); renderPersonToggles();
-  renderCalendar(); renderGirls(); renderCampaigns(); renderStudio(); renderCurriculum(); renderCommunities();
+  renderCalendar(); renderGirls(); renderStudio(); renderCurriculum(); renderCommunities();
   renderStores(); renderPlatform(); prTabVisibility(); renderMentionBadge();
   computeSuggestions();
 }

@@ -17,6 +17,7 @@ const PROJECTS = [
   ["1214196027560612", "New/Revamped Restaurant Training"],
   ["1216476678698201", "Academy WhatsApp"],
   ["1216637913085208", "Day to Day"],
+  ["1216638197844781", "Volume Drivers"],
   ["1213806179626680", "Store Visits"]
 ];
 
@@ -36,13 +37,7 @@ export default async function handler(req, res) {
     const soon = new Date(today); soon.setDate(soon.getDate() + 7);
     const iso = d => d.toISOString().slice(0, 10);
     const all = [];
-    const projects = PROJECTS.slice();
-    const portfolio = await fetch("https://app.asana.com/api/1.0/portfolios/1216656052977768/items?limit=100&opt_fields=name", { headers: { Authorization: `Bearer ${pat}` } });
-    if(portfolio.ok){
-      const pj=await portfolio.json();
-      (pj.data||[]).forEach(p=>{ if(!projects.some(([gid])=>gid===p.gid)) projects.push([p.gid,p.name]); });
-    }
-    for (const [gid, name] of projects) {
+    for (const [gid, name] of PROJECTS) {
       const r = await fetch(`https://app.asana.com/api/1.0/tasks?project=${gid}&limit=100&opt_fields=name,due_on,completed,assignee.name`,
         { headers: { Authorization: `Bearer ${pat}` } });
       const j = await r.json();

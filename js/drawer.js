@@ -238,7 +238,6 @@ function openCampaign(){
     '<div class="fld"><label>Ends</label><input type="date" id="cEnd"></div></div>'+
     '<div class="fld"><label>Channels</label><div style="display:flex;gap:4px;flex-wrap:wrap">'+chBoxes+'</div></div>'+
     '<div class="fld"><label>Roles affected</label><div style="display:flex;gap:4px;flex-wrap:wrap">'+roleBoxes+'</div></div>'+
-    '<div class="fld"><label>Campaign notes</label><textarea id="cNotes" placeholder="Goal, audience, important decisions, source links, what cannot change…"></textarea></div>'+
     '<div class="fld"><label>Band colour</label><select id="cColor">'+
       ["#D9822B","#0A3D62","#00A8A8","#F7C325","#7A5FB0","#C0392B","#3A7D44"].map(c=>'<option value="'+c+'">'+c+'</option>').join("")+'</select></div>'+
     '<div class="drawer-actions"><button class="btn primary" id="cPlan">Draft the plan</button>'+
@@ -271,10 +270,9 @@ function openCampaign(){
     document.getElementById("cCreate").onclick=async()=>{
       const btn=document.getElementById("cCreate"); btn.disabled=true; btn.innerHTML='<span class="spin"></span> building…';
       const color=document.getElementById("cColor").value;
-      const notes=document.getElementById("cNotes").value.trim();
       try{
-        const res=await call("create_project",{name,team:ACADEMY_TEAM,color:HEX_TO_ASANA[color]||"dark-orange",default_view:"calendar",
-          privacy_setting:"private_to_team",start_on:start,due_on:end,notes,
+        const res=await call("create_project",{name,team:ACADEMY_TEAM,color:"dark-orange",default_view:"calendar",
+          privacy_setting:"private_to_team",start_on:start,due_on:end,
           sections:CAMPAIGN_PHASES.map(p=>({sectionName:p}))});
         const gid=res.data&&res.data.gid; if(!gid) throw new Error("no project id returned");
         const secs=(res.data.sections_created&&res.data.sections_created.succeeded)||[];
@@ -288,15 +286,10 @@ function openCampaign(){
           tasks.push(t);
         });
         if(tasks.length) await call("create_tasks",{tasks});
-        let portfolioLinked=true;
-        try{ await call("add_to_portfolio",{portfolio_gid:CAMPAIGN_PORTFOLIO,item:gid}); }
-        catch(portfolioErr){ portfolioLinked=false; }
-        const campaign={gid,name,start,due:end,color,notes,url:"https://app.asana.com/0/"+gid,source:"portfolio"};
-        cfg.campaigns=(cfg.campaigns||[]).filter(c=>c.gid!==gid); cfg.campaigns.push(campaign);
-        cfg.projects=(cfg.projects||[]).filter(p=>p.gid!==gid); cfg.projects.push({gid,name,color,on:true,campaign:true});
-        state.campaignSelected=gid; state.campaignsLoaded=false;
-        saveCfg(); closeModal(); confetti(); switchTab("campaigns");
-        toast(portfolioLinked?"Campaign live — "+tasks.length+" tasks on the runway":"Campaign created, but it still needs adding to the portfolio");
+        cfg.campaigns.push({gid,name,start,due:end,color});
+        cfg.projects.push({gid,name,color,on:true});
+        saveCfg(); closeModal(); confetti();
+        toast("Campaign live — "+tasks.length+" tasks on the runway");
         loadAll();
       }catch(e){ btn.disabled=false; btn.textContent="Create it all in Asana"; toast("Failed: "+e.message); }
     };

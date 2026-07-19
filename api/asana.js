@@ -101,7 +101,7 @@ export default async function handler(req, res){
 
       // ---- campaigns portfolio ----
       case "get_portfolio_items":
-        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/items?${qs({opt_fields:args.opt_fields||"name,start_on,due_on,color,notes,permalink_url",limit:args.limit||100})}`);
+        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/items?${qs({opt_fields:args.opt_fields||"name,start_on,due_on,color,notes,permalink_url"})}`);
         break;
 
       case "add_to_portfolio":
