@@ -898,3 +898,152 @@ body.lane-resize-active .girls-board .glane{transition:none}
 .bst-name{font-size:13px;cursor:pointer}
 .bst-ship{display:flex;gap:8px;flex-shrink:0}
 .bst-comm{border:none;background:var(--fill);border-radius:10px;padding:6px 10px;font-family:var(--font);font-size:12px;color:var(--ink)}
+
+/* ================= campaigns — portfolio workspace ================= */
+.campaign-top{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin-bottom:20px}
+.campaign-top .hint{max-width:76ch}
+.campaign-top-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.campaign-shell{display:grid;grid-template-columns:270px minmax(0,1fr);gap:34px;align-items:start}
+.campaign-rail{position:sticky;top:78px;min-width:0}
+.campaign-summary{display:flex;align-items:baseline;gap:6px;padding:4px 2px 13px;border-bottom:1px solid var(--hair);color:var(--faint);font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.45px}
+.campaign-summary b{font-size:18px;line-height:1;color:var(--ink);letter-spacing:-.5px}
+.campaign-summary i{width:1px;height:14px;background:var(--hair);margin:0 4px}
+.campaign-sync-warn{font-size:11px;color:#9a4a24;line-height:1.4;text-transform:none;letter-spacing:0}
+.campaign-sync-warn span{color:var(--faint)}
+.campaign-list{display:flex;flex-direction:column}
+.campaign-row{width:100%;border:none;background:transparent;border-bottom:1px solid var(--hair);padding:13px 2px;display:grid;grid-template-columns:8px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;cursor:pointer;color:var(--ink);transition:background .15s,padding .15s,border-radius .15s}
+.campaign-row:hover{background:var(--fill);padding-left:9px;padding-right:9px;border-radius:10px}
+.campaign-row.on{background:var(--grad-soft);padding-left:9px;padding-right:9px;border-radius:10px;border-bottom-color:transparent}
+.campaign-row-dot{width:8px;height:8px;border-radius:50%}
+.campaign-row-main{min-width:0;display:flex;flex-direction:column;gap:2px}
+.campaign-row-main b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.15px}
+.campaign-row-main small,.campaign-row-side small{font-size:10.5px;color:var(--faint);font-weight:600}
+.campaign-row-side{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.campaign-status{display:inline-flex;align-items:center;border-radius:980px;padding:2px 7px;font-size:9px;font-weight:800;font-style:normal;text-transform:uppercase;letter-spacing:.45px;white-space:nowrap}
+.campaign-status.live{background:rgba(0,168,168,.12);color:#007d7d}
+.campaign-status.next{background:rgba(10,61,98,.08);color:var(--deep)}
+.campaign-status.done{background:var(--fill);color:var(--faint)}
+.campaign-status.plan{background:rgba(247,195,37,.18);color:#755a00}
+.campaign-detail{min-width:0}
+.campaign-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:0 0 18px;border-bottom:1px solid var(--hair)}
+.campaign-detail-head h2{font-size:clamp(24px,3vw,32px);line-height:1.1;margin:6px 0 4px;letter-spacing:-.8px}
+.campaign-detail-head p{margin:0;color:var(--faint);font-size:12px;font-weight:600}
+.campaign-kicker{display:flex;align-items:center;gap:8px;color:var(--faint);font-size:10.5px;font-weight:700}
+.campaign-detail-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(250px,.75fr);gap:38px;align-items:start}
+.campaign-main,.campaign-aside{min-width:0}
+.campaign-section{padding:24px 0 4px;border-bottom:1px solid var(--hair)}
+.campaign-aside .campaign-section:last-child,.campaign-main .campaign-section:last-child{border-bottom:none}
+.campaign-section-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:12px}
+.campaign-section-h h3{font-size:14px;letter-spacing:-.25px;margin:0}
+.campaign-section-h span{font-size:10.5px;color:var(--faint);font-weight:600}
+.campaign-fields{display:grid;grid-template-columns:1.5fr 1fr 1fr;gap:8px}
+.campaign-fields label,.campaign-note{display:flex;flex-direction:column;gap:5px}
+.campaign-fields span,.campaign-note>span{font-size:10px;color:var(--faint);font-weight:800;text-transform:uppercase;letter-spacing:.55px}
+.campaign-fields input,.campaign-note textarea,.campaign-add input,.campaign-add select,.campaign-sub-add input{width:100%;border:none;background:var(--fill);border-radius:10px;padding:9px 10px;font:inherit;font-size:12px;color:var(--ink)}
+.campaign-fields input:focus,.campaign-note textarea:focus,.campaign-add input:focus,.campaign-add select:focus,.campaign-sub-add input:focus{background:var(--card);box-shadow:0 0 0 2px var(--teal)}
+.campaign-note{margin-top:9px}
+.campaign-note textarea{min-height:96px;resize:vertical;line-height:1.5}
+.campaign-save-line{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:9px}
+.campaign-save-line span{font-size:10.5px;color:var(--faint)}
+.campaign-add{display:grid;grid-template-columns:minmax(180px,1.5fr) 126px 130px 132px auto;gap:6px;margin-bottom:13px}
+.campaign-add select{min-width:0;color:var(--muted)}
+.campaign-task-groups{display:flex;flex-direction:column;gap:14px}
+.campaign-task-group{min-width:0}
+.campaign-phase{display:flex;align-items:center;gap:7px;padding:4px 2px 5px;font-size:10px;font-weight:800;color:var(--faint);text-transform:uppercase;letter-spacing:.7px}
+.campaign-phase b{background:var(--fill);border-radius:980px;padding:1px 6px;color:var(--muted)}
+.campaign-task-wrap{border-top:1px solid var(--hair)}
+.campaign-task{display:grid;grid-template-columns:22px minmax(0,1fr) auto auto;gap:8px;align-items:center;padding:9px 2px}
+.campaign-task.done{opacity:.48}
+.campaign-task.done .campaign-task-name{text-decoration:line-through}
+.camp-check,.camp-sub-check{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--fill-2);background:var(--card);color:#fff;font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}
+.campaign-task.done .camp-check,.campaign-subtask.done .camp-sub-check{background:var(--teal);border-color:var(--teal)}
+.campaign-task-name{border:none;background:none;padding:0;text-align:left;font:inherit;font-size:12.5px;font-weight:650;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.campaign-task-name:hover{color:var(--teal)}
+.campaign-task-meta{font-size:10.5px;color:var(--faint);font-weight:600;white-space:nowrap}
+.campaign-sub-btn{opacity:.15;transition:opacity .15s}
+.campaign-task:hover .campaign-sub-btn{opacity:1}
+.campaign-subtasks{margin:0 0 8px 30px;padding:2px 0 4px 10px;border-left:1px solid var(--hair)}
+.campaign-subtask{display:grid;grid-template-columns:20px minmax(0,1fr) auto;gap:7px;align-items:center;padding:6px 2px;font-size:11.5px}
+.campaign-subtask.done{opacity:.5;text-decoration:line-through}
+.campaign-subtask small{color:var(--faint);font-weight:600}
+.campaign-sub-add{display:grid;grid-template-columns:minmax(0,1fr) 120px auto;gap:5px;margin-top:5px}
+.campaign-sub-add input{padding:7px 9px;font-size:11.5px}
+.campaign-calendar-section{padding-top:24px}
+.campaign-cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.campaign-cal-nav b{font-size:12px;letter-spacing:-.15px}
+.campaign-cal-dow,.campaign-cal-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr))}
+.campaign-cal-dow span{text-align:center;font-size:8px;font-weight:800;color:var(--faint);padding:3px 0;text-transform:uppercase}
+.campaign-cal-day{position:relative;min-height:37px;border:none;background:transparent;border-radius:7px;padding:4px 3px;color:var(--muted);font:inherit;font-size:9.5px;cursor:pointer;display:flex;align-content:flex-start;justify-content:center;gap:2px;flex-wrap:wrap;transition:background .12s}
+.campaign-cal-day:hover{background:var(--fill)}
+.campaign-cal-day.dim{opacity:.32}
+.campaign-cal-day.in-range{background:var(--grad-soft)}
+.campaign-cal-day.today span{background:var(--teal);color:#fff;width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800}
+.campaign-cal-day i{width:4px;height:4px;border-radius:50%;align-self:flex-end;margin-bottom:3px}
+.campaign-cal-day em{font-size:7px;color:var(--faint);font-style:normal;align-self:flex-end}
+.campaign-next button{width:100%;display:grid;grid-template-columns:48px minmax(0,1fr);gap:8px;border:none;border-top:1px solid var(--hair);background:none;padding:8px 2px;text-align:left;cursor:pointer;color:var(--ink)}
+.campaign-next button:first-of-type{border-top:none}
+.campaign-next button:hover{background:var(--fill)}
+.campaign-next button span{font-size:9.5px;color:var(--faint);font-weight:700;text-transform:uppercase}
+.campaign-next button b{font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.campaign-empty{text-align:center;padding:70px 20px}
+.campaign-empty-mark{display:block;font-size:42px;color:var(--teal);margin-bottom:8px}
+.campaign-empty h2{font-size:21px;margin:0 0 7px;letter-spacing:-.5px}
+.campaign-empty p{max-width:480px;margin:0 auto 18px;color:var(--muted);line-height:1.55}
+.campaign-task-empty{padding:24px 8px}
+
+@media(max-width:1040px){
+  .campaign-shell{grid-template-columns:220px minmax(0,1fr);gap:24px}
+  .campaign-detail-grid{grid-template-columns:1fr}
+  .campaign-aside{display:grid;grid-template-columns:1fr 1fr;gap:28px}
+  .campaign-add{grid-template-columns:minmax(180px,1fr) 126px 130px auto}
+  .campaign-add #campTaskAssignee{grid-column:1/4}
+}
+@media(max-width:760px){
+  .campaign-top{flex-direction:column}
+  .campaign-top-actions{width:100%;overflow-x:auto}
+  .campaign-shell{display:block}
+  .campaign-rail{position:static;margin-bottom:24px}
+  .campaign-list{display:flex;flex-direction:row;gap:6px;overflow-x:auto;padding-bottom:5px}
+  .campaign-row{flex:0 0 230px;border:1px solid var(--hair);border-radius:10px;padding:10px}
+  .campaign-row:hover,.campaign-row.on{padding:10px}
+  .campaign-detail-head{align-items:flex-end}
+  .campaign-fields{grid-template-columns:1fr 1fr}
+  .campaign-fields label:first-child{grid-column:1/-1}
+  .campaign-add{grid-template-columns:1fr 1fr}
+  .campaign-add #campTaskName{grid-column:1/-1}
+  .campaign-add #campTaskAssignee{grid-column:auto}
+  .campaign-task{grid-template-columns:22px minmax(0,1fr) auto}
+  .campaign-task-meta{display:none}
+  .campaign-aside{display:block}
+}
+@media(max-width:500px){
+  .campaign-detail-head{display:block}
+  .campaign-detail-head>a{margin-top:12px}
+  .campaign-fields,.campaign-add,.campaign-sub-add{grid-template-columns:1fr}
+  .campaign-fields label:first-child,.campaign-add #campTaskName{grid-column:auto}
+  .campaign-task{grid-template-columns:22px minmax(0,1fr)}
+  .campaign-sub-btn{grid-column:2;justify-self:start;opacity:1}
+  .campaign-subtasks{margin-left:12px}
+}
+
+/* Campaign task composer: two compact rows, so it never spills into the calendar column. */
+.campaign-add{grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto}
+.campaign-add #campTaskName{grid-column:1/3}
+.campaign-add #campTaskDue{grid-column:3}
+.campaign-add #campTaskPhase{grid-column:1}
+.campaign-add #campTaskAssignee{grid-column:2}
+.campaign-add #campTaskAdd{grid-column:3}
+@media(max-width:760px){
+  .campaign-add{grid-template-columns:1fr 1fr}
+  .campaign-add #campTaskName{grid-column:1/-1}
+  .campaign-add #campTaskDue,.campaign-add #campTaskPhase,.campaign-add #campTaskAssignee,.campaign-add #campTaskAdd{grid-column:auto}
+}
+@media(max-width:500px){
+  .campaign-add{grid-template-columns:1fr}
+  .campaign-add #campTaskName,.campaign-add #campTaskDue,.campaign-add #campTaskPhase,.campaign-add #campTaskAssignee,.campaign-add #campTaskAdd{grid-column:auto}
+}
+
+/* Keep the growing tab bar usable on phones without widening the whole page. */
+.tabs{max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{display:none}
+.tab{flex:0 0 auto}

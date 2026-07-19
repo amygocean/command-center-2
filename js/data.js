@@ -27,6 +27,9 @@ const GIRLS = [
 const STICKY_COLORS = ["#FFF3B0","#FFD6E0","#D4F0DB","#D6E9FF","#EBDDFF"];
 const LAYER = { opening:"#E8A013", visit:"#6C5CE7" };
 const ACADEMY_TEAM = "1213626139926485"; // team new campaigns are created in
+const CAMPAIGN_PORTFOLIO = "1216656052977768";
+const CAMPAIGN_PORTFOLIO_URL = "https://app.asana.com/0/portfolio/1216656052977768/1216677685805996";
+const RETIRED_CAMPAIGN_GIDS = ["1216638197844781"]; // hidden from this app; the Asana project itself is not deleted
 const REVAMP_PROJECT = "1214196027560612"; // store-revamp placeholders
 const CURRICULUM_PROJECT = "1216652752864537";
 const CURRICULUM_URL = "https://app.asana.com/0/1216652752864537";
@@ -199,12 +202,9 @@ const DEFAULT_CFG = {
     {gid:"1214196027560535",   name:"Menu Training",                   color:"#F7C325", on:true},
     {gid:"1214196027560612",   name:"New/Revamped Restaurant Training",color:"#5BC4BF", on:true},
     {gid:WA_PROJECT,           name:"Academy WhatsApp",                color:"#7A5FB0", on:true},
-    {gid:PB.proj,              name:"Day to Day",                      color:"#E4784D", on:true},
-    {gid:"1216638197844781",   name:"Volume Drivers",                  color:"#D9822B", on:true}
+    {gid:PB.proj,              name:"Day to Day",                      color:"#E4784D", on:true}
   ],
-  campaigns: [
-    {gid:"1216638197844781", name:"Volume Drivers", start:"2026-08-01", due:"2026-09-30", color:"#D9822B"}
-  ],
+  campaigns: [],
   people: ["1213414176761459","1213630129003527","1213630128899336"], // Amy, Caitlin, Jess
   communities: COMMUNITIES_DEFAULT,
   pageCap: 6,

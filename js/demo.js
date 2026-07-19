@@ -27,6 +27,17 @@ const SEC = {
   foh2:{gid:"s-foh2",name:"Front of House 2"}, boh:{gid:"s-boh",name:"Back of House"}, sushi:{gid:"s-sushi",name:"Sushi"}
 };
 
+const DEMO_CAMPAIGN_SECTIONS = {
+  pre:{gid:"dc-pre",name:"Pre-launch"}, launch:{gid:"dc-launch",name:"Launch week"},
+  market:{gid:"dc-market",name:"In market"}, wrap:{gid:"dc-wrap",name:"Wrap-up"}
+};
+const DEMO_CAMPAIGNS = [
+  {gid:"demo-camp-summer",name:"Summer Menu 2026",start_on:_d(-12),due_on:_d(34),color:"dark-teal",notes:"Launch confidence across FOH, BOH and Sushi. Keep every asset practical, mobile-first and focused on what changed.",permalink_url:"https://app.asana.com/demo/summer"},
+  {gid:"demo-camp-peak",name:"Peak Readiness 2026",start_on:_d(55),due_on:_d(118),color:"dark-blue",notes:"Build December readiness through coaching, pace, consistency and zero-error service.",permalink_url:"https://app.asana.com/demo/peak"}
+];
+const DEMO_PROJECTS = Object.fromEntries(DEMO_CAMPAIGNS.map(c=>[c.gid,{...c,sections:Object.values(DEMO_CAMPAIGN_SECTIONS)}]));
+const DEMO_SUBTASKS = {};
+
 const DEMO_TASKS = [
   // ---- Content & Comms: shoots ----
   _mk(CC_PROJECT,"Shoot Day 14 – Summer Menu heroes",{section:SEC.shoot,due:_d(6),assignee:"u-amy",
@@ -76,9 +87,14 @@ const DEMO_TASKS = [
   _mk(CC_PROJECT,"「shot」 Nasreen comms video (13:00 sharp) — Shoot Day 14 – Summer Menu heroes",{section:SEC.plan,due:_d(6),notes:"type: comms video\nteleprompter script approved — do not change"}),
   _mk(CC_PROJECT,"「brief」 Shoot Day 15 – Upselling scenarios FOH",{section:SEC.plan,due:_d(24),
     notes:"status: sent to Content Go\ndrafted: "+_d(-2)+"\n\nOCEAN BASKET ACADEMY — VIDEO BRIEF\nShoot: Shoot Day 15 – Upselling scenarios FOH\n\n1. THE BIG PICTURE\n• Roleplay clips for the upselling course…"}),
-  // ---- Volume Drivers campaign board ----
-  _mk("1216638197844781","Volume Drivers: upsell scripts v2",{due:_d(19),assignee:"u-cait"}),
-  _mk("1216638197844781","Volume Drivers: leaderboard mechanics",{due:_d(26),assignee:"u-amy"}),
+  // ---- Campaign portfolio projects ----
+  _mk("demo-camp-summer","Manager launch pack — what changed and how to coach it",{section:DEMO_CAMPAIGN_SECTIONS.pre,due:_d(-3),assignee:"u-jess"}),
+  _mk("demo-camp-summer","Summer Menu courses live + assigned",{section:DEMO_CAMPAIGN_SECTIONS.launch,due:_d(2),assignee:"u-amy"}),
+  _mk("demo-camp-summer","FOH confidence pulse",{section:DEMO_CAMPAIGN_SECTIONS.market,due:_d(12),assignee:"u-cait"}),
+  _mk("demo-camp-summer","Wrong-answer check — Skills Booster if needed",{section:DEMO_CAMPAIGN_SECTIONS.market,due:_d(18),assignee:"u-amy"}),
+  _mk("demo-camp-summer","Campaign results snapshot",{section:DEMO_CAMPAIGN_SECTIONS.wrap,due:_d(36),assignee:"u-jess"}),
+  _mk("demo-camp-peak","Peak playbook scope",{section:DEMO_CAMPAIGN_SECTIONS.pre,due:_d(62),assignee:"u-amy"}),
+  _mk("demo-camp-peak","Book peak coaching masterclass",{section:DEMO_CAMPAIGN_SECTIONS.pre,due:_d(70),assignee:"u-jess"}),
   // ---- WhatsApp Academy: the software board ----
   _mk(WA_PROJECT,"Learners in Cyprus can't open module 3 videos",{due:_d(-11),assignee:"u-jess"}),
   _mk(WA_PROJECT,"Completion data not syncing for two stores",{due:_d(-4),assignee:"u-jess"}),
@@ -130,6 +146,7 @@ async function demoCall(tool,args){
       return {data:DEMO_TASKS.filter(t=>t._proj===args.project).map(t=>({...t}))};
     case "get_project": {
       if(args.project_id==="demo-pr") return {data:{name:"PR & Positioning",sections:[["pr-0","Idea"],["pr-1","Pitched"],["pr-2","In progress"],["pr-3","Delivered"]].map(([g,n])=>({gid:g,name:n}))}};
+      if(DEMO_PROJECTS[args.project_id]) return {data:{...DEMO_PROJECTS[args.project_id],sections:DEMO_PROJECTS[args.project_id].sections.map(x=>({...x}))}};
       return {data:{name:"Demo board",sections:[SEC.mgmt,SEC.foh1,SEC.foh2,SEC.boh,SEC.sushi].map(s=>({gid:s.gid,name:s.name}))}};
     }
     case "get_my_tasks": {
@@ -142,7 +159,9 @@ async function demoCall(tool,args){
       return {data:{notes:t.notes||"",comments:[{text:"Looks great — let's lock it in 🎬",created_at:new Date().toISOString(),created_by:{name:"Jessica Pallister"}}]}};
     }
     case "update_tasks": {
-      (args.tasks||[]).forEach(u=>{ const t=DEMO_TASKS.find(x=>x.gid===u.task); if(!t) return;
+      (args.tasks||[]).forEach(u=>{ let t=DEMO_TASKS.find(x=>x.gid===u.task);
+        if(!t){ for(const arr of Object.values(DEMO_SUBTASKS)){ t=arr.find(x=>x.gid===u.task); if(t)break; } }
+        if(!t) return;
         if("completed" in u) t.completed=u.completed;
         if("due_on" in u) t.due_on=u.due_on;
         if("notes" in u) t.notes=u.notes;
@@ -153,8 +172,9 @@ async function demoCall(tool,args){
     }
     case "create_tasks": {
       const made=(args.tasks||[]).map(t=>{
+        const allSections=[...Object.values(SEC),...Object.values(DEMO_PROJECTS).flatMap(p=>p.sections||[])];
         const nt=_mk(t.project_id||CC_PROJECT,t.name,{due:t.due_on,notes:t.notes,assignee:t.assignee,
-          section: t.section_id ? Object.values(SEC).find(s=>s.gid===t.section_id) : null});
+          section: t.section_id ? allSections.find(s=>s.gid===t.section_id) : null});
         DEMO_TASKS.push(nt); return {gid:nt.gid,name:nt.name};
       });
       return {data:made};
@@ -167,7 +187,24 @@ async function demoCall(tool,args){
     case "create_project": {
       const gid="demo-proj-"+Date.now();
       const made=(args.sections||[]).map((sc,i)=>({gid:gid+"-s"+i,name:sc.sectionName}));
+      DEMO_PROJECTS[gid]={gid,name:args.name,start_on:args.start_on||null,due_on:args.due_on||null,color:args.color||"dark-teal",notes:args.notes||"",permalink_url:"https://app.asana.com/demo/"+gid,sections:made};
       return {data:{gid,name:args.name,sections_created:{succeeded:made}}};
+    }
+    case "get_portfolio_items": return {data:DEMO_CAMPAIGNS.map(c=>({...c}))};
+    case "add_to_portfolio": {
+      const proj=DEMO_PROJECTS[args.item];
+      if(proj&&!DEMO_CAMPAIGNS.some(c=>c.gid===proj.gid)) DEMO_CAMPAIGNS.push({...proj});
+      return {data:{}};
+    }
+    case "update_project": {
+      const proj=DEMO_PROJECTS[args.project_id];
+      if(proj){ Object.assign(proj,args.fields||{}); const c=DEMO_CAMPAIGNS.find(x=>x.gid===proj.gid); if(c)Object.assign(c,args.fields||{}); }
+      return {data:proj||{}};
+    }
+    case "get_subtasks": return {data:(DEMO_SUBTASKS[args.parent]||[]).map(x=>({...x}))};
+    case "create_subtask": {
+      const st={gid:"demo-sub-"+(_dgid++),name:(args.data&&args.data.name)||"Subtask",completed:false,due_on:(args.data&&args.data.due_on)||null,assignee:null};
+      (DEMO_SUBTASKS[args.parent]=DEMO_SUBTASKS[args.parent]||[]).push(st); return {data:st};
     }
     case "add_comment": return {data:{}};
     default: return {data:[]};
@@ -207,7 +244,7 @@ const DEMO_MYTASKS={
     _mt("Chase X Force re: completion bug",_d(0),"WhatsApp Academy"),
     _mt("Queue next week's community messages",_d(1),"Community Messages"),
     _mt("Allergen flashcards refresh",_d(8),"Menu Training"),
-    _mt("Volume Drivers: upsell scripts v2",_d(19),"Volume Drivers")
+    _mt("Summer Menu: FOH confidence pulse",_d(12),"Summer Menu 2026")
   ],
   jess:[
     _mt("Storyboard: Golden Crunch pop-ups",_d(3)),
