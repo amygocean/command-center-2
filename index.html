@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A3D62">
 <title>Academy Command Center</title>
-<link rel="stylesheet" href="/styles.css?v=20260718d">
+<link rel="stylesheet" href="/styles.css?v=20260719a">
 </head>
 <body>
 <!--
@@ -136,6 +136,7 @@
       </div>
       <div class="campaign-top-actions">
         <a class="btn ghost sm" href="https://app.asana.com/0/portfolio/1216656052977768/1216677685805996" target="_blank">Portfolio ↗</a>
+        <button class="btn ghost sm" id="campaignHiddenToggle" style="display:none">Hidden</button>
         <button class="btn ghost sm" id="campaignRefresh">Refresh</button>
         <button class="btn primary sm" id="campaignNew">+ New campaign</button>
       </div>
@@ -164,6 +165,7 @@
         <label>Date<input type="date" id="shDate"></label>
         <label>Time<input type="time" id="shTime"></label>
         <label class="grow">Location / store<input id="shLoc" placeholder="📍 e.g. Menlyn Park kitchen"></label>
+        <label class="grow">Campaign<select id="shCampaign"><option value="">No campaign</option></select></label>
       </div>
       <div class="add-shoot-foot">
         <span class="hint" style="margin:0">Adds the shoot, a “send calendar invite” reminder, and a “call store manager” task for Jess.</span>
@@ -180,9 +182,10 @@
     </div>
 
     <div class="stud-h"><span>Events</span>
-      <span class="qadd" style="margin:0;max-width:420px;flex:1">
+      <span class="qadd campaign-aware-add" style="margin:0;max-width:700px;flex:1">
         <input class="qadd-name" id="evName" placeholder="e.g. Masterclass: coaching the new menu">
         <input type="date" class="qadd-date" id="evDate" style="width:auto">
+        <select id="evCampaign" aria-label="Link event to campaign"><option value="">No campaign</option></select>
         <button class="qadd-btn" id="evAdd">Add</button>
       </span>
     </div>
@@ -204,8 +207,9 @@
     <div id="curriculumGrid" class="cur-grid"></div>
 
     <div class="stud-h"><span>Skills Boosters</span>
-      <span class="qadd" style="margin:0;max-width:420px;flex:1">
+      <span class="qadd campaign-aware-add" style="margin:0;max-width:680px;flex:1">
         <input class="qadd-name" id="sbName" placeholder="e.g. Sauce ladle sizes — the 15ml rule">
+        <select id="sbCampaign" aria-label="Link booster to campaign"><option value="">No campaign</option></select>
         <button class="qadd-btn" id="sbAdd">Add booster</button>
       </span>
     </div>
@@ -245,8 +249,9 @@
           <input type="date" class="qadd-date" id="waDate" style="width:auto">
         </div>
         <div id="commTargets"></div>
-        <div style="display:flex;gap:6px;align-items:center">
+        <div class="comm-composer-meta">
           <select id="waPurpose"></select>
+          <select id="waCampaign" aria-label="Link message to campaign"><option value="">No campaign</option></select>
           <button class="qadd-btn" id="waAdd">Queue it</button>
         </div>
         <h3 class="comm-h" style="margin-top:16px">Going out next</h3>
@@ -286,6 +291,14 @@
     <div id="prBody"></div>
   </section>
 
+  <!-- Mobile favourites: primary weekly destinations + More -->
+  <nav class="mobile-nav" aria-label="Primary navigation">
+    <button class="mobile-tab active" data-mobile-tab="calendar"><span>▦</span>Calendar</button>
+    <button class="mobile-tab" data-mobile-tab="people"><span>◉</span>Girls</button>
+    <button class="mobile-tab" data-mobile-tab="campaigns"><span>◆</span>Campaigns</button>
+    <button class="mobile-tab" id="mobileMore"><span>•••</span>More</button>
+  </nav>
+
   <!-- ============ NEWS ============ -->
   <section id="tab-news" class="tabpane">
     <div class="news-head">
@@ -308,19 +321,19 @@
 <div id="fridayWrap"></div>
 <div id="runWrap"></div>
 
-<script src="/js/data.js?v=20260718d"></script>
-<script src="/js/core.js?v=20260718d"></script>
-<script src="/js/demo.js?v=20260718d"></script>
-<script src="/js/calendar.js?v=20260718d"></script>
-<script src="/js/campaigns.js?v=20260718d"></script>
-<script src="/js/people.js?v=20260718d"></script>
-<script src="/js/content.js?v=20260718d"></script>
-<script src="/js/communities.js?v=20260718d"></script>
-<script src="/js/drawer.js?v=20260718d"></script>
-<script src="/js/stores.js?v=20260718d"></script>
-<script src="/js/platform.js?v=20260718d"></script>
-<script src="/js/pr.js?v=20260718d"></script>
-<script src="/js/friday.js?v=20260718d"></script>
-<script src="/js/news.js?v=20260718d"></script>
+<script src="/js/data.js?v=20260719a"></script>
+<script src="/js/core.js?v=20260719a"></script>
+<script src="/js/demo.js?v=20260719a"></script>
+<script src="/js/calendar.js?v=20260719a"></script>
+<script src="/js/campaigns.js?v=20260719a"></script>
+<script src="/js/people.js?v=20260719a"></script>
+<script src="/js/content.js?v=20260719a"></script>
+<script src="/js/communities.js?v=20260719a"></script>
+<script src="/js/drawer.js?v=20260719a"></script>
+<script src="/js/stores.js?v=20260719a"></script>
+<script src="/js/platform.js?v=20260719a"></script>
+<script src="/js/pr.js?v=20260719a"></script>
+<script src="/js/friday.js?v=20260719a"></script>
+<script src="/js/news.js?v=20260719a"></script>
 </body>
 </html>

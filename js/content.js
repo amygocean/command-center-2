@@ -96,6 +96,8 @@ function renderShootTodos(){
 
 /* ---- add a shoot day (+ invite reminder + call-store-manager for Jess) ---- */
 function wireStudioAdd(){
+  const shCampaign=document.getElementById("shCampaign");
+  if(shCampaign) fillCampaignSelectById("shCampaign",shCampaign.value,"No campaign");
   const btn=document.getElementById("btnAddShoot");
   if(btn && !btn.dataset.wired){ btn.dataset.wired="1";
     btn.onclick=()=>{ const f=document.getElementById("addShootForm"); f.style.display=f.style.display==="none"?"block":"none"; };
@@ -110,6 +112,7 @@ async function addShootDay(){
   const date=document.getElementById("shDate").value;
   const time=document.getElementById("shTime").value;
   const loc=(document.getElementById("shLoc").value||"").trim();
+  const campaign=(document.getElementById("shCampaign")&&document.getElementById("shCampaign").value)||"";
   if(!name){ toast("Name the shoot"); return; }
   if(!date){ toast("Pick a date"); return; }
   const noteBits=[];
@@ -125,11 +128,12 @@ async function addShootDay(){
     // call the store manager — assigned to Jess
     tasks.push({name:"Call store manager"+(loc?" — "+loc:""), project_id:CC_PROJECT, section_id:SEC_PLAN, due_on:date,
       assignee:jess?jess.gid:undefined, notes:"For shoot: "+name+(loc?"\nLocation: "+loc:"")});
-    await call("create_tasks",{tasks});
-    toast("Shoot added — invite reminder + Jess's store call created 🎬");
+    await createTasksWithCampaign(tasks,campaign,"Pre-launch");
+    toast(campaign?"Shoot added and linked to the campaign 🎬":"Shoot added — invite reminder + Jess's store call created 🎬");
     // reset + close
     document.getElementById("shName").value=""; document.getElementById("shDate").value="";
     document.getElementById("shTime").value=""; document.getElementById("shLoc").value="";
+    if(document.getElementById("shCampaign"))document.getElementById("shCampaign").value="";
     document.getElementById("addShootForm").style.display="none";
     loadAll();
   }catch(e){ toast("Failed: "+e.message); }
@@ -176,7 +180,8 @@ async function addIdeaTask(shootGid,text,btn){
   const task={name:text,project_id:s.projectGid,due_on:s.due,notes:"Content idea for "+s.name};
   
   if(s.projectGid===CC_PROJECT) task.section_id=SEC_PLAN;
-  try{ await call("create_tasks",{tasks:[task]});
+  const campaign=primaryCampaignForTask(s);
+  try{ await createTasksWithCampaign([task],campaign,"Pre-launch");
     if(btn){ btn.textContent="✓ Added"; btn.classList.remove("teal"); btn.classList.add("ghost"); }
     toast("Idea locked in");
   }catch(e){ if(btn){ btn.disabled=false; btn.textContent="＋ Task"; } toast("Failed: "+e.message); }
@@ -238,7 +243,7 @@ function draftBrief(shootGid){
       else{
         const t={name:"「brief」 "+s.name, project_id:s.projectGid, notes};
         if(s.projectGid===CC_PROJECT) t.section_id=SEC_PLAN;
-        await call("create_tasks",{tasks:[t]});
+        await createTasksWithCampaign([t],primaryCampaignForTask(s),"Pre-launch");
       }
       dismissSuggestion("brief-"+s.gid);
       confetti(); toast("Saved to the brief library"); closeModal(); loadAll();
@@ -285,7 +290,7 @@ function openShotList(shootGid){
     const t={name:"「shot」 "+nm+" — "+s.name, project_id:s.projectGid, due_on:s.due,
       notes:"type: "+type+(pop?"\n"+pop:"")};
     if(s.projectGid===CC_PROJECT) t.section_id=SEC_PLAN;
-    try{ await call("create_tasks",{tasks:[t]}); toast("On the shot list");
+    try{ await createTasksWithCampaign([t],primaryCampaignForTask(s),"Pre-launch"); toast("On the shot list");
       await loadAll(); openShotList(shootGid);
     }catch(e){ toast("Failed: "+e.message); }
   };
@@ -357,11 +362,15 @@ function queuePromoFor(gid){
   if(nm) nm.value="Reminder: "+ev.name;
   if(dt&&ev.due){ const d=pd(ev.due); d.setDate(d.getDate()-3); dt.value=iso(d); }
   if(pr) pr.value="info";
+  const wc=document.getElementById("waCampaign"),campaign=primaryCampaignForTask(ev);
+  if(wc){ fillCampaignSelectById("waCampaign",campaign,"No campaign"); wc.value=campaign; }
   toast("Promo drafted — pick the communities and queue it");
   if(nm) nm.focus();
 }
 function renderEvents(){
   const box=document.getElementById("eventList"); if(!box) return;
+  const evCampaign=document.getElementById("evCampaign");
+  if(evCampaign)fillCampaignSelectById("evCampaign",evCampaign.value,"No campaign");
   const today=todayD();
   const events=state.tasks.filter(t=>t.isEvent&&!t.isComms&&t.due).sort((a,b)=>a.due<b.due?-1:1);
   const upcoming=events.filter(t=>!t.completed&&pd(t.due)>=today);
@@ -386,8 +395,9 @@ function renderEvents(){
       const nm=document.getElementById("evName"), dt=document.getElementById("evDate");
       const name=nm.value.trim(); if(!name){toast("Name the event (include masterclass / workshop / webinar)");return;}
       if(!/masterclass|workshop|webinar|forum/i.test(name)){ toast("Include masterclass, workshop, webinar or forum in the name so it's recognised"); return; }
-      try{ await call("create_tasks",{tasks:[{name, project_id:CC_PROJECT, section_id:SEC_PLAN, due_on:dt.value||null}]});
-        nm.value=""; toast("Event on the calendar"); loadAll();
+      const campaign=(document.getElementById("evCampaign")&&document.getElementById("evCampaign").value)||"";
+      try{ await createTasksWithCampaign([{name, project_id:CC_PROJECT, section_id:SEC_PLAN, due_on:dt.value||null}],campaign,"Launch week");
+        nm.value=""; if(document.getElementById("evCampaign"))document.getElementById("evCampaign").value=""; toast(campaign?"Event linked to the campaign":"Event on the calendar"); loadAll();
       }catch(e){ toast("Failed: "+e.message); }
     };
   }
@@ -481,7 +491,8 @@ async function runMaxDigest(){
     out.querySelectorAll(".mx-add").forEach(btn2=>btn2.onclick=async()=>{
       btn2.disabled=true; btn2.textContent="…";
       const due=new Date(); due.setDate(due.getDate()+14);
-      try{ await call("create_tasks",{tasks:[{name:"Skills Booster: "+boosters[+btn2.dataset.ix], project_id:"1214196027560535", due_on:iso(due), notes:"From the wrong-answer digest, "+iso(todayD())}]});
+      const campaign=(document.getElementById("sbCampaign")&&document.getElementById("sbCampaign").value)||"";
+      try{ await createTasksWithCampaign([{name:"Skills Booster: "+boosters[+btn2.dataset.ix], project_id:"1214196027560535", due_on:iso(due), notes:"From the wrong-answer digest, "+iso(todayD())}],campaign,"In market");
         btn2.textContent="✓ Added"; btn2.classList.remove("teal"); btn2.classList.add("ghost"); toast("Booster on the board");
       }catch(e){ btn2.disabled=false; btn2.textContent="+ Task"; toast("Failed: "+e.message); }
     });
@@ -544,7 +555,7 @@ function wireBrainstorm(box){
     const task={name:idea.text,project_id:s.projectGid,due_on:s.due,notes:"Content idea for "+s.name+"\nParked by "+idea.by+", approved "+iso(todayD())};
     if(s.projectGid===CC_PROJECT) task.section_id=SEC_PLAN;
     try{
-      await call("create_tasks",{tasks:[task]});
+      await createTasksWithCampaign([task],primaryCampaignForTask(s),"Pre-launch");
       state.keeper.ideas[b.dataset.gid]=list.filter(i=>i.id!==b.dataset.id);
       saveKeeper(); toast("Approved — it's a task now"); confetti(); loadAll();
     }catch(e){ b.disabled=false; b.textContent="+ Task"; toast("Failed: "+e.message); }
@@ -567,6 +578,8 @@ const SB_PROJECT="1214196027560535";   // Skills Boosters board (also used by th
 function isBooster(t){ return /^\s*(?:\[[^\]]*\]\s*)?skills?\s*booster\b/i.test(t.name||""); }
 
 function renderCurriculum(){
+  const sbCampaign=document.getElementById("sbCampaign");
+  if(sbCampaign)fillCampaignSelectById("sbCampaign",sbCampaign.value,"No campaign");
   const grid=document.getElementById("curriculumGrid");
   const link=document.getElementById("curLink");
   if(link) link.href=CURRICULUM_URL;
@@ -613,7 +626,7 @@ async function shipBooster(gid,box){
     const secMap=await ensureWASections();
     const msg={name:"New Skills Booster: "+nm+" 💪", project_id:board, notes:"#purpose:practice\nFrom the curriculum — Skills Booster for "+esc(c.name)};
     if(secMap&&secMap[c.name]) msg.section_id=secMap[c.name]; else msg.name="["+c.name+"] "+msg.name;
-    await call("create_tasks",{tasks:[msg]});
+    await createTasksWithCampaign([msg],primaryCampaignForTask(t),"Launch week");
     toast("Shipped to "+c.name+" — drafted in Communities"); confetti(); loadAll();
     switchTab("communities");
   }catch(e){ toast("Failed: "+e.message); if(btn){ btn.disabled=false; btn.textContent="Ship"; } }
@@ -624,9 +637,10 @@ function wireBoosterAdd(){
   const go=async()=>{
     const inp=document.getElementById("sbName"); const nm=(inp.value||"").trim();
     if(!nm){ toast("Name the booster"); return; }
+    const campaign=(document.getElementById("sbCampaign")&&document.getElementById("sbCampaign").value)||"";
     try{
-      await call("create_tasks",{tasks:[{name:"Skills Booster: "+nm, project_id:SB_PROJECT, notes:"Added from the Curriculum tab, "+iso(todayD())}]});
-      inp.value=""; toast("Booster added"); loadAll();
+      await createTasksWithCampaign([{name:"Skills Booster: "+nm, project_id:SB_PROJECT, notes:"Added from the Curriculum tab, "+iso(todayD())}],campaign,"In market");
+      inp.value=""; if(document.getElementById("sbCampaign"))document.getElementById("sbCampaign").value=""; toast(campaign?"Booster added to the campaign":"Booster added"); loadAll();
     }catch(e){ toast("Failed: "+e.message); }
   };
   b.onclick=go;

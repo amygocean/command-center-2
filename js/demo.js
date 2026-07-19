@@ -11,12 +11,22 @@ const DEMO_USERS = [
 
 function _d(offsetDays){ const t=new Date(); t.setDate(t.getDate()+offsetDays); return iso(t); }
 let _dgid=1000;
+function _demoProjectName(gid){
+  const c=(typeof DEMO_PROJECTS!=="undefined"&&DEMO_PROJECTS[gid])||null;
+  const p=(typeof DEFAULT_CFG!=="undefined"&&(DEFAULT_CFG.projects||[]).find(x=>x.gid===gid))||null;
+  if(gid==="demo-msg")return "Community Messages";
+  if(gid==="demo-pr")return "PR & Positioning";
+  return (c&&c.name)||(p&&p.name)||gid;
+}
 function _mk(proj, name, opts){
   opts=opts||{};
+  const membership=(gid,section)=>({project:{gid,name:_demoProjectName(gid)},section:section||null});
+  const memberships=[membership(proj,opts.section||{gid:"s-none",name:opts.sectionName||""})];
+  (opts.projects||[]).forEach(x=>memberships.push(membership(x.gid||x.project_id,x.section||null)));
   return { gid:"demo-"+(_dgid++), name,
     notes:opts.notes||"", assignee:opts.assignee?DEMO_USERS.find(u=>u.gid===opts.assignee):null,
     due_on:opts.due||null, start_on:null, completed:!!opts.done, completed_at:opts.done?_d(-1)+"T10:00:00Z":null,
-    memberships:[{section:opts.section||{gid:"s-none",name:opts.sectionName||""}}],
+    resource_subtype:opts.resourceSubtype||"default_task", memberships,
     permalink_url:"https://app.asana.com/demo", _proj:proj };
 }
 const SEC = {
@@ -28,12 +38,13 @@ const SEC = {
 };
 
 const DEMO_CAMPAIGN_SECTIONS = {
-  pre:{gid:"dc-pre",name:"Pre-launch"}, launch:{gid:"dc-launch",name:"Launch week"},
-  market:{gid:"dc-market",name:"In market"}, wrap:{gid:"dc-wrap",name:"Wrap-up"}
+  hq:{gid:"dc-hq",name:"Campaign HQ"}, pre:{gid:"dc-pre",name:"Pre-launch"},
+  launch:{gid:"dc-launch",name:"Launch week"}, market:{gid:"dc-market",name:"In market"},
+  wrap:{gid:"dc-wrap",name:"Wrap-up"}
 };
 const DEMO_CAMPAIGNS = [
-  {gid:"demo-camp-summer",name:"Summer Menu 2026",start_on:_d(-12),due_on:_d(34),color:"dark-teal",notes:"Launch confidence across FOH, BOH and Sushi. Keep every asset practical, mobile-first and focused on what changed.",permalink_url:"https://app.asana.com/demo/summer"},
-  {gid:"demo-camp-peak",name:"Peak Readiness 2026",start_on:_d(55),due_on:_d(118),color:"dark-blue",notes:"Build December readiness through coaching, pace, consistency and zero-error service.",permalink_url:"https://app.asana.com/demo/peak"}
+  {gid:"demo-camp-summer",name:"Summer Menu 2026",start_on:_d(-12),due_on:_d(34),color:"dark-teal",notes:"Launch confidence across FOH, BOH and Sushi. Keep every asset practical, mobile-first and focused on what changed.",owner:DEMO_USERS[0],archived:false,permalink_url:"https://app.asana.com/demo/summer"},
+  {gid:"demo-camp-peak",name:"Peak Readiness 2026",start_on:_d(55),due_on:_d(118),color:"dark-blue",notes:"Build December readiness through coaching, pace, consistency and zero-error service.",owner:DEMO_USERS[2],archived:false,permalink_url:"https://app.asana.com/demo/peak"}
 ];
 const DEMO_PROJECTS = Object.fromEntries(DEMO_CAMPAIGNS.map(c=>[c.gid,{...c,sections:Object.values(DEMO_CAMPAIGN_SECTIONS)}]));
 const DEMO_SUBTASKS = {};
@@ -41,14 +52,14 @@ const DEMO_SUBTASKS = {};
 const DEMO_TASKS = [
   // ---- Content & Comms: shoots ----
   _mk(CC_PROJECT,"Shoot Day 14 – Summer Menu heroes",{section:SEC.shoot,due:_d(6),assignee:"u-amy",
-    notes:"18 videos: 8 reworked sushi dishes + drinks + comms video. Nasreen only free at 1pm."}),
+    notes:"18 videos: 8 reworked sushi dishes + drinks + comms video. Nasreen only free at 1pm.",projects:[{gid:"demo-camp-summer",section:DEMO_CAMPAIGN_SECTIONS.pre}]}),
   _mk(CC_PROJECT,"Shoot Day 15 – Upselling scenarios FOH",{section:SEC.shoot,due:_d(24),assignee:"u-jess",
     notes:"Roleplay clips for the upselling course. Need 2 waiters + manager."}),
   _mk(CC_PROJECT,"Shoot Day 13 – Winter wrap-up",{section:SEC.shoot,due:_d(-9),done:true}),
   // planned content
   _mk(CC_PROJECT,"Edit brief: Mojito + Lemon & Mint Cooler clips",{section:SEC.plan,due:_d(2),assignee:"u-amy"}),
   _mk(CC_PROJECT,"Storyboard: Golden Crunch California Roll pop-ups",{section:SEC.plan,due:_d(4),assignee:"u-jess"}),
-  _mk(CC_PROJECT,"Manager Masterclass: coaching the new menu",{section:SEC.plan,due:_d(13),assignee:"u-jess"}),
+  _mk(CC_PROJECT,"Manager Masterclass: coaching the new menu",{section:SEC.plan,due:_d(13),assignee:"u-jess",projects:[{gid:"demo-camp-summer",section:DEMO_CAMPAIGN_SECTIONS.launch}]}),
   _mk(CC_PROJECT,"Q3 Franchisee Forum voxpops edit",{section:SEC.plan,due:_d(-2),assignee:"u-amy"}),
   // occasions kept in Asana
   _mk(CC_PROJECT,"Nelson Mandela Day activation",{section:SEC.occ,due:_d(1)}),
@@ -56,7 +67,7 @@ const DEMO_TASKS = [
   _mk("1213797897707123","Trainer visits: Gauteng cluster",{due:_d(3),assignee:"u-cait"}),
   _mk("1213797897707123","Coach check-in: Cyprus stores",{due:_d(9),assignee:"u-jess"}),
   // ---- Menu Training ----
-  _mk("1214196027560535","Summer Menu FOH course — final QA",{due:_d(5),assignee:"u-amy"}),
+  _mk("1214196027560535","Summer Menu FOH course — final QA",{due:_d(5),assignee:"u-amy",projects:[{gid:"demo-camp-summer",section:DEMO_CAMPAIGN_SECTIONS.pre}]}),
   _mk("1214196027560535","Allergen flashcards refresh",{due:_d(8),assignee:"u-cait"}),
   _mk("1214196027560535","Sushi course: chopstick plating reshoots list",{due:_d(15),assignee:"u-jess"}),
   _mk("1214196027560535","Wrong-answer analysis: menu quiz",{due:_d(-1),assignee:"u-amy"}),
@@ -79,7 +90,7 @@ const DEMO_TASKS = [
   _mk(CC_PROJECT,"Golden Crunch 'guess what changed' teaser",{section:SEC.plan,due:_d(6),
     notes:"Content idea for Shoot Day 14 – Summer Menu heroes\nParked by Amy, approved "+_d(-1)}),
   // Skills Boosters — ship one to a community from the Curriculum tab
-  _mk(CC_PROJECT,"Skills Booster: Sauce ladle sizes — the 15ml rule",{section:SEC.plan,due:_d(9),notes:"From the wrong-answer digest"}),
+  _mk(CC_PROJECT,"Skills Booster: Sauce ladle sizes — the 15ml rule",{section:SEC.plan,due:_d(9),notes:"From the wrong-answer digest",projects:[{gid:"demo-camp-summer",section:DEMO_CAMPAIGN_SECTIONS.market}]}),
   _mk(CC_PROJECT,"Skills Booster: Reworked sushi — what changed in 60 seconds",{section:SEC.plan,due:_d(12)}),
   // shot list + brief library samples
   _mk(CC_PROJECT,"「shot」 Golden Crunch Prawn California Roll — plating — Shoot Day 14 – Summer Menu heroes",{section:SEC.plan,due:_d(6),notes:"type: video\npop-up: New winter menu meal — refer to recipe"}),
@@ -89,10 +100,10 @@ const DEMO_TASKS = [
     notes:"status: sent to Content Go\ndrafted: "+_d(-2)+"\n\nOCEAN BASKET ACADEMY — VIDEO BRIEF\nShoot: Shoot Day 15 – Upselling scenarios FOH\n\n1. THE BIG PICTURE\n• Roleplay clips for the upselling course…"}),
   // ---- Campaign portfolio projects ----
   _mk("demo-camp-summer","Manager launch pack — what changed and how to coach it",{section:DEMO_CAMPAIGN_SECTIONS.pre,due:_d(-3),assignee:"u-jess"}),
-  _mk("demo-camp-summer","Summer Menu courses live + assigned",{section:DEMO_CAMPAIGN_SECTIONS.launch,due:_d(2),assignee:"u-amy"}),
+  _mk("demo-camp-summer","Summer Menu courses live + assigned",{section:DEMO_CAMPAIGN_SECTIONS.launch,due:_d(2),assignee:"u-amy",resourceSubtype:"milestone"}),
   _mk("demo-camp-summer","FOH confidence pulse",{section:DEMO_CAMPAIGN_SECTIONS.market,due:_d(12),assignee:"u-cait"}),
   _mk("demo-camp-summer","Wrong-answer check — Skills Booster if needed",{section:DEMO_CAMPAIGN_SECTIONS.market,due:_d(18),assignee:"u-amy"}),
-  _mk("demo-camp-summer","Campaign results snapshot",{section:DEMO_CAMPAIGN_SECTIONS.wrap,due:_d(36),assignee:"u-jess"}),
+  _mk("demo-camp-summer","Campaign results snapshot",{section:DEMO_CAMPAIGN_SECTIONS.wrap,due:_d(36),assignee:"u-jess",resourceSubtype:"milestone"}),
   _mk("demo-camp-peak","Peak playbook scope",{section:DEMO_CAMPAIGN_SECTIONS.pre,due:_d(62),assignee:"u-amy"}),
   _mk("demo-camp-peak","Book peak coaching masterclass",{section:DEMO_CAMPAIGN_SECTIONS.pre,due:_d(70),assignee:"u-jess"}),
   // ---- WhatsApp Academy: the software board ----
@@ -118,7 +129,7 @@ const DEMO_TASKS = [
   _mk("demo-msg","Shout-out: Zambezi crew smashed the incentive 🎉",{section:SEC.foh1,due:_d(0),notes:"#purpose:celebrate"}),
   _mk("demo-msg","Poll: which station needs the next Skills Booster?",{section:SEC.boh,due:_d(4),notes:"#purpose:question"}),
   _mk("demo-msg","Sauce ladle compliance — 3 common mistakes",{section:SEC.boh,due:_d(6),notes:"#purpose:practice"}),
-  _mk("demo-msg","Masterclass invite: coaching the new menu",{section:SEC.mgmt,due:_d(8),notes:"#purpose:info"}),
+  _mk("demo-msg","Masterclass invite: coaching the new menu",{section:SEC.mgmt,due:_d(8),notes:"#purpose:info",projects:[{gid:"demo-camp-summer",section:DEMO_CAMPAIGN_SECTIONS.launch}]}),
   _mk("demo-msg","Winter menu recap sent ✓",{section:SEC.foh1,due:_d(-3),done:true,notes:"#purpose:info"}),
   _mk("demo-msg","Quiz teaser",{section:SEC.foh1,due:_d(5),notes:"#purpose:course"}),
   _mk("demo-msg","Quiz round 1",{section:SEC.foh1,due:_d(5),notes:"#purpose:course"}),
@@ -143,7 +154,7 @@ async function demoCall(tool,args){
     case "get_users": return {data:DEMO_USERS};
     case "get_tasks":
       if(args.project===CURRICULUM_PROJECT) return {data:DEMO_CURRICULUM};
-      return {data:DEMO_TASKS.filter(t=>t._proj===args.project).map(t=>({...t}))};
+      return {data:DEMO_TASKS.filter(t=>(t.memberships||[]).some(m=>m.project&&m.project.gid===args.project)||t._proj===args.project).map(t=>({...t,memberships:(t.memberships||[]).map(m=>({project:m.project&&{...m.project},section:m.section&&{...m.section}}))}))};
     case "get_project": {
       if(args.project_id==="demo-pr") return {data:{name:"PR & Positioning",sections:[["pr-0","Idea"],["pr-1","Pitched"],["pr-2","In progress"],["pr-3","Delivered"]].map(([g,n])=>({gid:g,name:n}))}};
       if(DEMO_PROJECTS[args.project_id]) return {data:{...DEMO_PROJECTS[args.project_id],sections:DEMO_PROJECTS[args.project_id].sections.map(x=>({...x}))}};
@@ -166,14 +177,27 @@ async function demoCall(tool,args){
         if("due_on" in u) t.due_on=u.due_on;
         if("notes" in u) t.notes=u.notes;
         if("name" in u) t.name=u.name;
+        if("resource_subtype" in u)t.resource_subtype=u.resource_subtype||"default_task";
         if("assignee" in u) t.assignee=u.assignee?DEMO_USERS.find(x=>x.gid===u.assignee)||null:null;
+        (u.add_projects||[]).forEach(ap=>{
+          const gid=typeof ap==="string"?ap:ap.project_id,sectionId=typeof ap==="object"&&ap.section_id;
+          if(!gid)return;
+          const proj=DEMO_PROJECTS[gid];
+          const section=sectionId&&proj?(proj.sections||[]).find(x=>x.gid===sectionId)||null:null;
+          const hit=(t.memberships||[]).find(m=>m.project&&m.project.gid===gid);
+          if(hit){if(section)hit.section=section;}
+          else (t.memberships=t.memberships||[]).push({project:{gid,name:_demoProjectName(gid)},section});
+        });
+        const remove=(u.remove_projects||[]).map(x=>typeof x==="string"?x:x.project_id).filter(Boolean);
+        if(remove.length)t.memberships=(t.memberships||[]).filter(m=>!m.project||!remove.includes(m.project.gid));
+        if(remove.includes(t._proj)&&t.memberships&&t.memberships[0])t._proj=t.memberships[0].project.gid;
       });
       return {data:(args.tasks||[]).map(t=>({gid:t.task}))};
     }
     case "create_tasks": {
       const made=(args.tasks||[]).map(t=>{
         const allSections=[...Object.values(SEC),...Object.values(DEMO_PROJECTS).flatMap(p=>p.sections||[])];
-        const nt=_mk(t.project_id||CC_PROJECT,t.name,{due:t.due_on,notes:t.notes,assignee:t.assignee,
+        const nt=_mk(t.project_id||CC_PROJECT,t.name,{due:t.due_on,notes:t.notes,assignee:t.assignee,resourceSubtype:t.resource_subtype,
           section: t.section_id ? allSections.find(s=>s.gid===t.section_id) : null});
         DEMO_TASKS.push(nt); return {gid:nt.gid,name:nt.name};
       });
@@ -183,23 +207,41 @@ async function demoCall(tool,args){
       const i=DEMO_TASKS.findIndex(x=>x.gid===args.task); if(i>=0) DEMO_TASKS.splice(i,1);
       return {data:{}};
     }
-    case "create_section": return {data:{gid:"s-new-"+Date.now(),name:args.name}};
+    case "create_section": {
+      const section={gid:"s-new-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),name:args.name};
+      if(DEMO_PROJECTS[args.project_id]){DEMO_PROJECTS[args.project_id].sections=DEMO_PROJECTS[args.project_id].sections||[];DEMO_PROJECTS[args.project_id].sections.push(section);}
+      return {data:section};
+    }
     case "create_project": {
       const gid="demo-proj-"+Date.now();
       const made=(args.sections||[]).map((sc,i)=>({gid:gid+"-s"+i,name:sc.sectionName}));
-      DEMO_PROJECTS[gid]={gid,name:args.name,start_on:args.start_on||null,due_on:args.due_on||null,color:args.color||"dark-teal",notes:args.notes||"",permalink_url:"https://app.asana.com/demo/"+gid,sections:made};
+      DEMO_PROJECTS[gid]={gid,name:args.name,start_on:args.start_on||null,due_on:args.due_on||null,color:args.color||"dark-teal",notes:args.notes||"",owner:args.owner?DEMO_USERS.find(u=>u.gid===args.owner)||null:null,archived:false,permalink_url:"https://app.asana.com/demo/"+gid,sections:made};
       return {data:{gid,name:args.name,sections_created:{succeeded:made}}};
     }
-    case "get_portfolio_items": return {data:DEMO_CAMPAIGNS.map(c=>({...c}))};
+    case "get_portfolio_items": return {data:DEMO_CAMPAIGNS.map(c=>({...c,owner:c.owner&&{...c.owner}}))};
     case "add_to_portfolio": {
       const proj=DEMO_PROJECTS[args.item];
       if(proj&&!DEMO_CAMPAIGNS.some(c=>c.gid===proj.gid)) DEMO_CAMPAIGNS.push({...proj});
       return {data:{}};
     }
+    case "remove_from_portfolio": {
+      const ix=DEMO_CAMPAIGNS.findIndex(c=>c.gid===args.item);if(ix>=0)DEMO_CAMPAIGNS.splice(ix,1);return {data:{}};
+    }
     case "update_project": {
       const proj=DEMO_PROJECTS[args.project_id];
-      if(proj){ Object.assign(proj,args.fields||{}); const c=DEMO_CAMPAIGNS.find(x=>x.gid===proj.gid); if(c)Object.assign(c,args.fields||{}); }
+      if(proj){
+        const fields={...(args.fields||{})};
+        if("owner" in fields)fields.owner=fields.owner?DEMO_USERS.find(u=>u.gid===fields.owner)||null:null;
+        Object.assign(proj,fields); const c=DEMO_CAMPAIGNS.find(x=>x.gid===proj.gid); if(c)Object.assign(c,fields);
+      }
       return {data:proj||{}};
+    }
+    case "delete_project": {
+      const gid=args.project_id;
+      delete DEMO_PROJECTS[gid];
+      const ci=DEMO_CAMPAIGNS.findIndex(c=>c.gid===gid);if(ci>=0)DEMO_CAMPAIGNS.splice(ci,1);
+      for(let i=DEMO_TASKS.length-1;i>=0;i--){const t=DEMO_TASKS[i];t.memberships=(t.memberships||[]).filter(m=>!m.project||m.project.gid!==gid);if(!t.memberships.length)DEMO_TASKS.splice(i,1);else if(t._proj===gid)t._proj=t.memberships[0].project.gid;}
+      return {data:{}};
     }
     case "get_subtasks": return {data:(DEMO_SUBTASKS[args.parent]||[]).map(x=>({...x}))};
     case "create_subtask": {
@@ -222,6 +264,8 @@ async function demoAI(prompt){
       .replace("• Running order & any hard time windows (presenters with limited time!) —","• Running order — Nasreen films at 13:00 SHARP (limited window); sushi dishes before lunch service");
   if(/wrong-answer|assessment data/i.test(prompt))
     return "TOP WRONG ANSWERS\n• Chilli salt still selected for the Tempura Prawn Roll — 41% picked the old recipe (change not landed)\n• Sauce ladle size on Panko Futomaki — 33% chose 30ml instead of 15ml\n• Cucumber vs zucchini swap — 28% still answer zucchini\n\nPATTERN\nAll three misses are recipe *changes*, not new dishes — crew learned the original and the delta didn't stick. Reinforce what changed, not the whole recipe.\n\nBOOSTER: Reworked sushi — what changed in 60 seconds\nBOOSTER: Sauce ladle sizes — the 15ml rule\nBOOSTER: Flashcard round: old ingredient vs new";
+  if(/campaign wrap-up|WHAT SHIPPED/i.test(prompt))
+    return "WHAT SHIPPED\n• Summer Menu courses went live and were assigned\n• The manager launch pack and shoot brief were completed\n\nWHAT SLIPPED / REMAINS OPEN\n• FOH confidence pulse is still open\n\nKEY DECISIONS\n• Keep reinforcement focused on recipe changes rather than reteaching the full menu\n\nRESULTS / BUSINESS SIGNALS\n• Add completion, confidence and operational results once the reporting cut is available\n\nWHAT WORKED\n• Cross-functional work stayed connected to one campaign without duplicate tasks\n\nWHAT WE WOULD CHANGE\n• Lock the community message schedule earlier\n\nFOLLOW-UPS\n• Complete the confidence pulse and results snapshot";
   if(/WhatsApp community activity/i.test(prompt))
     return "TL;DR: Lively week in this community — the menu quiz drove the most replies, and three crew members asked the same question about the new futomaki prep.\n\nThemes:\n• Confusion: cucumber vs zucchini swap (asked 3×)\n• High energy on the quiz + prize\n• Two stores asked for the plating video link again\n\nNeeds action:\n• Post a pinned answer on the futomaki swap\n• Re-share the plating video link\n\nVibe: engaged and upbeat 🔥";
   return "• Film a 40-second 'perfect plate' hero clip for each reworked dish, pop-up text on every swapped ingredient\n• Upselling side-by-side: same table, two takes — scripted vs natural, crew vote on which lands\n• 15-second teaser for WhatsApp: 'guess what changed on this plate' with Friday reveal";

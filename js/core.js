@@ -25,6 +25,7 @@ function loadCfg(){
         s._m5=true;
       }
       if(!s.campaigns) s.campaigns=[];
+      if(!s.hiddenCampaigns) s.hiddenCampaigns=[];
       if(!s._m6){
         const retired = new Set(RETIRED_CAMPAIGN_GIDS||[]);
         s.campaigns = s.campaigns.filter(c=>!retired.has(c.gid) && !/^volume drivers$/i.test(c.name||""));
@@ -68,7 +69,8 @@ const state = {
   campaignSectionLoading: {},
   campaignSubtasks: {},
   campaignExpanded: {},
-  campaignCursor: {}
+  campaignCursor: {},
+  campaignShowHidden: false
 };
 
 const DEMO = new URLSearchParams(location.search).has("demo");
@@ -96,7 +98,7 @@ async function askAI(prompt, data){
 }
 
 /* ---- loading ---- */
-const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,start_on,completed,completed_at,memberships.section.name,memberships.section.gid,permalink_url,notes";
+const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,start_on,completed,completed_at,resource_subtype,memberships.project.gid,memberships.project.name,memberships.section.name,memberships.section.gid,permalink_url,notes";
 async function fetchProject(p){
   let out = [], offset = null, pages = 0;
   do{
@@ -104,13 +106,19 @@ async function fetchProject(p){
     if(offset) args.offset = offset;
     const res = await call("get_tasks", args);
     (res.data||[]).forEach(t=>{
-      const sec = (t.memberships&&t.memberships[0]&&t.memberships[0].section)||null;
+      const memberships=t.memberships||[];
+      const currentMembership=memberships.find(m=>m.project&&m.project.gid===p.gid)||memberships[0]||null;
+      const sec=currentMembership&&currentMembership.section||null;
+      const sectionsByProject={};
+      memberships.forEach(m=>{ if(m.project&&m.project.gid) sectionsByProject[m.project.gid]=m.section?{gid:m.section.gid,name:m.section.name}:null; });
+      const projectGids=[...new Set([p.gid,...memberships.map(m=>m.project&&m.project.gid).filter(Boolean)])];
       out.push({
         gid:t.gid, name:t.name, notes:t.notes||"",
         assignee:t.assignee? {gid:t.assignee.gid,name:t.assignee.name}:null,
         due:t.due_on||null, start:t.start_on||null,
         completed:!!t.completed, completedAt:t.completed_at||null,
-        sectionName: sec?sec.name:"", sectionGid: sec?sec.gid:"",
+        resourceSubtype:t.resource_subtype||"default_task", isMilestone:t.resource_subtype==="milestone",
+        sectionName: sec?sec.name:"", sectionGid: sec?sec.gid:"", sectionsByProject, projectGids,
         url:t.permalink_url,
         projectGid:p.gid, projectName:p.name, projectColor:p.color,
         isShoot: (sec&&sec.gid===SEC_SHOOT) || /^shoot day/i.test(t.name||""),
@@ -155,7 +163,13 @@ async function loadAll(){
     hidden.forEach(h=>{ if(!active.some(p=>p.gid===h.gid)) active.push(h); });
     const results = await Promise.all(active.map(fetchProject));
     const map = new Map();
-    results.flat().forEach(t=>{ if(!map.has(t.gid)) map.set(t.gid,t); });
+    results.flat().forEach(t=>{
+      if(!map.has(t.gid)){ map.set(t.gid,t); return; }
+      const prev=map.get(t.gid);
+      prev.projectGids=[...new Set([...(prev.projectGids||[prev.projectGid]),...(t.projectGids||[t.projectGid])])];
+      prev.sectionsByProject={...(prev.sectionsByProject||{}),...(t.sectionsByProject||{})};
+      ["isShoot","isOccasion","isNote","isPassion","isComms","isPlatform","isBug","isVisit","isOpening","isEvent","isPrep","isShot","isBrief","isKeeper","isPlaceholder","isMilestone"].forEach(k=>{ prev[k]=!!(prev[k]||t[k]); });
+    });
     state.tasks = [...map.values()];
     readOrderKeeper();
     if(state._demoSeed) state._demoSeed();
@@ -289,9 +303,13 @@ function occasionsOn(dt){
 function tasksOn(dt){ return visibleTasks().filter(t=>t.due && sameDay(pd(t.due),dt)); }
 function commsOn(dt){ return state.tasks.filter(t=>t.isComms && !t.isKeeper && t.due && sameDay(pd(t.due),dt)); }
 function campaignsOn(dt){
-  return (cfg.campaigns||[]).filter(c=>{ const s=pd(c.start),e=pd(c.due); return s&&e&&dt>=s&&dt<=e; });
+  const hidden=new Set(cfg.hiddenCampaigns||[]);
+  return (cfg.campaigns||[]).filter(c=>!hidden.has(c.gid)&&!c.archived).filter(c=>{ const s=pd(c.start),e=pd(c.due); return s&&e&&dt>=s&&dt<=e; });
 }
-function isCampaignTask(t){ return (cfg.campaigns||[]).some(c=>c.gid===t.projectGid); }
+function isCampaignTask(t){
+  const ids=new Set((cfg.campaigns||[]).map(c=>c.gid));
+  return (t.projectGids||[t.projectGid]).some(g=>ids.has(g));
+}
 function communityOf(t){
   // section name match first, then [Name] prefix
   const c = cfg.communities.find(c=>c.name.toLowerCase()===(t.sectionName||"").toLowerCase());
@@ -478,12 +496,32 @@ function switchTab(name){
     if(on && !x.classList.contains("active")){ x.classList.add("active"); x.classList.remove("enter"); void x.offsetWidth; x.classList.add("enter"); }
     else if(!on) x.classList.remove("active");
   });
-  moveTabInk();
+  moveTabInk(); updateMobileNav(name);
 }
 function moveTabInk(){
   const bar=document.querySelector(".tabs"), act=document.querySelector(".tab.active"), ink=document.getElementById("tabInk");
   if(!bar||!act||!ink) return;
   ink.style.left=(act.offsetLeft)+"px"; ink.style.width=act.offsetWidth+"px";
+}
+
+function updateMobileNav(name){
+  document.querySelectorAll(".mobile-tab[data-mobile-tab]").forEach(b=>b.classList.toggle("active",b.dataset.mobileTab===name));
+  const more=document.getElementById("mobileMore");
+  if(more) more.classList.toggle("active",!["calendar","people","campaigns"].includes(name));
+}
+function openMobileMore(){
+  const secondary=[
+    ["studio","Studio & Events"],["curriculum","Curriculum"],["stores","Training & New Stores"],
+    ["platform","WhatsApp Academy"],["communities","Communities"],["news","News"],["pr","PR"]
+  ].filter(([key])=>{ const t=document.querySelector('.tab[data-tab="'+key+'"]'); return t&&getComputedStyle(t).display!=="none"; });
+  showModal('<h2>More</h2><div class="mobile-more-list">'+secondary.map(([key,label])=>'<button data-mobile-more="'+key+'">'+label+'<span>›</span></button>').join("")+'</div><div class="drawer-actions"><button class="btn ghost" data-close>Close</button></div>');
+  wireModalClose();
+  document.querySelectorAll("[data-mobile-more]").forEach(b=>b.onclick=()=>{ const key=b.dataset.mobileMore; closeModal(); switchTab(key); });
+}
+function wireMobileNavigation(){
+  document.querySelectorAll("[data-mobile-tab]").forEach(b=>b.onclick=()=>switchTab(b.dataset.mobileTab));
+  const more=document.getElementById("mobileMore"); if(more) more.onclick=openMobileMore;
+  updateMobileNav("calendar");
 }
 
 function renderAll(){
@@ -513,7 +551,7 @@ async function init(){
   document.getElementById("modalWrap").addEventListener("click",e=>{ if(e.target.classList.contains("modal-scrim"))closeModal(); });
   document.addEventListener("click",e=>{ const t=document.getElementById("tray");
     if(t.classList.contains("open") && !t.contains(e.target) && e.target.id!=="btnTray" && !document.getElementById("btnTray").contains(e.target)) toggleTray(false); });
-  wireCalendarControls(); wireCommunityControls();
+  wireCalendarControls(); wireCommunityControls(); wireMobileNavigation();
   // it's Friday? make the huddle button wink
   if(new Date().getDay()===5) document.getElementById("btnFriday").classList.add("its-friday");
 
