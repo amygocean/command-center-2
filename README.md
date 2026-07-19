@@ -87,11 +87,10 @@ Browser
   js/data.js        Asana ids, occasions list, brief template, defaults
   js/core.js        state, config, API plumbing, greeting, suggestions tray
   js/calendar.js    zoomable calendar (day → scrollable year)
-  js/campaigns.js   portfolio-backed campaigns, health, milestones & wrap-ups
   js/people.js      crew lanes + shared priority ordering
-  js/content.js     Studio & Events: shoots, prep kits, ideas, briefs and campaign links
-  js/communities.js WhatsApp planner, calendar, insights and campaign-linked messages
-  js/drawer.js      task drawer, campaign linking, modals and template generator
+  js/content.js     Studio: shoots, prep kits, AI ideas & supplier briefs
+  js/communities.js WhatsApp planner, per-community calendar, insights
+  js/drawer.js      task drawer + modals + campaign playbook generator
   js/friday.js      the Friday Huddle
   js/news.js        News tab (weekly web-searched reading list)
   js/demo.js        ?demo=1 canned data (previews & demos, no Asana needed)
@@ -112,13 +111,6 @@ gets the brief at 07:30 SAST on weekdays without opening the app.
 **Try it without signing in:** open `YOUR-URL/?demo=1` (or locally: `node serve.cjs`
 then `http://localhost:3999/?demo=1`) — the whole dashboard runs on sample data.
 Great for showing people around; nothing is written anywhere.
-
-**Campaign operating suite:**
-- A linked work item is one native Asana task added to both its specialist board and its campaign project — never a duplicate.
-- Campaign health uses visible workflow rules for overdue work, missing ownership, launch readiness and wrap-ups.
-- The campaign creator includes seven templates and native Asana milestones.
-- Decisions and wrap-ups are saved inside the campaign project so the history remains searchable.
-- See `CAMPAIGN-SUITE-ADDITION.md` for the workflow, safety levels and live smoke test.
 
 **Notes on the smart bits:**
 - The team's shared priority order lives in a hidden Asana task called

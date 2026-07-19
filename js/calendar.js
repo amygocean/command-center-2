@@ -149,8 +149,8 @@ function renderQuarter(cal,lbl,c){
 /* ---- pills ---- */
 function pillHTML(t){
   const camp=isCampaignTask(t);
-  const cls="pill"+(t.isShoot?" shoot":"")+(t.isEvent?" event":"")+(t.isMilestone?" milestone":"")+(camp?" camp":"")+(t.isPlaceholder?" place":"")+(t.completed?" done":"");
-  const icon=t.isShoot?"🎬 ":t.isEvent?"⭐ ":t.isMilestone?"◆ ":t.isPlaceholder?"":"";
+  const cls="pill"+(t.isShoot?" shoot":"")+(t.isEvent?" event":"")+(camp?" camp":"")+(t.isPlaceholder?" place":"")+(t.completed?" done":"");
+  const icon=t.isShoot?"🎬 ":t.isEvent?"⭐ ":t.isPlaceholder?"":"";
   return '<span class="'+cls+'" draggable="true" data-gid="'+t.gid+'" style="--pc:'+(t.isPlaceholder?"#6B7A8F":t.projectColor)+'" title="'+esc(t.name)+'">'+
     '<i class="pdot"></i>'+icon+esc(t.name)+'</span>';
 }

@@ -62,8 +62,6 @@ function renderCommLegend(){
 /* ---- composer ---- */
 function renderCommComposer(){
   const box=document.getElementById("commTargets"); if(!box) return;
-  const campaign=document.getElementById("waCampaign");
-  if(campaign)fillCampaignSelectById("waCampaign",campaign.value,"No campaign");
   box.innerHTML = cfg.communities.map(c=>
     '<label class="ctgt" style="--cc:'+c.color+'"><input type="checkbox" value="'+c.key+'"><span>'+esc(c.name)+'</span></label>').join("");
   const pr=document.getElementById("waPurpose");
@@ -80,7 +78,6 @@ async function addWAMessage(){
   const board = await ensureMsgBoard(); if(!board) return;
   const secMap = await ensureWASections();
   const notes = pr.value ? "#purpose:"+pr.value : "";
-  const campaign=(document.getElementById("waCampaign")&&document.getElementById("waCampaign").value)||"";
   const tasks = targets.map(c=>{
     const t={name, project_id:board, notes};
     if(dt.value) t.due_on=dt.value;
@@ -89,9 +86,9 @@ async function addWAMessage(){
     return t;
   });
   try{
-    await createTasksWithCampaign(tasks,campaign,"Launch week");
-    inp.value=""; pr.value=""; if(document.getElementById("waCampaign"))document.getElementById("waCampaign").value="";
-    toast(campaign?"Message planned and linked to the campaign":(targets.length>1?"Planned for "+targets.length+" communities":"Message planned"));
+    await call("create_tasks",{tasks});
+    inp.value=""; pr.value="";
+    toast(targets.length>1?"Planned for "+targets.length+" communities":"Message planned");
     loadAll();
   }catch(e){ toast("Failed: "+e.message); }
 }

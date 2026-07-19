@@ -101,19 +101,11 @@ export default async function handler(req, res){
 
       // ---- campaigns portfolio ----
       case "get_portfolio_items":
-        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/items?${qs({opt_fields:args.opt_fields||"name,start_on,due_on,color,notes,permalink_url,owner.gid,owner.name,archived",limit:args.limit||100})}`);
+        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/items?${qs({opt_fields:args.opt_fields||"name,start_on,due_on,color,notes,permalink_url",limit:args.limit||100})}`);
         break;
 
       case "add_to_portfolio":
         out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/addItem`, { method:"POST", body:{ data:{ item: args.item } } });
-        break;
-
-      case "remove_from_portfolio":
-        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/removeItem`, { method:"POST", body:{ data:{ item: args.item } } });
-        break;
-
-      case "delete_project":
-        out = await asanaFetch(req,res,`/projects/${args.project_id}`, { method:"DELETE" });
         break;
 
       case "update_project":

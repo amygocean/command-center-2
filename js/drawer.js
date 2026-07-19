@@ -8,10 +8,6 @@ function openDrawer(gid){
   const peopleOpts='<option value="unassigned">Unassigned</option>'+
     state.users.map(u=>'<option value="'+u.gid+'"'+(t.assignee&&t.assignee.gid===u.gid?" selected":"")+'>'+esc(u.name)+'</option>').join("");
   const projOpts=cfg.projects.map(p=>'<option value="'+p.gid+'"'+(p.gid===t.projectGid?" selected":"")+'>'+esc(p.name)+'</option>').join("");
-  const linkedCampaign=typeof primaryCampaignForTask==="function"?primaryCampaignForTask(t):"";
-  const primaryCampaign=typeof campaignGidSet==="function"&&campaignGidSet().has(t.projectGid);
-  const campaignLocked=primaryCampaign&&taskProjectGids(t).length===1;
-  const campaignOpts=typeof campaignOptionsHTML==="function"?campaignOptionsHTML(linkedCampaign,"No linked campaign"):'<option value="">No linked campaign</option>';
   const cm = t.isComms ? communityOf(t) : null;
   const pu = t.isComms ? purposeOf(t) : null;
   d.innerHTML=
@@ -25,7 +21,6 @@ function openDrawer(gid){
     '<div class="row"><div class="fld"><label>Due date</label><input type="date" id="dDue" value="'+(t.due||"")+'"></div>'+
     '<div class="fld"><label>Assignee</label><select id="dAssignee">'+peopleOpts+'</select></div></div>'+
     '<div class="fld"><label>Board (move task between projects)</label><select id="dProject">'+projOpts+'</select></div>'+
-    '<div class="fld"><label>Campaign link</label><select id="dCampaign" '+(campaignLocked?'disabled':'')+'>'+campaignOpts+'</select><span class="field-help">'+(campaignLocked?'This task lives directly in the campaign project. Move it to another board first if it should become cross-project work.':'The task stays on its board and is also added to the campaign project — no duplicate.')+'</span></div>'+
     '<div class="fld" id="dSecWrap" style="display:none"><label>Section in new board</label><select id="dSection"><option value="">(no section)</option></select></div>'+
     '<div class="drawer-actions">'+
       '<button class="btn primary" id="dSave">Save to Asana</button>'+
@@ -75,18 +70,9 @@ function openDrawer(gid){
     upd.assignee = asg==="unassigned"?null:asg;
     if(moved){ const sec=d.querySelector("#dSection").value;
       upd.add_projects=[sec?{project_id:proj,section_id:sec}:{project_id:proj}]; upd.remove_projects=[t.projectGid]; }
-    let campaignChanged=false;
-    if(!campaignLocked && typeof taskCampaignGids==="function"){
-      const selected=d.querySelector("#dCampaign").value;
-      const existing=taskCampaignGids(t);
-      const add=selected&&!existing.includes(selected)?{project_id:selected}:null;
-      const remove=existing.filter(g=>g!==selected&&g!==t.projectGid);
-      if(add){ upd.add_projects=upd.add_projects||[]; upd.add_projects.push(add); campaignChanged=true; }
-      if(remove.length){ upd.remove_projects=[...(upd.remove_projects||[]),...remove]; campaignChanged=true; }
-    }
     try{ await call("update_tasks",{tasks:[upd]});
       closeDrawer();
-      if(moved||campaignChanged){ toast(moved?"Task moved and campaign link saved":"Campaign link saved"); loadAll(); }
+      if(moved){ toast("Moved to "+(cfg.projects.find(p=>p.gid===proj)||{}).name); loadAll(); }
       else { t.name=name||t.name; t.due=due; t.notes=notes; t.assignee=asg==="unassigned"?null:{gid:asg,name:userName(asg)}; renderAll(); toast("Saved ✓"); }
     }catch(e){ toast("Failed: "+e.message); }
   };
@@ -121,14 +107,12 @@ function wireModalClose(){ document.querySelectorAll("#modal [data-close]").forE
 function openAdd(){
   const projOpts=cfg.projects.map(p=>'<option value="'+p.gid+'">'+esc(p.name)+'</option>').join("");
   const peopleOpts='<option value="">Unassigned</option>'+state.users.map(u=>'<option value="'+u.gid+'">'+esc(u.name)+'</option>').join("");
-  const campOpts=typeof campaignOptionsHTML==="function"?campaignOptionsHTML("","Link to campaign…"):"";
   showModal(
     '<h2>Add task</h2>'+
     '<div class="fld"><label>Task name</label><input id="aName" placeholder="e.g. Shoot Day 12 – Winter menu"></div>'+
     '<div class="fld"><label>Board</label><select id="aProj">'+projOpts+'</select></div>'+
     '<div class="row"><div class="fld"><label>Due date</label><input type="date" id="aDue"></div>'+
     '<div class="fld"><label>Assignee</label><select id="aAsg">'+peopleOpts+'</select></div></div>'+
-    '<div class="fld"><label>Campaign (optional)</label><select id="aCampaign">'+campOpts+'</select><span class="field-help">One task, visible on both its working board and the campaign.</span></div>'+
     '<div class="fld"><label>Notes</label><textarea id="aNotes"></textarea></div>'+
     '<div class="drawer-actions"><button class="btn primary" id="aSave">Create in Asana</button>'+
     '<button class="btn ghost" data-close>Cancel</button></div>'
@@ -140,8 +124,7 @@ function openAdd(){
     const asg=document.getElementById("aAsg").value; if(asg)task.assignee=asg;
     const notes=document.getElementById("aNotes").value.trim(); if(notes)task.notes=notes;
     const proj=document.getElementById("aProj").value; task.project_id=proj;
-    const campaign=document.getElementById("aCampaign").value;
-    try{ await createTasksWithCampaign([task],campaign,"Pre-launch"); closeModal(); toast(campaign?"Created and linked to campaign ✓":"Created ✓"); loadAll(); }
+    try{ await call("create_tasks",{tasks:[task]}); closeModal(); toast("Created ✓"); loadAll(); }
     catch(e){ toast("Failed: "+e.message); }
   };
 }
@@ -200,70 +183,122 @@ function openSettings(){
 }
 
 /* ---- campaign playbook generator ----
-   Choose a template, review every task/milestone, then create the real
-   Asana project and portfolio item. Nothing is created before approval. */
+   A campaign = a real Asana project with phase sections and dated
+   workstream tasks per channel. The plan is drafted client-side from
+   the house playbook, editable, then created on approval. */
+
+const CAMPAIGN_PHASES = ["Pre-launch","Launch week","In market","Wrap-up"];
+const CAMPAIGN_CHANNELS = [
+  {key:"courses", label:"Courses"},
+  {key:"videos",  label:"Videos / shoot"},
+  {key:"training",label:"In-person training"},
+  {key:"comms",   label:"Comms"}
+];
+
+function buildCampaignPlan(name, start, end, channels, roles){
+  const S=pd(start), E=pd(end);
+  const mid=new Date((S.valueOf()+E.valueOf())/2);
+  const d=(base,off)=>{ const x=new Date(base); x.setDate(x.getDate()+off); return iso(x); };
+  const roleTxt = roles.length ? " ("+roles.join(", ")+")" : "";
+  const rows=[]; const add=(phase,ch,due,task)=>{ if(ch==="all"||channels.includes(ch)) rows.push({phase,ch,due,name:task,on:true}); };
+
+  add("Pre-launch","courses",d(S,-28),"Write & build courses"+roleTxt);
+  add("Pre-launch","courses",d(S,-10),"QA + configure courses");
+  add("Pre-launch","courses",d(S,-7), "Manager launch pack (why, who, deadline, coaching)");
+  add("Pre-launch","videos", d(S,-21),"Brief to Content Go — "+name+" videos");
+  add("Pre-launch","videos", d(S,-14),"Shoot Day — "+name);
+  add("Pre-launch","videos", d(S,-5), "Final videos delivered & loaded");
+  add("Pre-launch","training",d(S,-21),"Book venues & trainers");
+  add("Pre-launch","training",d(S,-14),"Regional session schedule locked");
+  add("Pre-launch","comms",  d(S,-3), "Teaser message (queue in Communities)");
+  add("Pre-launch","comms",  start,   "Launch announcement");
+  add("Launch week","courses",start,  "Courses live + assigned");
+  add("Launch week","courses",d(S,5), "First-week participation check");
+  add("Launch week","training",d(S,3),"Run in-person sessions");
+  add("Launch week","comms",  d(S,1), "Manager huddle reminder");
+  add("In market","comms",   iso(mid),"Mid-campaign boost message");
+  add("In market","courses", iso(mid),"Wrong-answer check — Skills Booster if needed");
+  add("In market","training",iso(mid),"Trainer field check-ins");
+  add("Wrap-up","all",       d(E,2),  "Completion & results snapshot");
+  add("Wrap-up","all",       d(E,5),  "What we'd do differently (15 min huddle)");
+  add("Wrap-up","all",       d(E,7),  "Archive assets & source of truth");
+  return rows;
+}
 
 function openCampaign(){
   const chBoxes=CAMPAIGN_CHANNELS.map(c=>
     '<label class="ctgt" style="--cc:var(--teal)"><input type="checkbox" value="'+c.key+'" checked><span>'+c.label+'</span></label>').join("");
   const roleBoxes=["FOH","BOH","Sushi","Bar/Deli","Managers"].map(r=>
     '<label class="ctgt" style="--cc:var(--deep)"><input type="checkbox" value="'+r+'"><span>'+r+'</span></label>').join("");
-  const templates=CAMPAIGN_TEMPLATES.map(t=>'<option value="'+t.key+'">'+esc(t.label)+'</option>').join("");
-  const owners='<option value="">No owner yet</option>'+state.users.map(u=>'<option value="'+u.gid+'">'+esc(u.name)+'</option>').join("");
   showModal(
     '<h2>New campaign</h2>'+
-    '<p class="hint">Choose the kind of campaign first. The app drafts an appropriately sized runway — from a light communications push to a full menu launch — and marks the genuine milestones separately.</p>'+
-    '<div class="fld"><label>Campaign template</label><select id="cTemplate">'+templates+'</select><span class="field-help" id="cTemplateDesc">'+esc(CAMPAIGN_TEMPLATES[0].desc)+'</span></div>'+
+    '<p class="hint">Answer four things and the playbook drafts the whole runway — a real Asana project with Pre-launch, Launch week, In market and Wrap-up phases, dated back from your launch. You edit before anything is created.</p>'+
     '<div class="fld"><label>Campaign name</label><input id="cName" placeholder="e.g. Summer Menu 2027"></div>'+
     '<div class="row"><div class="fld"><label>Launch (start)</label><input type="date" id="cStart"></div>'+
     '<div class="fld"><label>Ends</label><input type="date" id="cEnd"></div></div>'+
-    '<div class="fld"><label>Campaign owner</label><select id="cOwner">'+owners+'</select></div>'+
     '<div class="fld"><label>Channels</label><div style="display:flex;gap:4px;flex-wrap:wrap">'+chBoxes+'</div></div>'+
     '<div class="fld"><label>Roles affected</label><div style="display:flex;gap:4px;flex-wrap:wrap">'+roleBoxes+'</div></div>'+
     '<div class="fld"><label>Campaign notes</label><textarea id="cNotes" placeholder="Goal, audience, important decisions, source links, what cannot change…"></textarea></div>'+
     '<div class="fld"><label>Band colour</label><select id="cColor">'+
       ["#D9822B","#0A3D62","#00A8A8","#F7C325","#7A5FB0","#C0392B","#3A7D44"].map(c=>'<option value="'+c+'">'+c+'</option>').join("")+'</select></div>'+
-    '<div class="drawer-actions"><button class="btn primary" id="cPlan">Draft the plan</button><button class="btn ghost" data-close>Cancel</button></div>'+
+    '<div class="drawer-actions"><button class="btn primary" id="cPlan">Draft the plan</button>'+
+    '<button class="btn ghost" data-close>Cancel</button></div>'+
     '<div id="cPlanOut"></div>'
   );
   wireModalClose();
-  const tpl=document.getElementById("cTemplate");
-  tpl.onchange=()=>{document.getElementById("cTemplateDesc").textContent=campaignTemplateByKey(tpl.value).desc;};
   document.getElementById("cPlan").onclick=()=>{
-    const name=document.getElementById("cName").value.trim();if(!name){toast("Name first");return;}
-    const start=document.getElementById("cStart").value,end=document.getElementById("cEnd").value;
-    if(!start||!end){toast("Pick the dates");return;}if(pd(start)>pd(end)){toast("The end date must be after launch");return;}
-    const channels=[...document.querySelectorAll('#modal .fld input[type="checkbox"]:checked')].map(i=>i.value).filter(v=>CAMPAIGN_CHANNELS.some(c=>c.key===v));
-    const roles=[...document.querySelectorAll('#modal .fld input[type="checkbox"]:checked')].map(i=>i.value).filter(v=>!CAMPAIGN_CHANNELS.some(c=>c.key===v));
-    const templateKey=tpl.value,plan=buildCampaignPlan(name,start,end,channels,roles,templateKey),out=document.getElementById("cPlanOut");
-    let html='<div class="ins-h" style="margin-top:18px">The plan — untick, edit or change task ↔ milestone</div>';
-    if(!plan.length)html+='<div class="empty">Blank template selected — the project and phases will be created without tasks.</div>';
-    CAMPAIGN_PHASES.filter(ph=>ph!=="Campaign HQ").forEach(ph=>{
-      const rows=plan.filter(r=>r.phase===ph);if(!rows.length)return;html+='<div class="plan-ph">'+ph+'</div>';
-      rows.forEach(r=>{const ix=plan.indexOf(r);html+='<div class="plan-row campaign-plan-row"><input type="checkbox" data-pi="'+ix+'" checked><select data-pt="'+ix+'"><option value="default_task"'+(!r.milestone?' selected':'')+'>Task</option><option value="milestone"'+(r.milestone?' selected':'')+'>Milestone</option></select><input type="text" data-pn="'+ix+'" value="'+esc(r.name)+'"><input type="date" data-pd="'+ix+'" value="'+r.due+'"></div>';});
+    const name=document.getElementById("cName").value.trim(); if(!name){toast("Name first");return;}
+    const start=document.getElementById("cStart").value, end=document.getElementById("cEnd").value;
+    if(!start||!end){toast("Pick the dates");return;}
+    const channels=[...document.querySelectorAll('#modal .fld input[type="checkbox"]:checked')]
+      .map(i=>i.value).filter(v=>CAMPAIGN_CHANNELS.some(c=>c.key===v));
+    const roles=[...document.querySelectorAll('#modal .fld input[type="checkbox"]:checked')]
+      .map(i=>i.value).filter(v=>!CAMPAIGN_CHANNELS.some(c=>c.key===v));
+    const plan=buildCampaignPlan(name,start,end,channels,roles);
+    const out=document.getElementById("cPlanOut");
+    let html='<div class="ins-h" style="margin-top:18px">The plan — untick or edit anything</div>';
+    CAMPAIGN_PHASES.forEach(ph=>{
+      const rows=plan.filter(r=>r.phase===ph); if(!rows.length) return;
+      html+='<div class="plan-ph">'+ph+'</div>';
+      rows.forEach((r)=>{ const ix=plan.indexOf(r);
+        html+='<div class="plan-row"><input type="checkbox" data-pi="'+ix+'" checked>'+
+          '<input type="text" data-pn="'+ix+'" value="'+esc(r.name)+'">'+
+          '<input type="date" data-pd="'+ix+'" value="'+r.due+'"></div>';
+      });
     });
-    html+='<div class="drawer-actions"><button class="btn primary" id="cCreate">Create it all in Asana</button></div>';out.innerHTML=html;
+    html+='<div class="drawer-actions"><button class="btn primary" id="cCreate">Create it all in Asana</button></div>';
+    out.innerHTML=html;
     document.getElementById("cCreate").onclick=async()=>{
-      const btn=document.getElementById("cCreate");btn.disabled=true;btn.innerHTML='<span class="spin"></span> building…';
-      const color=document.getElementById("cColor").value,notes=document.getElementById("cNotes").value.trim(),owner=document.getElementById("cOwner").value;
+      const btn=document.getElementById("cCreate"); btn.disabled=true; btn.innerHTML='<span class="spin"></span> building…';
+      const color=document.getElementById("cColor").value;
+      const notes=document.getElementById("cNotes").value.trim();
       try{
-        const fields={name,team:ACADEMY_TEAM,color:HEX_TO_ASANA[color]||"dark-orange",default_view:"calendar",privacy_setting:"private_to_team",start_on:start,due_on:end,notes,sections:CAMPAIGN_PHASES.map(p=>({sectionName:p}))};
-        if(owner)fields.owner=owner;
-        const res=await call("create_project",fields),gid=res.data&&res.data.gid;if(!gid)throw new Error("no project id returned");
-        const secs=(res.data.sections_created&&res.data.sections_created.succeeded)||[],secMap={};secs.forEach(x=>{secMap[x.name]=x.gid;});
+        const res=await call("create_project",{name,team:ACADEMY_TEAM,color:HEX_TO_ASANA[color]||"dark-orange",default_view:"calendar",
+          privacy_setting:"private_to_team",start_on:start,due_on:end,notes,
+          sections:CAMPAIGN_PHASES.map(p=>({sectionName:p}))});
+        const gid=res.data&&res.data.gid; if(!gid) throw new Error("no project id returned");
+        const secs=(res.data.sections_created&&res.data.sections_created.succeeded)||[];
+        const secMap={}; secs.forEach(s=>{ secMap[s.name]=s.gid; });
         const tasks=[];
         plan.forEach((r,ix)=>{
-          const cb=document.querySelector('[data-pi="'+ix+'"]');if(cb&&!cb.checked)return;
-          const nm=document.querySelector('[data-pn="'+ix+'"]'),dt=document.querySelector('[data-pd="'+ix+'"]'),ty=document.querySelector('[data-pt="'+ix+'"]');
-          const t={name:(nm?nm.value.trim():r.name)||r.name,project_id:gid,due_on:(dt&&dt.value)||r.due};
-          if(secMap[r.phase])t.section_id=secMap[r.phase];if(ty&&ty.value==="milestone")t.resource_subtype="milestone";tasks.push(t);
+          const cb=document.querySelector('[data-pi="'+ix+'"]'); if(cb&&!cb.checked) return;
+          const nm=document.querySelector('[data-pn="'+ix+'"]'), dt=document.querySelector('[data-pd="'+ix+'"]');
+          const t={name:(nm?nm.value.trim():r.name)||r.name, project_id:gid, due_on:(dt&&dt.value)||r.due};
+          if(secMap[r.phase]) t.section_id=secMap[r.phase];
+          tasks.push(t);
         });
-        if(tasks.length)await call("create_tasks",{tasks});
-        let portfolioLinked=true;try{await call("add_to_portfolio",{portfolio_gid:CAMPAIGN_PORTFOLIO,item:gid});}catch(e){portfolioLinked=false;}
-        const campaign={gid,name,start,due:end,color,notes,owner:owner?{gid:owner,name:userName(owner)}:null,url:"https://app.asana.com/0/"+gid,source:"portfolio"};
-        cfg.campaigns=(cfg.campaigns||[]).filter(c=>c.gid!==gid);cfg.campaigns.push(campaign);cfg.projects=(cfg.projects||[]).filter(p=>p.gid!==gid);cfg.projects.push({gid,name,color,on:true,campaign:true});
-        state.campaignSelected=gid;state.campaignsLoaded=false;saveCfg();closeModal();confetti();switchTab("campaigns");toast(portfolioLinked?"Campaign live — "+tasks.length+" work items on the runway":"Campaign created, but it still needs adding to the portfolio");loadAll();
-      }catch(e){btn.disabled=false;btn.textContent="Create it all in Asana";toast("Failed: "+e.message);}
+        if(tasks.length) await call("create_tasks",{tasks});
+        let portfolioLinked=true;
+        try{ await call("add_to_portfolio",{portfolio_gid:CAMPAIGN_PORTFOLIO,item:gid}); }
+        catch(portfolioErr){ portfolioLinked=false; }
+        const campaign={gid,name,start,due:end,color,notes,url:"https://app.asana.com/0/"+gid,source:"portfolio"};
+        cfg.campaigns=(cfg.campaigns||[]).filter(c=>c.gid!==gid); cfg.campaigns.push(campaign);
+        cfg.projects=(cfg.projects||[]).filter(p=>p.gid!==gid); cfg.projects.push({gid,name,color,on:true,campaign:true});
+        state.campaignSelected=gid; state.campaignsLoaded=false;
+        saveCfg(); closeModal(); confetti(); switchTab("campaigns");
+        toast(portfolioLinked?"Campaign live — "+tasks.length+" tasks on the runway":"Campaign created, but it still needs adding to the portfolio");
+        loadAll();
+      }catch(e){ btn.disabled=false; btn.textContent="Create it all in Asana"; toast("Failed: "+e.message); }
     };
   };
 }
