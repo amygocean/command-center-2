@@ -46,21 +46,31 @@ let girlGist=(()=>{ try{ return JSON.parse(localStorage.getItem(GIST_KEY)||"{}")
 function saveGist(){ try{ localStorage.setItem(GIST_KEY,JSON.stringify(girlGist)); }catch(_){} }
 const gistBusy={};   // key -> true while a summary is generating
 
-// The tasks we actually feed the model: visible, not hidden, not done,
-// soonest / overdue first so "top now" is meaningful.
-function gistTasks(key){
+// The workload as SHE has organised it: her sections (incl. the "Top 3
+// right now" priority section) with their tasks, plus everything else.
+// Feeding this structure — not a flat list — lets the AI weight her Top 3
+// and reason about impact from what she's actually chosen to prioritise.
+function gistStructure(key){
   const gc=girlCfg(key);
-  return visibleGirlTasks(key)
-    .filter(t=>!t.completed && !gc.hidden.includes(t.gid))
-    .sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1)
-    .slice(0,15);
+  const all=visibleGirlTasks(key).filter(t=>!t.completed && !gc.hidden.includes(t.gid));
+  const byId=Object.fromEntries(all.map(t=>[t.gid,t]));
+  const used=new Set();
+  const sections=gc.sections.map(sec=>{
+    const tasks=sec.taskIds.map(id=>byId[id]).filter(Boolean);
+    tasks.forEach(t=>used.add(t.gid));
+    return {id:sec.id, name:sec.name, tasks};
+  }).filter(s=>s.tasks.length);
+  const rest=all.filter(t=>!used.has(t.gid)).sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1);
+  return {all, sections, rest};
 }
-// A cheap, stable signature of the task set — if it changes, the cached
-// gist is stale and we flag a refresh (but still show the old one).
-function gistFingerprint(tasks){
-  const s=tasks.map(t=>t.gid+":"+(t.due||"")).join("|");
-  let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))|0;
-  return tasks.length+"-"+(h>>>0).toString(36);
+// A cheap, stable signature that also captures WHICH section each task sits
+// in — so moving a task into Top 3 marks the gist stale (priorities changed).
+function gistFingerprint(struct){
+  const parts=[];
+  struct.sections.forEach(s=>s.tasks.forEach(t=>parts.push(s.id+">"+t.gid+":"+(t.due||""))));
+  struct.rest.forEach(t=>parts.push("rest>"+t.gid+":"+(t.due||"")));
+  const s=parts.join("|"); let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))|0;
+  return parts.length+"-"+(h>>>0).toString(36);
 }
 // Bold the "Label:" at the start of each line for a scannable read.
 function gistFormat(text){
@@ -72,9 +82,9 @@ function gistFormat(text){
 
 function girlGistHTML(key){
   const g=GIRLS.find(x=>x.key===key);
-  const tasks=gistTasks(key);
+  const struct=gistStructure(key);
   const cached=girlGist[key];
-  const fp=gistFingerprint(tasks);
+  const fp=gistFingerprint(struct);
   const stale=cached && cached.fp!==fp;
   const busy=gistBusy[key];
   let inner;
@@ -92,20 +102,29 @@ function girlGistHTML(key){
 async function generateGirlGist(key){
   if(gistBusy[key]) return;
   const g=GIRLS.find(x=>x.key===key); if(!g) return;
-  const tasks=gistTasks(key);
-  if(!tasks.length){ girlGist[key]={text:"Busy with: nothing on the list right now — all clear.",fp:gistFingerprint(tasks),at:iso(todayD())}; saveGist(); renderGirls(); return; }
+  const struct=gistStructure(key);
+  const fp=gistFingerprint(struct);
+  if(!struct.all.length){ girlGist[key]={text:"Busy with: nothing on the list right now — all clear.",fp,at:iso(todayD())}; saveGist(); renderGirls(); return; }
+  const top3sec=struct.sections.find(s=>s.id==="top3");
+  const top3=top3sec?top3sec.tasks:[];
+  const otherSections=struct.sections.filter(s=>s.id!=="top3");
+  const slim=t=>({name:t.name,due:t.due,board:t.projectName});
   gistBusy[key]=true; renderGirls();
   try{
     const text=await askAI(
-      "You are the chief-of-staff for the Ocean Basket Academy team. Summarise ONE team member's current workload for a quick team glance, using their live Asana My Tasks (task name, due date, board). Write EXACTLY these four short labelled lines and nothing else:\n"+
-      "Busy with: <one sentence naming their current focus / the theme running through their tasks>\n"+
-      "Top now: <the 2-3 most pressing task names, comma-separated, soonest or overdue first>\n"+
+      "You are the chief-of-staff for the Ocean Basket Academy team. Summarise ONE team member's current workload for a quick team glance. Their tasks come grouped the way THEY organised them: 'top_3_priorities' are the tasks they have explicitly flagged as most important right now — weight these most heavily and let them drive your impact conclusion. 'sections' are their own groupings; 'everything_else' is the remaining work.\n"+
+      "Write EXACTLY these four short labelled lines and nothing else:\n"+
+      "Busy with: <one sentence naming the theme running through their work>\n"+
+      "Top now: <their Top 3 priorities by name if present, otherwise the 2-3 most pressing tasks, soonest or overdue first>\n"+
       "Deliverables: <the concrete things these tasks actually produce>\n"+
-      "For the business: <one sentence on the result or value this creates for Ocean Basket>\n"+
-      "Be specific to the real tasks — no generic filler. Warm, plain, confident. Keep the whole thing under 75 words.",
-      [{person:g.name, tasks:tasks.map(t=>({name:t.name,due:t.due,board:t.projectName}))}]
+      "For the business: <a one-sentence CONCLUSION about impact, reasoned primarily from the Top 3 priorities — the result Ocean Basket gets when these land>\n"+
+      "Be specific to the real tasks — no generic filler. Warm, plain, confident. Keep the whole thing under 80 words.",
+      [{person:g.name,
+        top_3_priorities:top3.map(slim),
+        sections:otherSections.map(s=>({section:s.name,tasks:s.tasks.map(slim)})),
+        everything_else:struct.rest.slice(0,12).map(slim)}]
     );
-    girlGist[key]={text:(text||"").trim(),fp:gistFingerprint(tasks),at:iso(todayD())};
+    girlGist[key]={text:(text||"").trim(),fp,at:iso(todayD())};
     saveGist();
   }catch(e){ toast("Couldn't summarise "+firstName(g.name)+": "+e.message); }
   gistBusy[key]=false; renderGirls();
@@ -176,13 +195,16 @@ function renderGirls(){
       '<div class="gdrop" data-key="'+g.key+'" data-sec="rest">'+
       (rest.length?rest.map(t=>girlCardHTML(t,g.key)).join(""):'<div class="gph">'+(all.length?"all sorted":pick(EMPTY_LINES))+'</div>')+
       '</div></div>';
+    // The hidden pile renders just above the gist so toggling it open pushes
+    // the AI summary down instead of ever sitting on top of it.
+    let hiddenBlock='';
     if(hiddenTasks.length){
       const open=paneOpen["gh:"+g.key];
-      body+='<div class="ghid" data-key="'+g.key+'">hidden ('+hiddenTasks.length+') '+(open?"▾":"▸")+'</div>';
-      if(open) body+='<div class="gdrop">'+hiddenTasks.map(t=>girlCardHTML(t,g.key)).join("")+'</div>';
+      hiddenBlock='<div class="ghid" data-key="'+g.key+'">hidden ('+hiddenTasks.length+') '+(open?"▾":"▸")+'</div>';
+      if(open) hiddenBlock+='<div class="gdrop">'+hiddenTasks.map(t=>girlCardHTML(t,g.key)).join("")+'</div>';
     }
-    if(err==="no_pat") body='<div class="empty" style="padding:30px 8px">Not connected yet.<br>Add <b>'+g.key.toUpperCase()+'_PAT</b> in Vercel → redeploy, and '+esc(g.name)+"'s My Tasks appear here.</div>";
-    else if(err) body='<div class="empty">Couldn\'t load: '+esc(err)+'</div>';
+    if(err==="no_pat"){ body='<div class="empty" style="padding:30px 8px">Not connected yet.<br>Add <b>'+g.key.toUpperCase()+'_PAT</b> in Vercel → redeploy, and '+esc(g.name)+"'s My Tasks appear here.</div>"; hiddenBlock=''; }
+    else if(err){ body='<div class="empty">Couldn\'t load: '+esc(err)+'</div>'; hiddenBlock=''; }
 
     html+='<div class="lane glane" data-key="'+g.key+'" data-resize-key="'+g.key+'" style="--lane-weight:'+girlLaneWeight(g.key)+'">'+
       '<div class="lane-h"><span class="avatar" style="--hue:'+(GIRLS.indexOf(g)*70)+'">'+g.name[0]+g.name[1].toUpperCase()+'</span>'+
@@ -192,6 +214,7 @@ function renderGirls(){
       '<div class="lane-body">'+body+
       '<div class="qadd"><input class="qadd-name" data-key="'+g.key+'" placeholder="+ quick task…">'+
       '<button class="qadd-btn" data-key="'+g.key+'">Add</button></div>'+
+      hiddenBlock+
       (err?'':girlGistHTML(g.key))+'</div>'+
       '<button class="lane-resizer" type="button" aria-label="Resize '+esc(g.name)+' task column" title="Drag to resize · double-click to reset"></button></div>';
   });

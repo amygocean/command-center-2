@@ -249,11 +249,14 @@ async function demoAI(prompt,data){
   if(/wrong-answer|assessment data/i.test(prompt))
     return "TOP WRONG ANSWERS\n• Chilli salt still selected for the Tempura Prawn Roll — 41% picked the old recipe (change not landed)\n• Sauce ladle size on Panko Futomaki — 33% chose 30ml instead of 15ml\n• Cucumber vs zucchini swap — 28% still answer zucchini\n\nPATTERN\nAll three misses are recipe *changes*, not new dishes — crew learned the original and the delta didn't stick. Reinforce what changed, not the whole recipe.\n\nBOOSTER: Reworked sushi — what changed in 60 seconds\nBOOSTER: Sauce ladle sizes — the 15ml rule\nBOOSTER: Flashcard round: old ingredient vs new";
   if(/current workload for a quick team glance/i.test(prompt)){
-    const who=(((data&&data[0]&&data[0].person)||"Amy")+"").split(" ")[0];
-    return "Busy with: "+who+" is heads-down on the Summer Menu launch content — briefs, shoot prep and the OB Fit reporting all landing in the same window.\n"+
-      "Top now: Edit Mojito + Lemon & Mint Cooler clips, Send OB Fit July report to EXCO, Book studio lights for Shoot Day 14\n"+
+    const d0=(data&&data[0])||{};
+    const who=((d0.person||"Amy")+"").split(" ")[0];
+    const top=(d0.top_3_priorities||[]).map(t=>t.name).filter(Boolean).slice(0,3);
+    const topLine=top.length?top.join(", "):"Edit Mojito + Lemon & Mint Cooler clips, Send OB Fit July report to EXCO, Book studio lights for Shoot Day 14";
+    return "Busy with: "+who+" is focused on the Summer Menu launch — the priorities she's flagged are what unblock the shoot and the reporting.\n"+
+      "Top now: "+topLine+"\n"+
       "Deliverables: finished drink clips, the EXCO report, and a shoot that's ready to roll on the day\n"+
-      "For the business: crew can plate and sell the new menu correctly from day one, and leadership sees the training impact in numbers.";
+      "For the business: clearing her top 3 means crew can plate and sell the new menu from day one, and leadership sees the training impact in the numbers.";
   }
   if(/WhatsApp community activity/i.test(prompt))
     return "TL;DR: Lively week in this community — the menu quiz drove the most replies, and three crew members asked the same question about the new futomaki prep.\n\nThemes:\n• Confusion: cucumber vs zucchini swap (asked 3×)\n• High energy on the quiz + prize\n• Two stores asked for the plating video link again\n\nNeeds action:\n• Post a pinned answer on the futomaki swap\n• Re-share the plating video link\n\nVibe: engaged and upbeat 🔥";
