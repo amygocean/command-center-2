@@ -5,7 +5,27 @@
 //  the Asana REST API, running as the logged-in user (see _lib.js).
 //  Keeping this shape means the dashboard's own logic barely changed.
 // ------------------------------------------------------------------
-import { asanaFetch, WORKSPACE } from "./_lib.js";
+import { asanaFetch, readSession, WORKSPACE } from "./_lib.js";
+
+// Reads of the shared boards go through ONE service token so every
+// signed-in teammate sees the same boards, regardless of what their own
+// Asana account has been shared into. Writes stay on the person's own
+// OAuth login (see asanaFetch) so edits/comments are attributed to them.
+// Defaults to AMY_PAT (which already owns every board); set a dedicated
+// ASANA_SHARED_PAT in Vercel if you'd rather not reuse a personal token.
+const SHARED_PAT = process.env.ASANA_SHARED_PAT || process.env.AMY_PAT;
+async function sharedFetch(req, res, path){
+  // still require the caller to be logged in — never serve board data anonymously
+  if(!readSession(req)){ const e = new Error("not authenticated"); e.status = 401; throw e; }
+  if(!SHARED_PAT) return asanaFetch(req, res, path); // no service token configured → fall back to the user's own token
+  const r = await fetch("https://app.asana.com/api/1.0"+path, {
+    headers: { Authorization: "Bearer "+SHARED_PAT, "Content-Type":"application/json" }
+  });
+  const text = await r.text();
+  let json; try { json = JSON.parse(text); } catch { json = { raw:text }; }
+  if(!r.ok){ const e = new Error((json.errors&&json.errors[0]&&json.errors[0].message)||("Asana "+r.status)); e.status=r.status; throw e; }
+  return json;
+}
 
 async function readBody(req){
   if(req.body && typeof req.body === "object") return req.body;
@@ -24,17 +44,17 @@ export default async function handler(req, res){
     switch(tool){
 
       case "get_users":
-        out = await asanaFetch(req,res,`/users?${qs({workspace:WORKSPACE, opt_fields:"name,email", limit:args.limit||100})}`);
+        out = await sharedFetch(req,res,`/users?${qs({workspace:WORKSPACE, opt_fields:"name,email", limit:args.limit||100})}`);
         break;
 
       case "get_tasks":
-        out = await asanaFetch(req,res,`/tasks?${qs({project:args.project, opt_fields:args.opt_fields, limit:args.limit||100, offset:args.offset})}`);
+        out = await sharedFetch(req,res,`/tasks?${qs({project:args.project, opt_fields:args.opt_fields, limit:args.limit||100, offset:args.offset})}`);
         break;
 
       case "get_project": {
-        const p = await asanaFetch(req,res,`/projects/${args.project_id}?${qs({opt_fields:args.opt_fields||"name"})}`);
+        const p = await sharedFetch(req,res,`/projects/${args.project_id}?${qs({opt_fields:args.opt_fields||"name"})}`);
         if(args.include_sections){
-          const s = await asanaFetch(req,res,`/projects/${args.project_id}/sections?${qs({opt_fields:"name"})}`);
+          const s = await sharedFetch(req,res,`/projects/${args.project_id}/sections?${qs({opt_fields:"name"})}`);
           p.data.sections = s.data;
         }
         out = p; break;
@@ -92,16 +112,16 @@ export default async function handler(req, res){
       }
 
       case "get_task": {
-        const p = await asanaFetch(req,res,`/tasks/${args.task_id}?${qs({opt_fields:args.opt_fields||"name,notes"})}`);
+        const p = await sharedFetch(req,res,`/tasks/${args.task_id}?${qs({opt_fields:args.opt_fields||"name,notes"})}`);
         // Asana comments are "stories" of type 'comment'
-        const st = await asanaFetch(req,res,`/tasks/${args.task_id}/stories?${qs({opt_fields:"text,type,created_at,created_by.name"})}`);
+        const st = await sharedFetch(req,res,`/tasks/${args.task_id}/stories?${qs({opt_fields:"text,type,created_at,created_by.name"})}`);
         p.data.comments = (st.data||[]).filter(s=>s.type==="comment").map(s=>({ text:s.text, created_at:s.created_at, created_by:s.created_by }));
         out = p; break;
       }
 
       // ---- campaigns portfolio ----
       case "get_portfolio_items":
-        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/items?${qs({opt_fields:args.opt_fields||"name,start_on,due_on,color,notes,permalink_url",limit:args.limit||100})}`);
+        out = await sharedFetch(req,res,`/portfolios/${args.portfolio_gid}/items?${qs({opt_fields:args.opt_fields||"name,start_on,due_on,color,notes,permalink_url",limit:args.limit||100})}`);
         break;
 
       case "add_to_portfolio":
@@ -117,7 +137,7 @@ export default async function handler(req, res){
         break;
 
       case "get_subtasks":
-        out = await asanaFetch(req,res,`/tasks/${args.parent}/subtasks?${qs({opt_fields:"name,completed,due_on,assignee.name"})}`);
+        out = await sharedFetch(req,res,`/tasks/${args.parent}/subtasks?${qs({opt_fields:"name,completed,due_on,assignee.name"})}`);
         break;
 
       case "create_section":
