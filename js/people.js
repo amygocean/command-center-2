@@ -189,9 +189,10 @@ function renderGirls(){
       '<span class="nm">'+esc(g.name)+'</span>'+
       '<button class="lmode" data-addsec="'+g.key+'">+ section</button>'+
       '<span class="ct">'+all.filter(t=>!gc.hidden.includes(t.gid)).length+'</span></div>'+
-      '<div class="lane-body">'+(err?'':girlGistHTML(g.key))+body+
+      '<div class="lane-body">'+body+
       '<div class="qadd"><input class="qadd-name" data-key="'+g.key+'" placeholder="+ quick task…">'+
-      '<button class="qadd-btn" data-key="'+g.key+'">Add</button></div></div>'+
+      '<button class="qadd-btn" data-key="'+g.key+'">Add</button></div>'+
+      (err?'':girlGistHTML(g.key))+'</div>'+
       '<button class="lane-resizer" type="button" aria-label="Resize '+esc(g.name)+' task column" title="Drag to resize · double-click to reset"></button></div>';
   });
 

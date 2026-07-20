@@ -346,7 +346,7 @@ button.gchip:hover{transform:translateY(-1px);background:var(--fill-2)}
   padding:2px 2px 12px;display:flex;flex-direction:column;overflow-y:auto;max-height:62vh;
 }
 /* ---- The Gist: per-person AI workload summary ---- */
-.gsum{border:1px solid var(--hair);border-radius:12px;background:var(--grad-soft);padding:9px 11px 10px;margin:2px 0 12px}
+.gsum{border:1px solid var(--hair);border-radius:12px;background:var(--grad-soft);padding:9px 11px 10px;margin:12px 0 2px}
 .gsum.is-stale{border-color:rgba(247,195,37,.6)}
 .gsum-h{display:flex;align-items:center;gap:8px;margin-bottom:5px}
 .gsum-title{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--deep)}
