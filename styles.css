@@ -807,7 +807,8 @@ body.lane-resize-active .girls-board .glane{transition:none}
 
 /* ---- corkboard ---- */
 .corkboard{flex:0 0 250px;position:sticky;top:70px}
-.cork-h{font-size:14px;font-weight:800;letter-spacing:-.3px;margin-bottom:8px}
+.cork-h{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font-size:14px;font-weight:800;letter-spacing:-.3px;margin-bottom:8px}
+.cork-h small{font-size:9.5px;font-weight:700;letter-spacing:0;color:var(--faint);white-space:nowrap}
 .cork-area{
   position:relative;height:420px;border-radius:14px;overflow:hidden;
   background:
@@ -815,6 +816,7 @@ body.lane-resize-active .girls-board .glane{transition:none}
     repeating-linear-gradient(45deg, rgba(160,120,70,.05) 0 3px, transparent 3px 7px),
     #EFE6D8;
 }
+.cork-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:28px;text-align:center;font-size:11px;font-weight:700;line-height:1.5;color:rgba(58,52,40,.42)}
 .sticky{
   position:absolute;width:150px;min-height:78px;padding:10px 12px 22px;font-size:12px;line-height:1.45;
   box-shadow:0 3px 8px rgba(18,26,36,.18);cursor:grab;user-select:none;touch-action:none;
@@ -849,6 +851,11 @@ body.lane-resize-active .girls-board .glane{transition:none}
 .at-opt:hover,.at-opt.on{background:var(--fill)}
 
 /* ---- PR pipeline ---- */
+.pr-top{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.pr-top h2{margin:0;font-size:20px;letter-spacing:-.5px}
+.pr-top .hint{margin:3px 0 0}
+.pr-top-actions{display:flex;gap:8px;flex-wrap:wrap}
+.pr-access-warn{margin:-8px 0 16px;padding:9px 12px;border-radius:10px;background:var(--fill);color:var(--muted);font-size:11px;line-height:1.4}
 .pr-pipe{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0}
 .pr-col{padding:0 16px;border-left:1px solid var(--hair);min-height:180px}
 .pr-col:first-child{border-left:none;padding-left:0}

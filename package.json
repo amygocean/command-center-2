@@ -3,6 +3,11 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Ocean Basket Academy Command Center — hosted web app (Asana + AI), deployable on Vercel.",
-  "engines": { "node": ">=18" }
+  "description": "Ocean Basket Academy Command Center \u2014 hosted web app (Asana + AI), deployable on Vercel.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "check": "node scripts/check.mjs"
+  }
 }

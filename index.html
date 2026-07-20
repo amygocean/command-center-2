@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A3D62">
 <title>Academy Command Center</title>
-<link rel="stylesheet" href="/styles.css?v=20260718d">
+<link rel="stylesheet" href="/styles.css?v=20260720a">
 </head>
 <body>
 <!--
@@ -79,7 +79,7 @@
     <button class="tab" data-tab="platform">WhatsApp Academy</button>
     <button class="tab" data-tab="communities">Communities</button>
     <button class="tab" data-tab="news">News</button>
-    <button class="tab" data-tab="pr" style="display:none">PR</button>
+    <button class="tab" data-tab="pr">PR</button>
     <span id="tabInk"></span>
   </nav>
 
@@ -117,7 +117,7 @@
   <!-- ============ THE CREW ============ -->
   <section id="tab-people" class="tabpane">
     <div class="girls-top">
-      <p class="hint" style="margin:0">Straight from everyone's Asana My Tasks. Drag to prioritise, drop into sections (make your own), — hides noise, 🔒 keeps a task just for you. Drag "up for grabs" tasks onto a lane to assign them. Drag the divider between columns to make one wider; the others will shrink to make room.</p>
+      <p class="hint" style="margin:0">Straight from everyone's Asana My Tasks. Drag to prioritise or arrange tasks into your own sections; every change is saved automatically. — hides noise, 🔒 keeps a task just for you. Drag “up for grabs” tasks onto a lane to assign them. Drag the divider between columns to make one wider; the others will shrink to make room.</p>
       <button class="btn ghost sm" id="btnTrophy">Trophy cabinet</button>
     </div>
     <div class="girls-filter" id="girlsFilter"></div>
@@ -221,13 +221,10 @@
 
   <!-- ============ COMMUNITIES ============ -->
   <section id="tab-communities" class="tabpane">
-    <div id="msgSetup" style="display:none">
-      <div class="empty" style="padding:50px 0">The message planner needs its own board — separate from the WhatsApp software one.<br><br>
-      <button class="btn glow" id="msgCreate">Create the Community Messages board</button><br><br>
-      <span class="hint">Makes a "Community Messages" project in Asana with a section per community. One click, then this tab comes alive.</span></div>
-    </div>
+    <div id="msgSetup" style="display:none"></div>
     <div class="comm-top">
       <div id="commLegend" class="ptoggles"></div>
+      <a class="btn ghost sm" id="communitiesAsanaLink" href="https://app.asana.com/1/14491666778313/project/1216476690596926/list/1216477106031170" target="_blank">Open Communities board ↗</a>
     </div>
     <div class="comm-grid">
       <div class="comm-col">
@@ -281,7 +278,7 @@
     <div id="platformBody"></div>
   </section>
 
-  <!-- ============ PR (Amy only) ============ -->
+  <!-- ============ PR (shared team pipeline) ============ -->
   <section id="tab-pr" class="tabpane">
     <div id="prBody"></div>
   </section>
@@ -308,19 +305,19 @@
 <div id="fridayWrap"></div>
 <div id="runWrap"></div>
 
-<script src="/js/data.js?v=20260718d"></script>
-<script src="/js/core.js?v=20260718d"></script>
-<script src="/js/demo.js?v=20260718d"></script>
-<script src="/js/calendar.js?v=20260718d"></script>
-<script src="/js/campaigns.js?v=20260718d"></script>
-<script src="/js/people.js?v=20260718d"></script>
-<script src="/js/content.js?v=20260718d"></script>
-<script src="/js/communities.js?v=20260718d"></script>
-<script src="/js/drawer.js?v=20260718d"></script>
-<script src="/js/stores.js?v=20260718d"></script>
-<script src="/js/platform.js?v=20260718d"></script>
-<script src="/js/pr.js?v=20260718d"></script>
-<script src="/js/friday.js?v=20260718d"></script>
-<script src="/js/news.js?v=20260718d"></script>
+<script src="/js/data.js?v=20260720a"></script>
+<script src="/js/core.js?v=20260720a"></script>
+<script src="/js/demo.js?v=20260720a"></script>
+<script src="/js/calendar.js?v=20260720a"></script>
+<script src="/js/campaigns.js?v=20260720a"></script>
+<script src="/js/people.js?v=20260720a"></script>
+<script src="/js/content.js?v=20260720a"></script>
+<script src="/js/communities.js?v=20260720a"></script>
+<script src="/js/drawer.js?v=20260720a"></script>
+<script src="/js/stores.js?v=20260720a"></script>
+<script src="/js/platform.js?v=20260720a"></script>
+<script src="/js/pr.js?v=20260720a"></script>
+<script src="/js/friday.js?v=20260720a"></script>
+<script src="/js/news.js?v=20260720a"></script>
 </body>
 </html>

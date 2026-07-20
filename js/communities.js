@@ -19,33 +19,24 @@ function commMsgs(){
   return state.tasks.filter(t=>t.isComms && !t.isKeeper);
 }
 
-/* the Community Messages board — created from here, mirrored in Asana */
+/* The Communities planner uses the existing shared Asana board.  The board
+   id is fixed in data.js so every browser opens the same source of truth and
+   the app never offers to create a duplicate project. */
 async function ensureMsgBoard(){
-  if(cfg.msgBoard) return cfg.msgBoard;
-  try{
-    const res=await call("create_project",{name:"Community Messages",team:ACADEMY_TEAM,color:"dark-purple",
-      default_view:"calendar",privacy_setting:"private_to_team",
-      sections:cfg.communities.map(cm=>({sectionName:cm.name}))});
-    const gid=res.data&&res.data.gid; if(!gid) throw new Error("no project id returned");
-    cfg.msgBoard=gid;
-    const secs=(res.data.sections_created&&res.data.sections_created.succeeded)||[];
-    state.waSections={}; secs.forEach(sc=>{ state.waSections[sc.name]=sc.gid; });
-    saveCfg(); confetti(); toast("Community Messages board created");
-    loadAll();
-    return gid;
-  }catch(e){ toast("Couldn't create the board: "+e.message); return null; }
+  if(DEMO) return cfg.msgBoard||"demo-msg";
+  if(cfg.msgBoard!==COMMUNITIES_PROJECT){ cfg.msgBoard=COMMUNITIES_PROJECT; saveCfg(); }
+  return COMMUNITIES_PROJECT;
 }
 function renderMsgSetup(){
-  const setup=document.getElementById("msgSetup"); if(!setup) return false;
-  if(cfg.msgBoard){ setup.style.display="none"; return false; }
-  setup.style.display="block";
-  const b=document.getElementById("msgCreate");
-  if(b && !b.dataset.wired){ b.dataset.wired="1"; b.onclick=ensureMsgBoard; }
-  return true;
+  const setup=document.getElementById("msgSetup");
+  if(setup) setup.style.display="none";
+  const link=document.getElementById("communitiesAsanaLink");
+  if(link) link.href=DEMO?"https://app.asana.com/demo":COMMUNITIES_URL;
+  return false;
 }
 
 function renderCommunities(){
-  if(renderMsgSetup()) return;
+  renderMsgSetup();
   renderCommLegend(); renderCommComposer(); renderCommCalendar(); renderCommList(); renderCommInsights();
 }
 
@@ -95,15 +86,15 @@ async function addWAMessage(){
 async function ensureWASections(){
   if(state.waSections) return state.waSections;
   try{
-    if(!cfg.msgBoard) return null;
-    const res=await call("get_project",{project_id:cfg.msgBoard,include_sections:true,opt_fields:"sections.name"});
+    const board=await ensureMsgBoard();
+    const res=await call("get_project",{project_id:board,include_sections:true,opt_fields:"sections.name"});
     const secs=(res.data&&res.data.sections)||[];
     const map={};
     for(const c of cfg.communities){
       const hit=secs.find(s=>s.name.toLowerCase()===c.name.toLowerCase());
       if(hit) map[c.name]=hit.gid;
       else{
-        try{ const made=await call("create_section",{project_id:cfg.msgBoard,name:c.name});
+        try{ const made=await call("create_section",{project_id:board,name:c.name});
           if(made.data&&made.data.gid) map[c.name]=made.data.gid;
         }catch(e){ /* fall back to [Name] prefix */ }
       }

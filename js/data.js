@@ -16,9 +16,12 @@ const PB = {
   passion:"1216637913044078"    // Passion Projects (kept OFF the calendar)
 };
 const WA_PROJECT = "1216476678698201";   // WhatsApp Academy — the software/platform board (X Force)
+const COMMUNITIES_PROJECT = "1216476690596926"; // existing shared Communities planning board
+const COMMUNITIES_URL = "https://app.asana.com/1/14491666778313/project/1216476690596926/list/1216477106031170";
+const PR_PROJECT_NAME = "PR & Positioning";
 const BUGS_PROJECT = "1216593621076084";  // X Force bugs & errors board
 const VISITS_PROJECT = "1213806179626680";// trainer store-visits board
-const AMY_GID = "1213414176761459";       // PR tab is Amy-only
+const AMY_GID = "1213414176761459";
 const GIRLS = [
   {key:"amy",     gid:"1213414176761459", name:"Amy"},
   {key:"caitlin", gid:"1213630129003527", name:"Caitlin"},
@@ -212,6 +215,6 @@ const DEFAULT_CFG = {
   showComms: true,
   showOccasions: true,
   showStores: true,
-  msgBoard: null,   // the Community Messages board — created from the app
-  prBoard: null     // Amy's PR & Positioning board — created from the app
+  msgBoard: COMMUNITIES_PROJECT, // fixed existing Communities board; never created by the app
+  prBoard: null                 // resolved from shared dashboard state / Asana by name
 };

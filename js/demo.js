@@ -140,6 +140,10 @@ const DEMO_CURRICULUM = MO.map((m,i)=>{
 async function demoCall(tool,args){
   await new Promise(r=>setTimeout(r,120)); // let the spinners breathe
   switch(tool){
+    case "save_dashboard_state": return {data:{gid:args.task_id||"demo-keeper"}};
+    case "find_project_by_name": return {data:{gid:"demo-pr",name:"PR & Positioning",permalink_url:"https://app.asana.com/demo/pr"}};
+    case "ensure_shared_project_access": return {data:{gid:"demo-membership",member:{gid:args.team_id}}};
+    case "ensure_shared_sections": return {data:[["pr-0","Idea"],["pr-1","Pitched"],["pr-2","In progress"],["pr-3","Delivered"]].map(([gid,name])=>({gid,name}))};
     case "get_users": return {data:DEMO_USERS};
     case "get_tasks":
       if(args.project===CURRICULUM_PROJECT) return {data:DEMO_CURRICULUM};
@@ -158,6 +162,7 @@ async function demoCall(tool,args){
       const t=DEMO_TASKS.find(x=>x.gid===args.task_id)||{};
       return {data:{notes:t.notes||"",comments:[{text:"Looks great — let's lock it in 🎬",created_at:new Date().toISOString(),created_by:{name:"Jessica Pallister"}}]}};
     }
+    case "update_shared_tasks":
     case "update_tasks": {
       (args.tasks||[]).forEach(u=>{ let t=DEMO_TASKS.find(x=>x.gid===u.task);
         if(!t){ for(const arr of Object.values(DEMO_SUBTASKS)){ t=arr.find(x=>x.gid===u.task); if(t)break; } }
@@ -170,6 +175,7 @@ async function demoCall(tool,args){
       });
       return {data:(args.tasks||[]).map(t=>({gid:t.task}))};
     }
+    case "create_shared_tasks":
     case "create_tasks": {
       const made=(args.tasks||[]).map(t=>{
         const allSections=[...Object.values(SEC),...Object.values(DEMO_PROJECTS).flatMap(p=>p.sections||[])];
@@ -184,6 +190,7 @@ async function demoCall(tool,args){
       return {data:{}};
     }
     case "create_section": return {data:{gid:"s-new-"+Date.now(),name:args.name}};
+    case "create_shared_project":
     case "create_project": {
       const gid="demo-proj-"+Date.now();
       const made=(args.sections||[]).map((sc,i)=>({gid:gid+"-s"+i,name:sc.sectionName}));

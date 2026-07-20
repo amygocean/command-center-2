@@ -49,6 +49,7 @@ In the Vercel dashboard → your project → **Settings → Environment Variable
 | `ASANA_WORKSPACE` | `14491666778313` (Ocean Basket) |
 | `ANTHROPIC_API_KEY` | your Anthropic key, or leave blank to turn AI off |
 | `SESSION_SECRET` | any long random string (mash the keyboard) |
+| `ASANA_SHARED_PAT` | a PAT that can access the shared Academy boards; falls back to `AMY_PAT` if omitted |
 
 ## Step 4 — Point Asana back at your app
 
@@ -62,7 +63,7 @@ In the Vercel dashboard → your project → **Settings → Environment Variable
 ## Step 5 — Sign in and add the team
 
 1. Open your Vercel URL. You'll see **"Sign in with Asana."** Sign in — the dashboard loads with your live boards.
-2. **Caitlin and Jess** just visit the same URL and sign in with *their* Asana. Because everyone signs in individually, each person sees exactly what their Asana permissions allow. No passwords to share.
+2. **Caitlin and Jess** just visit the same URL and sign in with *their* Asana. Ordinary task changes still use each person's own login. Shared app data—The Girls layout, Corkboard and PR pipeline—uses `ASANA_SHARED_PAT` so the team sees one consistent version. No passwords to share.
 
 That's it — the team now has the Command Center at a shared web address.
 
@@ -87,16 +88,17 @@ Browser
   js/data.js        Asana ids, occasions list, brief template, defaults
   js/core.js        state, config, API plumbing, greeting, suggestions tray
   js/calendar.js    zoomable calendar (day → scrollable year)
-  js/people.js      crew lanes + shared priority ordering
+  js/people.js      crew lanes, auto-saved sections/order + shared Corkboard
   js/content.js     Studio: shoots, prep kits, AI ideas & supplier briefs
-  js/communities.js WhatsApp planner, per-community calendar, insights
+  js/communities.js WhatsApp planner linked to the fixed Communities board
   js/drawer.js      task drawer + modals + campaign playbook generator
   js/friday.js      the Friday Huddle
   js/news.js        News tab (weekly web-searched reading list)
+  js/pr.js          shared PR pipeline for the full Academy team
   js/demo.js        ?demo=1 canned data (previews & demos, no Asana needed)
    │  fetch()
    ▼
-/api/asana   → talks to Asana's REST API as the signed-in user
+/api/asana   → talks to Asana as the signed-in user or shared-board identity
 /api/ai      → talks to Anthropic (key stays server-side)
 /api/news    → Anthropic + web search: curates the weekly News tab
 /api/digest  → weekday 07:30 cron: emails the morning brief (see .env.example)
@@ -113,11 +115,14 @@ then `http://localhost:3999/?demo=1`) — the whole dashboard runs on sample dat
 Great for showing people around; nothing is written anywhere.
 
 **Notes on the smart bits:**
-- The team's shared priority order lives in a hidden Asana task called
-  `⚙️ dashboard-state (do not delete)` on the Day-to-Day board.
+- The Girls sections, exact task order, hidden/private choices, Corkboard and
+  shared board ids live in a hidden Asana task called
+  `⚙️ dashboard-state (do not delete)` on the Day-to-Day board. Every change is
+  cached in the browser immediately, then synced to Asana with automatic retry.
 - Prep-kit tasks are named `「prep」 … — <shoot name>` so the app can track them.
-- Each WhatsApp community is a section in the Academy WhatsApp board (created
-  automatically); message purpose is stored as `#purpose:<tag>` in the task notes.
+- Communities uses the existing Asana project `1216476690596926`; the app no
+  longer creates a second message board. Each community is a section, and
+  message purpose is stored as `#purpose:<tag>` in the task notes.
 - The OB Fit month bar reads the Curriculum board when tasks are named
   `January: <focus>` etc. — edit there or in Settings, both stay in sync.
 - Holidays/occasions (ZA · CY · UK + food days) live in `js/data.js`, not Asana.
@@ -134,7 +139,8 @@ Your Asana tokens live in an **httpOnly cookie** — the browser holds it but pa
 
 ## Security notes
 
-- Use each person's own Asana sign-in (as set up here) rather than a shared token — it's safer and matches everyone's real permissions.
+- Keep individual Asana sign-in for ordinary work. Use `ASANA_SHARED_PAT` only
+  for app-wide shared state and boards that genuinely need one consistent view.
 - Any Asana personal access tokens shared informally in the past should be **revoked and regenerated** (app.asana.com/0/my-apps).
 - Keep the Client Secret, Session Secret and Anthropic key only in Vercel's environment variables — never in the code or in chat.
 

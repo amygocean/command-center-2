@@ -31,6 +31,12 @@ function loadCfg(){
         s.projects = s.projects.filter(p=>!retired.has(p.gid) && !/^volume drivers$/i.test(p.name||""));
         s._m6=true;
       }
+      // Communities now points to the existing shared Asana board.  Force the
+      // canonical id so every browser stops carrying its own board setting.
+      if(!s._m7 || s.msgBoard!==COMMUNITIES_PROJECT){
+        s.msgBoard=COMMUNITIES_PROJECT;
+        s._m7=true;
+      }
       localStorage.setItem(LS_KEY, JSON.stringify(s));
       return s;
     }
@@ -145,13 +151,15 @@ async function loadAll(){
     }
     if(typeof syncCampaignPortfolio==="function") await syncCampaignPortfolio();
     const active = cfg.projects.filter(p=>p.on).slice();
-    // always-on hidden boards: trainer visits + X Force bugs (+ messages board once created)
+    // Always-on support boards.  The Day-to-Day project is included even
+    // when somebody hides it in Settings because it contains the shared
+    // dashboard-state task (Girls layout + Corkboard).
     const hidden = [
-      {gid:VISITS_PROJECT, name:"Store Visits",  color:LAYER.visit},
-      {gid:BUGS_PROJECT,   name:"X Force Bugs",  color:"#B03A2E"}
+      {gid:PB.proj,         name:"Day to Day",          color:"#E4784D"},
+      {gid:VISITS_PROJECT,  name:"Store Visits",        color:LAYER.visit},
+      {gid:BUGS_PROJECT,    name:"X Force Bugs",        color:"#B03A2E"},
+      {gid:(cfg.msgBoard||COMMUNITIES_PROJECT), name:"Community Messages", color:"#7A5FB0"}
     ];
-    if(cfg.msgBoard && !active.some(p=>p.gid===cfg.msgBoard))
-      hidden.push({gid:cfg.msgBoard, name:"Community Messages", color:"#7A5FB0"});
     hidden.forEach(h=>{ if(!active.some(p=>p.gid===h.gid)) active.push(h); });
     const results = await Promise.all(active.map(fetchProject));
     const map = new Map();
@@ -195,37 +203,163 @@ async function loadCurriculum(){
   }catch(e){ /* fallback stays */ }
 }
 
-/* ---- shared priority order (kept in a hidden Asana task's notes) ---- */
+/* ---- shared dashboard state (Girls layout + Corkboard + shared board ids) ---- */
+const KEEPER_NAME = "⚙️ dashboard-state (do not delete)";
+const KEEPER_CACHE_PREFIX = "ob-dashboard-state-cache-v2:";
+
+function keeperCacheKey(){
+  return KEEPER_CACHE_PREFIX + ((state.me&&state.me.gid)||"shared");
+}
+function keeperStamp(k){
+  const n=Number(k&&k._meta&&k._meta.updatedAt);
+  return Number.isFinite(n)?n:0;
+}
+function readLocalKeeper(){
+  try{
+    const raw=localStorage.getItem(keeperCacheKey());
+    return raw?JSON.parse(raw):null;
+  }catch(_){ return null; }
+}
+function cacheKeeper(){
+  try{ localStorage.setItem(keeperCacheKey(),JSON.stringify(state.keeper||{})); }
+  catch(_){ /* localStorage may be unavailable in private/strict browsers */ }
+}
+function normaliseKeeper(raw){
+  const k=(raw&&typeof raw==="object")?raw:{};
+  if(!k.order||typeof k.order!=="object") k.order={};
+  if(!k.girls||typeof k.girls!=="object") k.girls={};
+  GIRLS.forEach(g=>{
+    const gc=(k.girls[g.key]&&typeof k.girls[g.key]==="object")?k.girls[g.key]:{};
+    if(!Array.isArray(gc.sections)) gc.sections=[];
+    gc.sections=gc.sections.filter(s=>s&&s.id).map(s=>({
+      id:String(s.id), name:String(s.name||"Untitled section"),
+      taskIds:Array.isArray(s.taskIds)?[...new Set(s.taskIds.map(String))]:[]
+    }));
+    if(!gc.sections.some(s=>s.id==="top3"))
+      gc.sections.unshift({id:"top3",name:"Top 3 right now",taskIds:[]});
+    if(!Array.isArray(gc.order)) gc.order=[];
+    if(!Array.isArray(gc.hidden)) gc.hidden=[];
+    if(!Array.isArray(gc.private)) gc.private=[];
+    gc.order=[...new Set(gc.order.map(String))];
+    gc.hidden=[...new Set(gc.hidden.map(String))];
+    gc.private=[...new Set(gc.private.map(String))];
+    k.girls[g.key]=gc;
+  });
+  if(!Array.isArray(k.cork)) k.cork=[];
+  if(!Array.isArray(k.mentions)) k.mentions=[];
+  if(!k.ideas||typeof k.ideas!=="object") k.ideas={};
+  if(!k.fuel||typeof k.fuel!=="object") k.fuel={};
+  if(!k.boards||typeof k.boards!=="object") k.boards={};
+  if(!k._meta||typeof k._meta!=="object") k._meta={updatedAt:0};
+  return k;
+}
+
 function readOrderKeeper(){
-  const k = state.tasks.find(t=>t.isKeeper);
-  if(k){ state.orderKeeper = k.gid;
-    try{ state.keeper = JSON.parse(k.notes||"{}")||{}; }catch(e){ state.keeper={}; }
+  const candidates=state.tasks.filter(t=>t.isKeeper).map(t=>{
+    let parsed={}; try{ parsed=JSON.parse(t.notes||"{}")||{}; }catch(_){ parsed={}; }
+    return {task:t,keeper:normaliseKeeper(parsed)};
+  }).sort((a,b)=>keeperStamp(b.keeper)-keeperStamp(a.keeper));
+
+  const server=candidates[0]||null;
+  const local=readLocalKeeper();
+  const localWins=!!local && keeperStamp(local)>keeperStamp(server&&server.keeper);
+  state.orderKeeper=server&&server.task.gid||null;
+  state.keeper=normaliseKeeper(localWins?local:(server&&server.keeper));
+  state.order=state.keeper.order||{};
+
+  // A newer local copy means the previous Asana sync was interrupted. Load it
+  // immediately, then automatically resume syncing without making the user
+  // move another card first.
+  let changed=localWins;
+  // PR is a shared app board, not a browser-specific setting.  Migrate the
+  // creator's old local cfg into the shared keeper, then hydrate everyone else.
+  if(state.keeper.boards.prBoard){
+    if(cfg.prBoard!==state.keeper.boards.prBoard){ cfg.prBoard=state.keeper.boards.prBoard; saveCfg(); }
+  }else if(cfg.prBoard){
+    state.keeper.boards.prBoard=cfg.prBoard; changed=true;
   }
-  state.order = state.keeper.order||{};
-  if(!state.keeper.girls) state.keeper.girls={};
-  GIRLS.forEach(g=>{ if(!state.keeper.girls[g.key])
-    state.keeper.girls[g.key]={sections:[{id:"top3",name:"Top 3 right now",taskIds:[]}], order:[], hidden:[], private:[]}; });
-  if(!state.keeper.cork) state.keeper.cork=[];
-  if(!state.keeper.mentions) state.keeper.mentions=[];
-  if(!state.keeper.ideas) state.keeper.ideas={};   // shootGid -> [{id,text,by,at}] — the brainstorm
-  if(!state.keeper.fuel) state.keeper.fuel={};     // shootGid -> source material for ✨ Ideas
+  if(state.keeper.boards.communities!==COMMUNITIES_PROJECT){
+    state.keeper.boards.communities=COMMUNITIES_PROJECT; changed=true;
+  }
+  if(cfg.msgBoard!==COMMUNITIES_PROJECT){ cfg.msgBoard=COMMUNITIES_PROJECT; saveCfg(); }
+
+  cacheKeeper();
+  if(changed) setTimeout(saveKeeper,0);
 }
-let keeperTimer = null;
+
+let keeperTimer=null;
+let keeperRetryTimer=null;
+let keeperSaving=false;
+let keeperDirty=false;
+let keeperWarned=false;
+
+function touchKeeper(){
+  state.keeper=normaliseKeeper(state.keeper);
+  state.keeper.order=state.order;
+  state.keeper._meta={
+    ...(state.keeper._meta||{}),
+    updatedAt:Date.now(),
+    editorGid:(state.me&&state.me.gid)||null,
+    editorName:(state.me&&state.me.name)||null
+  };
+}
 function saveKeeper(){
+  touchKeeper();
+  cacheKeeper();                 // immediate: refresh cannot erase the layout
+  keeperDirty=true;
   clearTimeout(keeperTimer);
-  keeperTimer = setTimeout(async ()=>{
-    state.keeper.order = state.order;
-    const notes = JSON.stringify(state.keeper);
-    try{
-      if(state.orderKeeper){
-        await call("update_tasks",{tasks:[{task:state.orderKeeper, notes}]});
-      }else{
-        const r = await call("create_tasks",{tasks:[{name:"⚙️ dashboard-state (do not delete)", project_id:PB.proj, section_id:PB.notes, notes}]});
-        state.orderKeeper = r.data&&r.data[0]&&r.data[0].gid;
-      }
-    }catch(e){ /* still works locally this session */ }
-  }, 700);
+  keeperTimer=setTimeout(flushKeeper,180);
 }
+async function flushKeeper(){
+  if(DEMO||keeperSaving||!keeperDirty) return;
+  keeperSaving=true;
+  keeperDirty=false;
+  const revision=keeperStamp(state.keeper);
+  const notes=JSON.stringify(state.keeper);
+  try{
+    const r=await call("save_dashboard_state",{
+      task_id:state.orderKeeper,
+      project_id:PB.proj,
+      section_id:PB.notes,
+      name:KEEPER_NAME,
+      notes
+    });
+    if(r&&r.data&&r.data.gid) state.orderKeeper=r.data.gid;
+    keeperWarned=false;
+    clearTimeout(keeperRetryTimer);
+  }catch(e){
+    keeperDirty=true;
+    clearTimeout(keeperRetryTimer);
+    keeperRetryTimer=setTimeout(flushKeeper,4000);
+    if(!keeperWarned){
+      keeperWarned=true;
+      toast("Saved on this browser; Asana sync will retry automatically");
+    }
+  }finally{
+    keeperSaving=false;
+    if(keeperDirty && keeperStamp(state.keeper)>revision){
+      clearTimeout(keeperTimer);
+      keeperTimer=setTimeout(flushKeeper,80);
+    }
+  }
+}
+function persistKeeperOnExit(){
+  cacheKeeper();
+  if(DEMO||!keeperDirty) return;
+  try{
+    fetch("/api/asana",{
+      method:"POST", keepalive:true,
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({tool:"save_dashboard_state",args:{
+        task_id:state.orderKeeper,project_id:PB.proj,section_id:PB.notes,
+        name:KEEPER_NAME,notes:JSON.stringify(state.keeper)
+      }})
+    });
+  }catch(_){ /* the local cache is already safe */ }
+}
+window.addEventListener("pagehide",persistKeeperOnExit);
+document.addEventListener("visibilitychange",()=>{ if(document.visibilityState==="hidden") flushKeeper(); });
+
 const saveOrder = saveKeeper; // legacy callers
 
 /* ---- each person's Asana My Tasks (via their PAT, server-side) ---- */
@@ -479,6 +613,8 @@ function switchTab(name){
     else if(!on) x.classList.remove("active");
   });
   moveTabInk();
+  if(name==="people"&&typeof clampCorkNotes==="function")
+    requestAnimationFrame(()=>clampCorkNotes(true));
 }
 function moveTabInk(){
   const bar=document.querySelector(".tabs"), act=document.querySelector(".tab.active"), ink=document.getElementById("tabInk");

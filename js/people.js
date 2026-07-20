@@ -137,6 +137,24 @@ function renderGirls(){
   renderCorkboard();
 }
 
+/* Capture the exact DOM order after every drop.  This is deliberately
+   broader than only saving the destination section: it preserves moves between
+   sections, reordering inside a section, and the Everything else order in one
+   atomic snapshot. */
+function captureGirlLayoutFromDOM(board,key){
+  const gc=girlCfg(key);
+  const seen=new Set();
+  gc.sections.forEach(sec=>{
+    const zone=board.querySelector('.gdrop[data-key="'+key+'"][data-sec="'+sec.id+'"]');
+    if(!zone) return;
+    sec.taskIds=[...zone.querySelectorAll('.gcard[data-key="'+key+'"]')]
+      .map(c=>c.dataset.gid).filter(id=>id&&!seen.has(id)&&(seen.add(id),true));
+  });
+  const restZone=board.querySelector('.gdrop[data-key="'+key+'"][data-sec="rest"]');
+  gc.order=restZone?[...restZone.querySelectorAll('.gcard[data-key="'+key+'"]')]
+    .map(c=>c.dataset.gid).filter(id=>id&&!seen.has(id)&&(seen.add(id),true)):[];
+}
+
 /* ---- interactions ---- */
 let gDragging=null;
 function wireGirls(board){
@@ -168,7 +186,11 @@ function wireGirls(board){
   board.querySelectorAll(".sec-del").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
     const gc=girlCfg(b.dataset.key);
+    const removed=gc.sections.find(s=>s.id===b.dataset.sec);
     gc.sections=gc.sections.filter(s=>s.id!==b.dataset.sec);
+    // Tasks from a deleted section keep their visible order when they fall
+    // back into Everything else instead of being re-sorted by date.
+    if(removed) gc.order=[...removed.taskIds,...gc.order.filter(id=>!removed.taskIds.includes(id))];
     saveKeeper(); renderGirls();
   });
 
@@ -187,19 +209,13 @@ function wireGirls(board){
       e.preventDefault(); e.stopPropagation();
       const gid=gDragging.dataset.gid;
       const fromPool=gDragging.dataset.pool==="1";
-      const key=zone.dataset.key, secId=zone.dataset.sec;
+      const key=zone.dataset.key;
       if(!key){ return; }
       if(fromPool || gDragging.dataset.key!==key){ assignToGirl(gid,key,fromPool); return; }
       const gc=girlCfg(key);
       gc.sections.forEach(s=>{ s.taskIds=s.taskIds.filter(id=>id!==gid); });
-      if(secId!=="rest"){
-        const sec=gc.sections.find(s=>s.id===secId);
-        if(sec) sec.taskIds=[...zone.querySelectorAll(".gcard")].map(c=>c.dataset.gid);
-      }
-      // capture rest order from its zone
-      const restZone=board.querySelector('.gdrop[data-key="'+key+'"][data-sec="rest"]');
-      if(restZone) gc.order=[...restZone.querySelectorAll(".gcard")].map(c=>c.dataset.gid);
-      saveKeeper(); renderGirls(); toast("Shuffled");
+      captureGirlLayoutFromDOM(board,key);
+      saveKeeper(); renderGirls(); toast("Shuffled · saved automatically");
     };
   });
   board.querySelectorAll(".glane:not(.pool)").forEach(lane=>{
@@ -330,10 +346,23 @@ async function completeGirlTask(gid,key){
   const list=state.myTasks[key];
   const i=list.findIndex(t=>t.gid===gid);
   const t=i>=0?list[i]:null;
+  const gc=girlCfg(key);
+  const snapshot={
+    sections:gc.sections.map(s=>({...s,taskIds:[...s.taskIds]})),
+    order:[...gc.order],hidden:[...gc.hidden],private:[...gc.private]
+  };
   if(i>=0) list.splice(i,1);
-  renderGirls(); toast(pick(DONE_LINES));
+  gc.sections.forEach(s=>{ s.taskIds=s.taskIds.filter(id=>id!==gid); });
+  gc.order=gc.order.filter(id=>id!==gid);
+  gc.hidden=gc.hidden.filter(id=>id!==gid);
+  gc.private=gc.private.filter(id=>id!==gid);
+  saveKeeper(); renderGirls(); toast(pick(DONE_LINES));
   try{ await call("update_tasks",{tasks:[{task:gid,completed:true}]}); }
-  catch(e){ if(t) list.splice(i,0,t); renderGirls(); toast("Failed: "+e.message); }
+  catch(e){
+    if(t) list.splice(i,0,t);
+    gc.sections=snapshot.sections; gc.order=snapshot.order; gc.hidden=snapshot.hidden; gc.private=snapshot.private;
+    saveKeeper(); renderGirls(); toast("Failed: "+e.message);
+  }
 }
 
 /* ---- trophy cabinet ---- */
@@ -376,12 +405,34 @@ async function openTrophy(){
 }
 
 /* ---- corkboard ---- */
+function clampCorkNotes(shouldSave){
+  const areaEl=document.getElementById("corkArea");
+  if(!areaEl) return;
+  const width=areaEl.clientWidth, height=areaEl.clientHeight;
+  // renderAll() also renders hidden tabs. A display:none corkboard reports
+  // 0×0; never treat that as a real viewport or every note would collapse
+  // into the top-left corner before the user even opens The Girls.
+  if(width<150||height<90) return;
+  const maxX=Math.max(0,width-150);
+  const maxY=Math.max(0,height-90);
+  let changed=false;
+  state.keeper.cork.forEach(n=>{
+    const x=Math.max(0,Math.min(maxX,Number(n.x)||0));
+    const y=Math.max(0,Math.min(maxY,Number(n.y)||0));
+    if(x!==n.x||y!==n.y){ n.x=x; n.y=y; changed=true; }
+    const el=areaEl.querySelector('.sticky[data-id="'+n.id+'"]');
+    if(el){ el.style.left=x+"px"; el.style.top=y+"px"; }
+  });
+  if(changed&&shouldSave) saveKeeper();
+}
+
 function renderCorkboard(){
   const cb=document.getElementById("corkboard"); if(!cb) return;
   const notes=state.keeper.cork;
-  cb.innerHTML='<div class="cork-h">The corkboard</div>'+
+  cb.innerHTML='<div class="cork-h"><span>The corkboard</span><small>shared with everyone · auto-saved</small></div>'+
     '<div class="cork-area" id="corkArea">'+
-    notes.map(n=>'<div class="sticky" data-id="'+n.id+'" style="background:'+n.color+';left:'+(n.x||10)+'px;top:'+(n.y||10)+'px">'+
+    (!notes.length?'<div class="cork-empty">Pin a note and the whole team will see it here.</div>':'')+
+    notes.map(n=>'<div class="sticky" data-id="'+n.id+'" style="background:'+n.color+';left:'+(Number(n.x)||0)+'px;top:'+(Number(n.y)||0)+'px">'+
       '<button class="sticky-x" data-id="'+n.id+'">✕</button>'+
       '<div class="sticky-txt">'+esc(n.text)+'</div>'+
       '<div class="sticky-by">'+esc(n.author)+'</div></div>').join("")+
@@ -390,14 +441,18 @@ function renderCorkboard(){
     '<div class="cork-colors">'+STICKY_COLORS.map((c,i)=>'<span class="ckc'+(i===0?" on":"")+'" data-c="'+c+'" style="background:'+c+'"></span>').join("")+'</div>'+
     '<button class="qadd-btn" id="corkPin">Pin</button></div>';
 
+  requestAnimationFrame(()=>clampCorkNotes(true));
   let color=STICKY_COLORS[0];
   cb.querySelectorAll(".ckc").forEach(el=>el.onclick=()=>{
     cb.querySelectorAll(".ckc").forEach(x=>x.classList.remove("on")); el.classList.add("on"); color=el.dataset.c;
   });
   const pin=()=>{
     const inp=document.getElementById("corkText"); const txt=inp.value.trim(); if(!txt) return;
+    const area=document.getElementById("corkArea");
+    const maxX=Math.max(0,(area&&area.clientWidth||250)-150);
+    const maxY=Math.max(0,(area&&area.clientHeight||220)-90);
     state.keeper.cork.push({id:"n"+Date.now(),text:txt,color,
-      x:8+Math.random()*60, y:8+Math.random()*120,
+      x:Math.round(Math.random()*maxX), y:Math.round(Math.random()*maxY),
       author:firstName(state.me&&state.me.name)||"someone", at:iso(todayD())});
     saveKeeper(); renderCorkboard();
   };
@@ -408,22 +463,24 @@ function renderCorkboard(){
     state.keeper.cork=state.keeper.cork.filter(n=>n.id!==b.dataset.id);
     saveKeeper(); renderCorkboard();
   });
-  // free drag
+  // Free drag. Coordinates are clamped on release so a note remains visible
+  // when another teammate opens the board on a smaller screen.
   cb.querySelectorAll(".sticky").forEach(el=>{
     el.onpointerdown=e=>{
       if(e.target.closest(".sticky-x")) return;
-      const area=document.getElementById("corkArea").getBoundingClientRect();
+      const areaEl=document.getElementById("corkArea");
+      const area=areaEl.getBoundingClientRect();
       const sx=e.clientX-el.offsetLeft, sy=e.clientY-el.offsetTop;
       el.setPointerCapture(e.pointerId);
       el.classList.add("lifted");
       el.onpointermove=ev=>{
-        el.style.left=Math.max(0,Math.min(area.width-150, ev.clientX-sx))+"px";
-        el.style.top=Math.max(0,Math.min(area.height-90, ev.clientY-sy))+"px";
+        el.style.left=Math.max(0,Math.min(area.width-150,ev.clientX-sx))+"px";
+        el.style.top=Math.max(0,Math.min(area.height-90,ev.clientY-sy))+"px";
       };
       el.onpointerup=()=>{
         el.onpointermove=null; el.classList.remove("lifted");
         const n=state.keeper.cork.find(x=>x.id===el.dataset.id);
-        if(n){ n.x=parseFloat(el.style.left); n.y=parseFloat(el.style.top); saveKeeper(); }
+        if(n){ n.x=parseFloat(el.style.left)||0; n.y=parseFloat(el.style.top)||0; clampCorkNotes(false); saveKeeper(); }
       };
     };
   });
