@@ -345,20 +345,6 @@ button.gchip:hover{transform:translateY(-1px);background:var(--fill-2)}
 .lane-body{
   padding:2px 2px 12px;display:flex;flex-direction:column;overflow-y:auto;max-height:62vh;
 }
-/* ---- The Gist: per-person AI workload summary ---- */
-.gsum{border:1px solid var(--hair);border-radius:12px;background:var(--grad-soft);padding:9px 11px 10px;margin:12px 0 2px}
-.gsum.is-stale{border-color:rgba(247,195,37,.6)}
-.gsum-h{display:flex;align-items:center;gap:8px;margin-bottom:5px}
-.gsum-title{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--deep)}
-.gsum-when{font-size:10px;color:var(--faint);font-weight:600}
-.gsum-btn{margin-left:auto;border:none;background:var(--deep);color:#fff;border-radius:980px;padding:4px 11px;font-family:var(--font);font-weight:700;font-size:11px;cursor:pointer;transition:background .15s var(--ease)}
-.gsum-btn:hover{background:var(--teal)}
-.gsum-btn:disabled{opacity:.6;cursor:default}
-.gsum-body{font-size:12px;line-height:1.45;color:var(--ink)}
-.gist-line{margin:0 0 3px}
-.gist-line b{color:var(--deep);font-weight:800}
-.gist-empty{font-size:11.5px;color:var(--muted);line-height:1.45}
-.gist-stale{margin-top:6px;font-size:10.5px;font-weight:700;color:#9a7a12}
 .lane+.lane{border-left:1px solid var(--hair);padding-left:26px}
 .lane-sub{font-size:10px;font-weight:700;color:var(--faint);text-transform:uppercase;letter-spacing:.7px;margin:12px 0 2px}
 .card{
