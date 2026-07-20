@@ -13,10 +13,21 @@ function _d(offsetDays){ const t=new Date(); t.setDate(t.getDate()+offsetDays); 
 let _dgid=1000;
 function _mk(proj, name, opts){
   opts=opts||{};
+  // Mirror the real Asana custom-field shape so demo data flows through the
+  // exact same parser as live data (Trainer, RAG, Date of Training, etc.).
+  const cf=[];
+  if(opts.trainer)      cf.push({name:"Trainer",display_value:opts.trainer});
+  if(opts.support)      cf.push({name:"Trainer Support",display_value:opts.support});
+  if(opts.rag)          cf.push({name:"Status of Section",display_value:opts.rag});
+  if(opts.trainDate)    cf.push({name:"Date of Training",display_value:opts.trainDate+"T09:00:00.000Z"});
+  if(opts.restaurant)   cf.push({name:"Restaurant Name",display_value:opts.restaurant});
+  if(opts.region)       cf.push({name:"Restaurant Region",display_value:opts.region});
+  if(opts.trainSection) cf.push({name:"Section",display_value:opts.trainSection});
   return { gid:"demo-"+(_dgid++), name,
     notes:opts.notes||"", assignee:opts.assignee?DEMO_USERS.find(u=>u.gid===opts.assignee):null,
     due_on:opts.due||null, start_on:null, completed:!!opts.done, completed_at:opts.done?_d(-1)+"T10:00:00Z":null,
     memberships:[{section:opts.section||{gid:"s-none",name:opts.sectionName||""}}],
+    custom_fields:cf,
     permalink_url:"https://app.asana.com/demo", _proj:proj };
 }
 const SEC = {
@@ -52,9 +63,14 @@ const DEMO_TASKS = [
   _mk(CC_PROJECT,"Q3 Franchisee Forum voxpops edit",{section:SEC.plan,due:_d(-2),assignee:"u-amy"}),
   // occasions kept in Asana
   _mk(CC_PROJECT,"Nelson Mandela Day activation",{section:SEC.occ,due:_d(1)}),
-  // ---- Team Scheduling ----
-  _mk("1213797897707123","Trainer visits: Gauteng cluster",{due:_d(3),assignee:"u-cait"}),
-  _mk("1213797897707123","Coach check-in: Cyprus stores",{due:_d(9),assignee:"u-jess"}),
+  // ---- Team Scheduling (the SCHEDULE — upcoming visits per trainer) ----
+  _mk(SCHEDULE_PROJECT,"Menlyn Park",{due:_d(2),trainer:"Cameron",support:"Sam",sectionName:"New Restaurants"}),
+  _mk(SCHEDULE_PROJECT,"Fourways Mall",{due:_d(3),trainer:"Teboho",sectionName:"New Restaurants"}),
+  _mk(SCHEDULE_PROJECT,"Canal Walk",{due:_d(5),trainer:"Given",sectionName:"Revamps"}),
+  _mk(SCHEDULE_PROJECT,"Gateway",{due:_d(6),trainer:"Norman",support:"Noni",sectionName:"Revamps"}),
+  _mk(SCHEDULE_PROJECT,"Brooklyn Square",{due:_d(9),trainer:"Cameron",sectionName:"New Restaurants"}),
+  _mk(SCHEDULE_PROJECT,"Kloof Street",{due:_d(11),trainer:"Given",sectionName:"Revamps"}),
+  _mk(SCHEDULE_PROJECT,"Sandton City",{due:_d(14),trainer:"Mandla",sectionName:"New Restaurants"}),
   // ---- Menu Training ----
   _mk("1214196027560535","Summer Menu FOH course — final QA",{due:_d(5),assignee:"u-amy"}),
   _mk("1214196027560535","Allergen flashcards refresh",{due:_d(8),assignee:"u-cait"}),
@@ -103,13 +119,16 @@ const DEMO_TASKS = [
   _mk(BUGS_PROJECT,"Quiz score shows 0% when learner passes on retry",{due:_d(-18)}),
   _mk(BUGS_PROJECT,"Certificates render with wrong store name",{due:_d(-6)}),
   _mk(BUGS_PROJECT,"Menu button unresponsive on older Androids",{due:_d(-2)}),
-  // ---- trainer visits board ----
-  _mk(VISITS_PROJECT,"Menlyn Park — opening training",{due:_d(9),assignee:"u-cait",notes:"trainer: Cameron"}),
-  _mk(VISITS_PROJECT,"Gateway — follow-up visit",{due:_d(4),notes:"trainer: Charlotte"}),
-  _mk(VISITS_PROJECT,"Canal Walk — assessment visit",{due:_d(16),notes:"trainer: Norman"}),
-  _mk(VISITS_PROJECT,"Zambezi — training visit",{due:_d(-40),done:true,notes:"trainer: Given"}),
-  _mk(VISITS_PROJECT,"Eastgate — training visit",{due:_d(-300),done:true,notes:"trainer: Mandla"}),
-  _mk(VISITS_PROJECT,"Sea Point — training visit",{due:_d(-260),done:true,notes:"trainer: Tebogo"}),
+  // ---- Training Feedback (the RECORD — what each visit found + RAG) ----
+  _mk(FEEDBACK_PROJECT,"Kloof Street",{restaurant:"Kloof Street",region:"Western Cape",trainer:"Given",trainSection:"Back of House",rag:"Orange - Nearly There (2 - 3 Minor issues)",trainDate:_d(-3),notes:"Reinforced temperature control during filleting; requested BOH cheat sheets be mounted."}),
+  _mk(FEEDBACK_PROJECT,"Kempton Park",{restaurant:"Kempton Park",region:"Gauteng",trainer:"Teboho",trainSection:"Sushi",rag:"Green - Good (No issues)",trainDate:_d(-3),done:true,notes:"Skilled team, no training needed. Everyone pushing on Academy."}),
+  _mk(FEEDBACK_PROJECT,"Cape Gate Mall",{restaurant:"Cape Gate Mall",region:"Western Cape",trainer:"Godfrey",trainSection:"Back of House",rag:"Red - Needs Help (Critical Deviations)",trainDate:_d(-4),notes:"Bain Marie out of order, burners smoking. Trained grill line on portioning and clean-as-you-go."}),
+  _mk(FEEDBACK_PROJECT,"Oakfields",{restaurant:"Oakfields",region:"Gauteng",trainer:"Teboho",trainSection:"Sushi",rag:"Orange - Nearly There (2 - 3 Minor issues)",trainDate:_d(-5),notes:"Advised pre-rolling to cut guest wait. Use block cream cheese, not spread."}),
+  _mk(FEEDBACK_PROJECT,"Somerset Mall",{restaurant:"Somerset Mall",region:"Western Cape",trainer:"Godfrey",trainSection:"Back of House",rag:"Orange - Nearly There (2 - 3 Minor issues)",trainDate:_d(-6),notes:"Store improved since last time. Green board behind deli needs replacing."}),
+  _mk(FEEDBACK_PROJECT,"Sandton City",{restaurant:"Sandton City",region:"Gauteng",trainer:"Norman",trainSection:"Front of House",rag:"Green - Good (No issues)",trainDate:_d(-12),done:true,notes:"Strong service standards, upsell scripts landing well."}),
+  _mk(FEEDBACK_PROJECT,"Zambezi Junction",{restaurant:"Zambezi Junction",region:"Pretoria",trainer:"Given",trainSection:"Management",rag:"Orange - Nearly There (2 - 3 Minor issues)",trainDate:_d(-40),done:true}),
+  _mk(FEEDBACK_PROJECT,"Eastgate",{restaurant:"Eastgate",region:"Gauteng",trainer:"Mandla",trainSection:"Back of House",rag:"Green - Good (No issues)",trainDate:_d(-300),done:true}),
+  _mk(FEEDBACK_PROJECT,"Sea Point",{restaurant:"Seapoint",region:"Western Cape",trainer:"Cameron",trainSection:"Sushi",rag:"Green - Good (No issues)",trainDate:_d(-260),done:true}),
   // ---- community messages (the new board) ----
   _mk("demo-msg","Menu quiz Friday: win a spot prize 🏆",{section:SEC.foh1,due:_d(1),notes:"#purpose:course"}),
   _mk("demo-msg","Menu quiz Friday: win a spot prize 🏆",{section:SEC.foh2,due:_d(1),notes:"#purpose:course"}),

@@ -754,6 +754,50 @@ input:focus,textarea:focus,select:focus{outline:none}
 .pill.store .st-tag{font-size:8.5px;font-weight:800;letter-spacing:.4px;background:color-mix(in srgb,var(--pc) 85%,#000 0%);color:#fff;border-radius:3px;padding:0 4px;text-transform:uppercase}
 .yd.store{background:#E8A013;transform:translateX(9px)}
 .ev-warn{font-size:11px;font-weight:700;color:#9a4a24;background:rgba(228,120,77,.12);border-radius:980px;padding:4px 11px;white-space:nowrap}
+/* support-trainer dot on a calendar visit pill */
+.pill.store .pdot2{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-left:-2px;box-shadow:0 0 0 1.5px var(--card)}
+
+/* ---- trainer filter bar (under the calendar toolbar) ---- */
+.trainer-bar{display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin:2px 0 4px}
+.trainer-bar-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:var(--faint);margin-right:2px}
+.ttog{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--muted);background:var(--fill);border-radius:980px;padding:5px 11px;cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease),box-shadow .15s var(--ease);user-select:none}
+.ttog:hover{background:var(--fill-2);color:var(--ink)}
+.ttog .tdot{width:8px;height:8px;border-radius:50%;background:var(--tc)}
+.ttog.on{color:#fff;background:var(--tc,var(--ink));box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}
+.ttog.on .tdot{background:#fff}
+
+/* ---- trainer roster strip ---- */
+.trainer-roster{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px;margin:4px 0 8px}
+.trs-card{position:relative;text-align:left;border:1px solid var(--hair);border-left:4px solid var(--tc);border-radius:var(--r-sm);background:var(--card);padding:12px 13px;cursor:pointer;box-shadow:var(--shadow-sm);transition:transform .15s var(--spring),box-shadow .15s var(--ease),border-color .15s var(--ease);font-family:var(--font)}
+.trs-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+.trs-card.on{box-shadow:0 0 0 2px var(--tc),var(--shadow-md)}
+.trs-top{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.trs-top .trs-dot{width:10px;height:10px;border-radius:50%;background:var(--tc);flex-shrink:0}
+.trs-top b{font-size:14px;font-weight:800;color:var(--ink);letter-spacing:-.2px}
+.trs-next{font-size:11px;color:var(--muted);line-height:1.35;min-height:29px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.trs-stats{display:flex;gap:10px;margin:7px 0 8px}
+.trs-stats span{font-size:11px;font-weight:700;color:var(--ink)}
+.trs-stats span:last-child{color:var(--faint)}
+.trs-rag{display:flex;height:6px;border-radius:980px;overflow:hidden;background:var(--fill-2)}
+.trs-rag span{display:block}
+.trs-rag.empty{opacity:.5}
+
+/* ---- trainer chip (inline, in lists) ---- */
+.tr-chip{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;font-size:11px;font-weight:700;color:var(--tc);background:color-mix(in srgb,var(--tc) 12%,transparent);border-radius:980px;padding:3px 9px;white-space:nowrap}
+.tr-chip i{width:7px;height:7px;border-radius:50%;background:var(--tc)}
+.tr-chip.mini{padding:1px 7px;font-size:10px}
+
+/* ---- feedback (RAG) rows ---- */
+.fb-row{display:flex;align-items:center;gap:11px;padding:9px 4px;border-top:1px solid var(--hair);cursor:pointer;transition:background .12s var(--ease)}
+.fb-row:hover{background:var(--fill)}
+.fb-rag{flex:0 0 6px;align-self:stretch;min-height:34px;border-radius:980px}
+.fb-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.fb-t{font-size:13px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fb-sec{font-size:10px;font-weight:700;color:var(--faint);background:var(--fill);border-radius:4px;padding:1px 5px;text-transform:uppercase;letter-spacing:.3px}
+.fb-tag{flex:0 0 auto;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px}
+.fb-main .news-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rag-key{display:inline-flex;align-items:center;gap:4px}
+.rag-key i{width:9px;height:9px;border-radius:50%;display:inline-block;margin-left:4px}
 
 /* ================= the girls ================= */
 .girls-top{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:14px}

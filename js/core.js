@@ -37,6 +37,11 @@ function loadCfg(){
         s.msgBoard=COMMUNITIES_PROJECT;
         s._m7=true;
       }
+      if(!s._m8){ // Team Scheduling moves out of the project chips and into
+        // the trainer-coloured Stores & visits layer, so drop the old chip.
+        s.projects = s.projects.filter(p=>p.gid!==SCHEDULE_PROJECT);
+        s._m8=true;
+      }
       localStorage.setItem(LS_KEY, JSON.stringify(s));
       return s;
     }
@@ -53,6 +58,7 @@ const state = {
   cursor: new Date(),
   view: cfg.view || "month",
   peopleFilter: [],
+  trainerFilter: [],   // when set, the calendar shows only these trainers' visits
   showDone: false,
   loading: true,
   error: null,
@@ -102,7 +108,7 @@ async function askAI(prompt, data){
 }
 
 /* ---- loading ---- */
-const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,start_on,completed,completed_at,memberships.section.name,memberships.section.gid,permalink_url,notes";
+const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,start_on,completed,completed_at,memberships.section.name,memberships.section.gid,permalink_url,notes,custom_fields.name,custom_fields.display_value";
 async function fetchProject(p){
   let out = [], offset = null, pages = 0;
   do{
@@ -111,6 +117,13 @@ async function fetchProject(p){
     const res = await call("get_tasks", args);
     (res.data||[]).forEach(t=>{
       const sec = (t.memberships&&t.memberships[0]&&t.memberships[0].section)||null;
+      // ---- custom fields (Trainer, Trainer Support, RAG, etc.) ----------
+      // display_value is a plain string for every field type, incl. dates
+      // (ISO) and multi-select (comma-joined), so one map handles them all.
+      const cf = {};
+      (t.custom_fields||[]).forEach(f=>{ if(f&&f.name) cf[f.name]=f.display_value; });
+      const trainDateRaw = cf["Date of Training"] || null;      // Feedback board only
+      const trainSupport = (cf["Trainer Support"]||"").split(",").map(s=>s.trim()).filter(Boolean);
       out.push({
         gid:t.gid, name:t.name, notes:t.notes||"",
         assignee:t.assignee? {gid:t.assignee.gid,name:t.assignee.name}:null,
@@ -118,6 +131,15 @@ async function fetchProject(p){
         completed:!!t.completed, completedAt:t.completed_at||null,
         sectionName: sec?sec.name:"", sectionGid: sec?sec.gid:"",
         url:t.permalink_url,
+        // trainer layer — read straight from the Asana custom fields
+        trainer: cf["Trainer"] || null,
+        trainerSupport: trainSupport,
+        rag: cf["Status of Section"] || null,            // Feedback board RAG
+        storeStatus: cf["Status of Restaurant"] || null, // Scheduling board RAG
+        restaurant: cf["Restaurant Name"] || null,
+        region: cf["Restaurant Region"] || null,
+        trainSection: cf["Section"] || null,             // FOH / BOH / Sushi / Mgmt
+        trainDate: trainDateRaw ? trainDateRaw.slice(0,10) : null,
         projectGid:p.gid, projectName:p.name, projectColor:p.color,
         isShoot: (sec&&sec.gid===SEC_SHOOT) || /^shoot day/i.test(t.name||""),
         isOccasion: (sec&&sec.gid===SEC_OCC),
@@ -126,7 +148,8 @@ async function fetchProject(p){
         isComms: !!cfg.msgBoard && p.gid===cfg.msgBoard,
         isPlatform: p.gid===WA_PROJECT,
         isBug: p.gid===BUGS_PROJECT,
-        isVisit: p.gid===VISITS_PROJECT,
+        isVisit: p.gid===FEEDBACK_PROJECT,       // a completed visit RECORD + feedback
+        isSchedule: p.gid===SCHEDULE_PROJECT,    // an upcoming visit on the SCHEDULE
         isOpening: p.gid===REVAMP_PROJECT && !!t.due_on,
         isEvent: /masterclass|workshop|webinar|forum/i.test(t.name||""),
         isPrep: /^「prep」/.test(t.name||""),
@@ -156,7 +179,8 @@ async function loadAll(){
     // dashboard-state task (Girls layout + Corkboard).
     const hidden = [
       {gid:PB.proj,         name:"Day to Day",          color:"#E4784D"},
-      {gid:VISITS_PROJECT,  name:"Store Visits",        color:LAYER.visit},
+      {gid:SCHEDULE_PROJECT,name:"Team Scheduling",     color:LAYER.visit},
+      {gid:FEEDBACK_PROJECT,name:"Training Feedback",   color:LAYER.visit},
       {gid:BUGS_PROJECT,    name:"X Force Bugs",        color:"#B03A2E"},
       {gid:(cfg.msgBoard||COMMUNITIES_PROJECT), name:"Community Messages", color:"#7A5FB0"}
     ];
@@ -392,6 +416,17 @@ function initials(n){ return (n||"?").split(" ").map(x=>x[0]).slice(0,2).join(""
 function esc(s){ return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function userName(gid){ const u=state.users.find(x=>x.gid===gid); return u?u.name:gid; }
 function firstName(n){ return (n||"").split(" ")[0]; }
+// Who is running this visit? The "Trainer" custom field is the source of
+// truth; fall back to a "trainer: X" note (demo data) then the assignee.
+function trainerOf(t){
+  if(t.trainer) return t.trainer;
+  const m=(t.notes||"").match(/trainer:\s*([A-Za-z]+)/i); if(m) return m[1];
+  if(t.assignee) return firstName(t.assignee.name);
+  return "";
+}
+// The date a visit sits on: the Feedback board carries it in a custom field
+// ("Date of Training"); everything else uses the normal Asana due date.
+function visitDateOf(t){ return (t.isVisit ? (t.trainDate||t.due) : t.due) || null; }
 function pick(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
 function daysTo(dateStr){ return Math.round((pd(dateStr)-todayD())/864e5); }
 function humanWhen(days){ return days===0?"today":days===1?"tomorrow":days===-1?"yesterday":days<0?Math.abs(days)+"d ago":"in "+days+" days"; }
@@ -404,7 +439,7 @@ function visibleTasks(){
     if(t.isOccasion||t.isNote||t.isPassion||t.isKeeper) return false;
     if(t.isShot||t.isBrief) return false;             // live in Studio, not on the calendar
     if(t.isComms) return false;                       // comms render as their own layer
-    if(t.isVisit||t.isOpening||t.isBug) return false; // stores + platform have their own layers/tabs
+    if(t.isVisit||t.isSchedule||t.isOpening||t.isBug) return false; // stores + platform have their own layers/tabs
     if(!state.showDone && t.completed) return false;
     if(pf.length){
       if(!t.assignee) return pf.includes("unassigned");
@@ -623,7 +658,7 @@ function moveTabInk(){
 }
 
 function renderAll(){
-  renderSub(); renderGreeting(); renderChips(); renderPersonToggles();
+  renderSub(); renderGreeting(); renderChips(); renderPersonToggles(); renderTrainerToggles();
   renderCalendar(); renderGirls(); renderCampaigns(); renderStudio(); renderCurriculum(); renderCommunities();
   renderStores(); renderPlatform(); prTabVisibility(); renderMentionBadge();
   computeSuggestions();

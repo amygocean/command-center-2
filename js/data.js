@@ -29,10 +29,46 @@ const GIRLS = [
 ];
 const STICKY_COLORS = ["#FFF3B0","#FFD6E0","#D4F0DB","#D6E9FF","#EBDDFF"];
 const LAYER = { opening:"#E8A013", visit:"#6C5CE7" };
+
+// ---- Trainers -----------------------------------------------------------
+// One stable colour per trainer, shared by the calendar pills and the
+// Training tab so a trainer reads the same everywhere. Names come straight
+// from the "Trainer" custom field on the Scheduling + Feedback boards.
+const TRAINER_COLORS = {
+  "Norman":"#0A3D62", "Given":"#009B9E", "Teboho":"#E4784D", "Cameron":"#7A5FB0",
+  "Mandla":"#D64545", "Sam":"#2FA36B", "Noni":"#C64B8C", "Mish":"#3A7D9A",
+  "Charlotte":"#B5651D", "Lina":"#E85D9E", "Godfrey":"#5B8C2A", "Carlos":"#8E44AD",
+  "Jose":"#16A085", "Josh":"#C9A227", "Other":"#7A8B99"
+};
+const TRAINER_FALLBACK = ["#0A3D62","#009B9E","#E4784D","#7A5FB0","#D64545","#2FA36B",
+  "#C64B8C","#3A7D9A","#B5651D","#E85D9E","#5B8C2A","#8E44AD","#16A085","#C9A227"];
+// Stable colour for any trainer — known ones from the map, unknown ones hashed
+// to a fixed slot so the colour never changes between reloads.
+function trainerColor(name){
+  if(!name) return "#7A8B99";
+  if(TRAINER_COLORS[name]) return TRAINER_COLORS[name];
+  let h=0; for(let i=0;i<name.length;i++) h=(h*31+name.charCodeAt(i))>>>0;
+  return TRAINER_FALLBACK[h%TRAINER_FALLBACK.length];
+}
+// RAG buckets from the free-text "Status of Section" values on the Feedback board
+const RAG = {
+  green: {key:"green", color:"#2FA36B", label:"Green"},
+  orange:{key:"orange",color:"#E8952E", label:"Orange"},
+  red:   {key:"red",   color:"#D64545", label:"Red"}
+};
+function ragOf(status){
+  const s=(status||"").toLowerCase();
+  if(s.startsWith("green")||s.includes("good")) return RAG.green;
+  if(s.startsWith("orange")||s.includes("nearly")) return RAG.orange;
+  if(s.startsWith("red")||s.includes("needs help")||s.includes("critical")) return RAG.red;
+  return null;
+}
 const ACADEMY_TEAM = "1213626139926485"; // team new campaigns are created in
 const CAMPAIGN_PORTFOLIO = "1216656052977768";
 const CAMPAIGN_PORTFOLIO_URL = "https://app.asana.com/0/portfolio/1216656052977768/1216677685805996";
 const RETIRED_CAMPAIGN_GIDS = ["1216638197844781"]; // hidden from this app; the Asana project itself is not deleted
+const SCHEDULE_PROJECT = "1213797897707123"; // Team Scheduling — the forward-looking trainer schedule
+const FEEDBACK_PROJECT = VISITS_PROJECT;      // Training Team Feedback — the record of visits that happened
 const REVAMP_PROJECT = "1214196027560612"; // store-revamp placeholders
 const CURRICULUM_PROJECT = "1216652752864537";
 const CURRICULUM_URL = "https://app.asana.com/0/1216652752864537";
@@ -201,7 +237,6 @@ const PALETTE = ["#0A3D62","#00A8A8","#F7C325","#5BC4BF","#7A5FB0","#E4784D","#3
 const DEFAULT_CFG = {
   projects: [
     {gid:CC_PROJECT,           name:"Content & Comms",                 color:"#0A3D62", on:true},
-    {gid:"1213797897707123",   name:"Team Scheduling",                 color:"#00A8A8", on:true},
     {gid:"1214196027560535",   name:"Menu Training",                   color:"#F7C325", on:true},
     {gid:"1214196027560612",   name:"New/Revamped Restaurant Training",color:"#5BC4BF", on:true},
     {gid:WA_PROJECT,           name:"Academy WhatsApp",                color:"#7A5FB0", on:true},

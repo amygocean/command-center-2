@@ -101,7 +101,7 @@ function renderCalendar(dir){
   const sl=document.getElementById("zoomSlider");
   if(sl && +sl.value!==VIEWS.indexOf(state.view)) sl.value=VIEWS.indexOf(state.view);
   document.querySelectorAll(".ztick").forEach(t=>t.classList.toggle("on",t.dataset.v===state.view));
-  renderCurriculumBar();
+  renderCurriculumBar(); renderTrainerToggles();
   const cal=document.getElementById("calendar");
   const lbl=document.getElementById("periodLabel");
   const c=state.cursor;
@@ -118,16 +118,48 @@ function renderCalendar(dir){
   else if(state.view==="year"){ renderYear(cal,lbl,c); }
 }
 
-/* stores layers: openings (amber) + trainer visits (violet) */
+/* stores layers: openings (amber) + trainer visits (coloured per trainer).
+   Visits come from the SCHEDULE board — the forward plan of who goes where.
+   A trainer filter, when set, hides everyone else's visits (openings stay). */
 function storesOn(dt){
   if(!cfg.showStores) return [];
-  return state.tasks.filter(t=>(t.isVisit||t.isOpening) && !t.completed && t.due && sameDay(pd(t.due),dt));
+  const tf=state.trainerFilter;
+  return state.tasks.filter(t=>(t.isSchedule||t.isOpening) && !t.completed && t.due && sameDay(pd(t.due),dt))
+    .filter(t=> t.isOpening || !tf.length || tf.includes(trainerOf(t)));
 }
 function storePillHTML(t){
-  const col=t.isOpening?LAYER.opening:LAYER.visit;
-  const tag=t.isOpening?"HO":(t.assignee?firstName(t.assignee.name):"visit");
-  return '<span class="pill store'+(t.isOpening?" open-store":"")+'" data-gid="'+t.gid+'" style="--pc:'+col+'" title="'+esc(t.name)+(t.isOpening?" · handover":" · trainer visit")+'">'+
-    '<i class="pdot"></i><b class="st-tag">'+esc(tag)+'</b>'+esc(t.name)+'</span>';
+  if(t.isOpening){
+    const tr=trainerOf(t);
+    return '<span class="pill store open-store" data-gid="'+t.gid+'" style="--pc:'+LAYER.opening+'" title="'+esc(t.name)+' · handover'+(tr?" · "+esc(tr):"")+'">'+
+      '<i class="pdot"></i><b class="st-tag">HO</b>'+esc(t.name)+'</span>';
+  }
+  const tr=trainerOf(t), col=trainerColor(tr);
+  const sup=(t.trainerSupport||[]).filter(Boolean);
+  const supDot=sup.length?'<i class="pdot2" style="background:'+trainerColor(sup[0])+'"></i>':'';
+  const tip=(tr||"visit")+" → "+t.name+(sup.length?" (+ "+sup.join(", ")+")":"");
+  return '<span class="pill store" data-gid="'+t.gid+'" style="--pc:'+col+'" title="'+esc(tip)+'">'+
+    '<i class="pdot"></i>'+supDot+'<b class="st-tag">'+esc(tr?firstName(tr):"visit")+'</b>'+esc(t.name)+'</span>';
+}
+/* the row of trainer filter chips under the calendar toolbar */
+function renderTrainerToggles(){
+  const box=document.getElementById("trainerBar"); if(!box) return;
+  if(!cfg.showStores){ box.style.display="none"; return; }
+  const names=[...new Set(state.tasks.filter(t=>t.isSchedule&&!t.completed&&t.due)
+    .map(trainerOf).filter(Boolean))].sort();
+  if(!names.length){ box.style.display="none"; return; }
+  box.style.display="flex";
+  const tf=state.trainerFilter;
+  const chip=(label,val,active,col)=>'<span class="ttog'+(active?" on":"")+'" data-val="'+esc(val)+'"'+
+    (col?' style="--tc:'+col+'"':'')+'>'+(col?'<i class="tdot"></i>':'')+esc(label)+'</span>';
+  let html='<span class="trainer-bar-label">Trainers</span>'+chip("All","",tf.length===0,"");
+  names.forEach(n=>html+=chip(n,n,tf.includes(n),trainerColor(n)));
+  box.innerHTML=html;
+  box.querySelectorAll(".ttog").forEach(el=>el.onclick=()=>{
+    const v=el.dataset.val;
+    if(v===""){ state.trainerFilter=[]; }
+    else { const i=state.trainerFilter.indexOf(v); if(i>=0) state.trainerFilter.splice(i,1); else state.trainerFilter.push(v); }
+    renderTrainerToggles(); renderCalendar();
+  });
 }
 
 /* quarter: three months side by side, same mini grids as the year */
@@ -305,7 +337,7 @@ function miniMonthHTML(y,m){
     const dayTasks=vt.filter(t=>t.due===dstr);
     const shoots=dayTasks.filter(t=>t.isShoot).length;
     const comms=cfg.showComms?state.tasks.filter(t=>t.isComms&&!t.isKeeper&&t.due===dstr).length:0;
-    const stores=cfg.showStores?state.tasks.filter(t=>(t.isVisit||t.isOpening)&&!t.completed&&t.due===dstr).length:0;
+    const stores=cfg.showStores?state.tasks.filter(t=>(t.isSchedule||t.isOpening)&&!t.completed&&t.due===dstr).length:0;
     const occ=cfg.showOccasions&&(OCCASIONS_APP.some(o=>o.date===dstr)||state.tasks.some(t=>t.isOccasion&&t.due===dstr));
     const camp=campaignsOn(dt).length>0;
     let cls="md"; if(sameDay(dt,today)) cls+=" now"; if(camp) cls+=" camp";

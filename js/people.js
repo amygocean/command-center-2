@@ -121,7 +121,7 @@ function renderGirls(){
   // unassigned pool from the boards — only in "Everyone" view
   const pool=girlsFocus?[]:state.tasks.filter(t=>!t.assignee && !t.completed &&
     !t.isOccasion&&!t.isNote&&!t.isPassion&&!t.isKeeper&&!t.isShot&&!t.isBrief&&
-    !t.isComms&&!t.isVisit&&!t.isOpening&&!t.isBug&&!t.isPlaceholder);
+    !t.isComms&&!t.isVisit&&!t.isSchedule&&!t.isOpening&&!t.isBug&&!t.isPlaceholder);
   if(!girlsFocus) html+='<div class="lane glane pool" data-resize-key="pool" style="--lane-weight:'+girlLaneWeight("pool")+'"><div class="lane-h"><span class="nm">Up for grabs</span><span class="ct">'+pool.length+'</span></div>'+
     '<div class="lane-body"><p class="hint" style="margin:4px 0 8px">Unassigned on the boards — drag onto a girl to hand it out.</p>'+
     (pool.length?pool.slice(0,15).map(t=>
