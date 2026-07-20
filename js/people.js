@@ -34,6 +34,83 @@ function visibleGirlTasks(key){
   });
 }
 
+/* ================================================================
+   THE GIST — a short AI read of each person's live workload.
+   Runs the person's My Tasks through /api/ai (OpenAI) on demand and
+   caches the result, keyed by a fingerprint of the task list, so it
+   never re-runs on every render — only when asked, or when the tasks
+   have actually changed. Cache survives reloads via localStorage.
+   ================================================================ */
+const GIST_KEY="ob_girl_gist_v1";
+let girlGist=(()=>{ try{ return JSON.parse(localStorage.getItem(GIST_KEY)||"{}")||{}; }catch(_){ return {}; } })();
+function saveGist(){ try{ localStorage.setItem(GIST_KEY,JSON.stringify(girlGist)); }catch(_){} }
+const gistBusy={};   // key -> true while a summary is generating
+
+// The tasks we actually feed the model: visible, not hidden, not done,
+// soonest / overdue first so "top now" is meaningful.
+function gistTasks(key){
+  const gc=girlCfg(key);
+  return visibleGirlTasks(key)
+    .filter(t=>!t.completed && !gc.hidden.includes(t.gid))
+    .sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1)
+    .slice(0,15);
+}
+// A cheap, stable signature of the task set — if it changes, the cached
+// gist is stale and we flag a refresh (but still show the old one).
+function gistFingerprint(tasks){
+  const s=tasks.map(t=>t.gid+":"+(t.due||"")).join("|");
+  let h=0; for(let i=0;i<s.length;i++) h=(h*31+s.charCodeAt(i))|0;
+  return tasks.length+"-"+(h>>>0).toString(36);
+}
+// Bold the "Label:" at the start of each line for a scannable read.
+function gistFormat(text){
+  return esc(text).split(/\n+/).filter(Boolean).map(line=>{
+    const m=line.match(/^\s*([A-Za-z][A-Za-z .'&]{2,22}?):\s*(.*)$/);
+    return m ? '<p class="gist-line"><b>'+m[1]+':</b> '+m[2]+'</p>' : '<p class="gist-line">'+line+'</p>';
+  }).join("");
+}
+
+function girlGistHTML(key){
+  const g=GIRLS.find(x=>x.key===key);
+  const tasks=gistTasks(key);
+  const cached=girlGist[key];
+  const fp=gistFingerprint(tasks);
+  const stale=cached && cached.fp!==fp;
+  const busy=gistBusy[key];
+  let inner;
+  if(busy) inner='<div class="gist-empty"><span class="spin"></span> reading '+esc(firstName(g.name))+"'s tasks…</div>";
+  else if(cached) inner=gistFormat(cached.text)+(stale?'<div class="gist-stale">tasks changed since this — refresh for the latest</div>':'');
+  else inner='<div class="gist-empty">An AI read of what '+esc(firstName(g.name))+" is busy with, the deliverables, and why it matters. Tap Summarise.</div>";
+  const btnLabel=busy?"…":cached?"↻ Refresh":"✨ Summarise";
+  const when=cached&&!busy?'<span class="gist-when">'+humanWhen(daysTo(cached.at))+'</span>':'';
+  return '<div class="gsum'+(stale?" is-stale":"")+'" data-key="'+key+'">'+
+    '<div class="gsum-h"><span class="gsum-title">✨ The gist</span>'+when+
+    '<button class="gsum-btn" data-sum="'+key+'"'+(busy?" disabled":"")+'>'+btnLabel+'</button></div>'+
+    '<div class="gsum-body">'+inner+'</div></div>';
+}
+
+async function generateGirlGist(key){
+  if(gistBusy[key]) return;
+  const g=GIRLS.find(x=>x.key===key); if(!g) return;
+  const tasks=gistTasks(key);
+  if(!tasks.length){ girlGist[key]={text:"Busy with: nothing on the list right now — all clear.",fp:gistFingerprint(tasks),at:iso(todayD())}; saveGist(); renderGirls(); return; }
+  gistBusy[key]=true; renderGirls();
+  try{
+    const text=await askAI(
+      "You are the chief-of-staff for the Ocean Basket Academy team. Summarise ONE team member's current workload for a quick team glance, using their live Asana My Tasks (task name, due date, board). Write EXACTLY these four short labelled lines and nothing else:\n"+
+      "Busy with: <one sentence naming their current focus / the theme running through their tasks>\n"+
+      "Top now: <the 2-3 most pressing task names, comma-separated, soonest or overdue first>\n"+
+      "Deliverables: <the concrete things these tasks actually produce>\n"+
+      "For the business: <one sentence on the result or value this creates for Ocean Basket>\n"+
+      "Be specific to the real tasks — no generic filler. Warm, plain, confident. Keep the whole thing under 75 words.",
+      [{person:g.name, tasks:tasks.map(t=>({name:t.name,due:t.due,board:t.projectName}))}]
+    );
+    girlGist[key]={text:(text||"").trim(),fp:gistFingerprint(tasks),at:iso(todayD())};
+    saveGist();
+  }catch(e){ toast("Couldn't summarise "+firstName(g.name)+": "+e.message); }
+  gistBusy[key]=false; renderGirls();
+}
+
 /* ---- lane rendering ---- */
 function girlCardHTML(t,key){
   const gc=girlCfg(key);
@@ -112,7 +189,7 @@ function renderGirls(){
       '<span class="nm">'+esc(g.name)+'</span>'+
       '<button class="lmode" data-addsec="'+g.key+'">+ section</button>'+
       '<span class="ct">'+all.filter(t=>!gc.hidden.includes(t.gid)).length+'</span></div>'+
-      '<div class="lane-body">'+body+
+      '<div class="lane-body">'+(err?'':girlGistHTML(g.key))+body+
       '<div class="qadd"><input class="qadd-name" data-key="'+g.key+'" placeholder="+ quick task…">'+
       '<button class="qadd-btn" data-key="'+g.key+'">Add</button></div></div>'+
       '<button class="lane-resizer" type="button" aria-label="Resize '+esc(g.name)+' task column" title="Drag to resize · double-click to reset"></button></div>';
@@ -238,6 +315,9 @@ function wireGirls(board){
       }catch(e){ toast("Failed: "+e.message); }
     };
     b.onclick=go; inp.onkeydown=e=>{ if(e.key==="Enter") go(); };
+  });
+  board.querySelectorAll(".gsum-btn").forEach(b=>b.onclick=e=>{
+    e.stopPropagation(); generateGirlGist(b.dataset.sum);
   });
   const tc=document.getElementById("btnTrophy");
   if(tc && !tc.dataset.wired){ tc.dataset.wired="1"; tc.onclick=openTrophy; }
