@@ -218,9 +218,30 @@ Shoot date: {{SHOOT_DATE}}
 
 // ---- Copy deck — the fun stuff -----------------------------------------
 const GREETINGS = {
-  morning:["Morning, {n} ☀️","Rise and brine, {n}","Good morning, {n}"],
-  afternoon:["Afternoon, {n}","Back at it, {n}","Hey {n}, the ocean's calm"],
-  evening:["Evening, {n}","Late one, {n}? Respect","Golden hour, {n}"]
+  morning:[
+    "Morning, {n}. Let's make something good.",
+    "Hey {n} ☀️ Ready when you are.",
+    "New day, fresh ideas. Hi, {n}.",
+    "Morning, {n}. Let's get into it.",
+    "Big plans, good energy. Morning, {n}.",
+    "Hello, {n}. Let's make today useful."
+  ],
+  afternoon:[
+    "Hey {n} — look at you making moves.",
+    "Afternoon, {n}. Plenty of day left.",
+    "Round two, {n}. Let's go.",
+    "Hey {n}. What's getting shipped today?",
+    "Back at it, {n}. Excellent choice.",
+    "Afternoon, {n}. Keep the good stuff moving."
+  ],
+  evening:[
+    "Evening, {n}. Let's land this.",
+    "Still here, {n}? Iconic.",
+    "Late-shift energy, {n}.",
+    "Hey {n} — one last good move.",
+    "Evening, {n}. Finish strong, then log off.",
+    "Look at you, {n}. Quietly getting it done."
+  ]
 };
 const EMPTY_LINES = [
   "Nothing here. Suspiciously peaceful.",

@@ -77,6 +77,8 @@ const data=fs.readFileSync(path.join(root,"js/data.js"),"utf8");
 assert.match(data,/name:"Bar \/ Deli"/,"Bar / Deli is missing from Communities roles");
 assert.match(data,/commTimeFavourites: \["10:00","15:00","18:00"\]/,"Default favourite times are incorrect");
 assert.match(data,/completionCelebrations: true/,"Task completion celebrations are not enabled by default");
+assert.doesNotMatch(data,/Rise and brine/i,"Retired greeting returned");
+assert.match(data,/Still here, \{n\}\? Iconic\./,"Updated evening greeting pack is missing");
 
 const styles=fs.readFileSync(path.join(root,"styles.css"),"utf8");
 assert.match(styles,/\.wc-grid\{grid-auto-rows:minmax\(88px,auto\)/,"Communities calendar rows do not grow with message volume");
