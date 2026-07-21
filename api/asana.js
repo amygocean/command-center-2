@@ -358,10 +358,16 @@ export default async function handler(req, res){
       }
 
       case "get_task": {
-        const p = await sharedFetch(req,res,`/tasks/${args.task_id}?${qs({opt_fields:args.opt_fields||"name,notes"})}`);
+        const taskPath=`/tasks/${args.task_id}?${qs({opt_fields:args.opt_fields||"name,notes"})}`;
+        let p;
+        try{ p=await asanaFetch(req,res,taskPath); }
+        catch(_){ p=await sharedFetch(req,res,taskPath); }
         // Asana comments are "stories" of type 'comment'
-        const st = await sharedFetch(req,res,`/tasks/${args.task_id}/stories?${qs({opt_fields:"text,type,created_at,created_by.name"})}`);
-        p.data.comments = (st.data||[]).filter(s=>s.type==="comment").map(s=>({ text:s.text, created_at:s.created_at, created_by:s.created_by }));
+        const storyPath=`/tasks/${args.task_id}/stories?${qs({opt_fields:"text,type,resource_subtype,created_at,created_by.name"})}`;
+        let st;
+        try{ st=await asanaFetch(req,res,storyPath); }
+        catch(_){ st=await sharedFetch(req,res,storyPath); }
+        p.data.comments = (st.data||[]).filter(s=>s.type==="comment"||s.resource_subtype==="comment_added").map(s=>({ text:s.text, created_at:s.created_at, created_by:s.created_by }));
         out = p; break;
       }
 
@@ -372,7 +378,13 @@ export default async function handler(req, res){
         const days=Math.max(7,Math.min(Number(args.days)||180,365));
         const taskLimit=Math.max(20,Math.min(Number(args.task_limit)||100,100));
         const mentionLimit=Math.max(10,Math.min(Number(args.mention_limit)||100,100));
-        const afterIso=new Date(Date.now()-days*86400000).toISOString();
+        const oldestAllowed=Date.now()-days*86400000;
+        const requestedAfter=args.after_iso?new Date(args.after_iso).getTime():NaN;
+        // Normal background checks only revisit tasks changed since the last
+        // successful scan. Clamp the requested point to the configured history
+        // window so a bad browser value can never trigger an unbounded scan.
+        const afterMs=Number.isFinite(requestedAfter)?Math.max(oldestAllowed,Math.min(requestedAfter,Date.now())):oldestAllowed;
+        const afterIso=new Date(afterMs).toISOString();
         const me=await asanaFetch(req,res,`/users/me?${qs({opt_fields:"name,email"})}`);
         const diagnostics={followedTop:0,followedSubtasks:0,projectTasks:0,discoveredSubtasks:0,storyTasks:0,comments:0,storyErrors:0,sharedFallbacks:0,pages:0};
         const warnings=[];
@@ -413,6 +425,8 @@ export default async function handler(req, res){
         // Tasks already loaded in the browser are useful parent seeds even if
         // Asana search has not indexed a recent change yet.
         for(const task of (args.tasks||[]).slice(0,180)){
+          const modified=task.modified_at?new Date(task.modified_at).getTime():NaN;
+          if(Number.isFinite(modified)&&modified<afterMs) continue;
           const item=compactTask({
             gid:task.gid,name:task.name,permalink_url:task.permalink_url||task.url,modified_at:task.modified_at,
             memberships:task.projectGid?[{project:{gid:task.projectGid,name:task.projectName||""}}]:[],parent:task.parent||null
@@ -450,7 +464,7 @@ export default async function handler(req, res){
         all.sort((a,b)=>new Date(b.at||0)-new Date(a.at||0));
         out={
           data:all.slice(0,mentionLimit),scanned_tasks:tasks.length,scanned_subtasks:tasks.filter(t=>t.parent).length,
-          scanned_comments:diagnostics.comments,window_days:days,generated_at:new Date().toISOString(),
+          scanned_comments:diagnostics.comments,window_days:Math.max(1,Math.ceil((Date.now()-afterMs)/86400000)),generated_at:new Date().toISOString(),
           warning:warnings.length?warnings.join(" "):null,diagnostics
         };
         break;

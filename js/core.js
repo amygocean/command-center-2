@@ -77,6 +77,7 @@ let cfg = loadCfg();
 
 const state = {
   tasks: [],           // merged, tagged task list
+  externalTasks: {},   // source tasks opened from Mentions but not loaded on Academy boards
   users: [],           // [{gid,name,email}]
   me: null,            // {gid,name} of the signed-in user
   cursor: new Date(),
@@ -138,7 +139,7 @@ async function askAI(prompt, data){
 }
 
 /* ---- loading ---- */
-const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,due_at,start_on,completed,completed_at,memberships.project.gid,memberships.project.name,memberships.section.name,memberships.section.gid,permalink_url,notes,custom_fields.name,custom_fields.display_value";
+const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,due_at,start_on,completed,completed_at,modified_at,memberships.project.gid,memberships.project.name,memberships.section.name,memberships.section.gid,permalink_url,notes,custom_fields.name,custom_fields.display_value";
 function johannesburgDateTime(value){
   if(!value) return {date:null,time:null};
   const date=new Date(value);
@@ -175,6 +176,7 @@ async function fetchProject(p){
       const dueParts=johannesburgDateTime(t.due_at);
       out.push({
         gid:t.gid, name:t.name, notes:t.notes||"",
+        modifiedAt:t.modified_at||null,
         assignee:t.assignee? {gid:t.assignee.gid,name:t.assignee.name}:null,
         due:t.due_on||dueParts.date||null, dueAt:t.due_at||null, sendTime:dueParts.time||null, start:t.start_on||null,
         completed:!!t.completed, completedAt:t.completed_at||null,
@@ -329,6 +331,21 @@ function normaliseKeeper(raw){
   });
   if(!Array.isArray(k.cork)) k.cork=[];
   if(!Array.isArray(k.mentions)) k.mentions=[];
+  if(!k.mentionRefs||typeof k.mentionRefs!=="object") k.mentionRefs={};
+  Object.keys(k.mentionRefs).forEach(userGid=>{
+    const refs=Array.isArray(k.mentionRefs[userGid])?k.mentionRefs[userGid]:[];
+    k.mentionRefs[userGid]=refs.filter(ref=>ref&&ref.taskGid).map(ref=>({
+      id:String(ref.id||("mention-ref:"+ref.taskGid)),
+      taskGid:String(ref.taskGid),
+      taskName:String(ref.taskName||"Mention follow-up"),
+      taskUrl:ref.taskUrl?String(ref.taskUrl):null,
+      projectName:ref.projectName?String(ref.projectName):null,
+      parentName:ref.parentName?String(ref.parentName):null,
+      from:ref.from?String(ref.from):null,
+      text:ref.text?String(ref.text):"",
+      addedAt:String(ref.addedAt||new Date().toISOString())
+    }));
+  });
   if(!k.ideas||typeof k.ideas!=="object") k.ideas={};
   if(!k.fuel||typeof k.fuel!=="object") k.fuel={};
   if(!k.boards||typeof k.boards!=="object") k.boards={};
@@ -463,7 +480,8 @@ async function loadMyTasks(){
 }
 function findTask(gid){
   return state.tasks.find(x=>x.gid===gid) ||
-    GIRLS.map(g=>state.myTasks[g.key]).flat().find(x=>x.gid===gid);
+    GIRLS.map(g=>state.myTasks[g.key]).flat().find(x=>x.gid===gid) ||
+    state.externalTasks[String(gid)] || null;
 }
 
 /* ---- small utilities ---- */
@@ -611,6 +629,11 @@ async function toggleDone(gid,val,options={}){
   if(!val) toast("Back in play");
   try{
     await call(t.isComms?"update_shared_tasks":"update_tasks",{tasks:[{task:gid,completed:val}]});
+    if(val&&typeof isMentionTaskPinned==="function"&&isMentionTaskPinned(gid)&&typeof removeMentionReference==="function"){
+      const context=typeof mentionContextForTask==="function"?mentionContextForTask(gid):null;
+      if(context&&typeof markMentionsSeen==="function")markMentionsSeen(context.group.items);
+      removeMentionReference(gid,true);
+    }
     if(val && !options.suppressCelebration) celebrateCompletion(t,options);
     return true;
   }catch(e){
@@ -867,7 +890,7 @@ async function init(){
     };
     document.getElementById("loginGate").style.display="none";
     document.getElementById("app").style.display="";
-    loadAll(); requestAnimationFrame(moveTabInk);
+    loadAll(); if(typeof startMentionWatcher==="function")startMentionWatcher(); requestAnimationFrame(moveTabInk);
     return;
   }
   try{
@@ -877,7 +900,7 @@ async function init(){
       if(j&&j.user) state.me = {gid:j.user.gid, name:j.user.name};
       document.getElementById("loginGate").style.display="none";
       document.getElementById("app").style.display="";
-      loadAll(); requestAnimationFrame(moveTabInk);
+      loadAll(); if(typeof startMentionWatcher==="function")startMentionWatcher(); requestAnimationFrame(moveTabInk);
     }
     else showLogin();
   }catch(e){ showLogin(); }

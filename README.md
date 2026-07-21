@@ -120,15 +120,27 @@ Great for showing people around; nothing is written anywhere.
 
 ## Real Asana mentions
 
-The header **@** button scans recent Asana comments and shows where the signed-in
-person was genuinely @mentioned. The scanner checks followed top-level tasks,
-followed subtasks, Academy-project work and subtasks discovered directly from
-recent parent tasks. Results include the person, comment excerpt, task or
-subtask, parent task, project, date and a route back to the source.
+The header **@** button opens a right-side, scrollable mention inbox without
+adding another main app tab. It reconstructs genuine task and subtask mentions
+from accessible Asana comments and groups them by source task.
 
-The panel reports its scan counts and displays permission or Stories-scope
-failures instead of silently presenting them as zero mentions. Results are
-user-specific, cached for five minutes and can be refreshed manually.
+Each person has their own **New**, **All** and **Hidden** states. Opening the
+panel does not acknowledge everything: a mention becomes seen when its thread
+is opened, when it is shown in My To-Do, or through the explicit **Mark all
+seen** action. Hidden mentions remain recoverable and no longer contribute to
+the badge.
+
+**Show in My To-Do** adds a linked reference in the signed-in person's Girls
+column. The reference opens the original task in the normal drawer for comments
+or an Asana visit; it never moves, reassigns, duplicates or completes the source
+task. Ticking the linked reference removes only the reminder.
+
+Cached mentions render immediately. Regular checks are incremental, run every
+five minutes while the app is open and when the tab becomes active, while
+**Deep scan** remains available for the full six-month history. Newly found
+mentions update and animate the @ badge and produce an in-app toast. The panel
+still reports permission or Stories-scope failures instead of presenting them
+as a false empty result.
 
 ## Smart Campaigns
 

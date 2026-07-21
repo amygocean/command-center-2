@@ -12,12 +12,14 @@ function openDrawer(gid){
     .map(p=>'<option value="'+p.gid+'">'+esc(p.name)+'</option>').join("");
   const cm = t.isComms ? communityOf(t) : null;
   const pu = t.isComms ? purposeOf(t) : null;
+  const mentionContext=state.mentionOpenContext&&String(state.mentionOpenContext.taskGid)===String(gid)?state.mentionOpenContext:null;
+  const mentionContextHtml=mentionContext?'<div class="mention-context"><div><b>@ Mention from '+esc(mentionContext.from||"Someone")+'</b><span>'+esc(mentionDate(mentionContext.at))+'</span></div><p>'+esc(mentionContext.text||"You were mentioned in this task.")+'</p></div>':'';
   d.innerHTML=
     '<h2>'+(t.isShoot?"🎬 ":"")+esc(t.name)+'</h2>'+
     '<div class="cmeta" style="margin-bottom:12px"><span class="dot" style="background:'+t.projectColor+'"></span> '+esc(t.projectName)+
       (t.sectionName?' · '+esc(t.sectionName):"")+
       (cm?' · <b style="color:'+cm.color+'">'+esc(cm.name)+'</b>':"")+
-      (pu?' · '+pu.label:"")+'</div>'+
+      (pu?' · '+pu.label:"")+'</div>'+mentionContextHtml+
     '<div class="fld"><label>Name</label><input id="dName" value="'+esc(t.name)+'"></div>'+
     '<div class="fld"><label>Description</label><textarea id="dNotes" placeholder="Add a description…">'+esc(t.notes||"")+'</textarea></div>'+
     '<div class="row"><div class="fld"><label>'+(t.isComms?'Send date':'Due date')+'</label><input type="date" id="dDue" value="'+(t.due||"")+'"></div>'+
@@ -48,7 +50,7 @@ function openDrawer(gid){
       const {html,hasMentions,mentioned}=buildMentionHtml(txt);
       if(hasMentions) await call("add_comment",{task_id:gid,text:html,html:true});
       else await call("add_comment",{task_id:gid,text:txt});
-      logMentions(mentioned, t);
+      logMentions(mentioned, t, txt);
       inp.value=""; toast("Comment added"); loadTaskDetail(gid);
     }
     catch(e){ toast("Failed: "+e.message); }
@@ -115,13 +117,13 @@ function openDrawer(gid){
 function closeDrawer(){
   const w=document.getElementById("drawerWrap");
   w.classList.remove("open");
-  setTimeout(()=>{ w.style.display="none"; },200);
+  setTimeout(()=>{ w.style.display="none"; state.mentionOpenContext=null; },200);
 }
 async function loadTaskDetail(gid){
   const box=document.getElementById("dCmts"); if(!box) return;
   try{
     const res=await call("get_task",{task_id:gid,opt_fields:"notes,comments.text,comments.created_by.name,comments.created_at"});
-    const full=res.data||{}; const t=state.tasks.find(x=>x.gid===gid);
+    const full=res.data||{}; const t=findTask(gid);
     const ta=document.getElementById("dNotes");
     if(ta && document.activeElement!==ta && full.notes!=null && full.notes!==ta.value){ ta.value=full.notes; if(t) t.notes=full.notes; }
     const cs=full.comments||[];
@@ -132,8 +134,8 @@ async function loadTaskDetail(gid){
 }
 
 /* ---- modal plumbing ---- */
-function showModal(html){ const w=document.getElementById("modalWrap"); document.getElementById("modal").innerHTML=html; w.style.display="block"; requestAnimationFrame(()=>w.classList.add("open")); }
-function closeModal(){ const w=document.getElementById("modalWrap"); w.classList.remove("open"); setTimeout(()=>{ w.style.display="none"; },200); }
+function showModal(html,mode=""){ const w=document.getElementById("modalWrap"); document.getElementById("modal").innerHTML=html; w.classList.toggle("mention-mode",mode==="mention"); w.style.display="block"; requestAnimationFrame(()=>w.classList.add("open")); }
+function closeModal(){ const w=document.getElementById("modalWrap"); w.classList.remove("open"); setTimeout(()=>{ w.style.display="none"; w.classList.remove("mention-mode"); },200); }
 function wireModalClose(){ document.querySelectorAll("#modal [data-close]").forEach(x=>x.onclick=()=>{closeDrawer();closeModal();}); }
 
 /* ---- add task ---- */
@@ -373,13 +375,13 @@ function buildMentionHtml(txt){
   });
   return {html,hasMentions,mentioned};
 }
-function logMentions(mentioned, task){
+function logMentions(mentioned, task, text=""){
   if(!mentioned||!mentioned.length) return;
   const girls=mentioned.filter(m=>GIRLS.some(g=>g.gid===m.gid));
   if(!girls.length) return;
   girls.forEach(m=>{
     state.keeper.mentions.unshift({to:m.gid, from:(state.me&&state.me.name)||"someone",
-      taskGid:task.gid, taskName:task.name, at:new Date().toISOString()});
+      taskGid:task.gid, taskName:task.name, text, at:new Date().toISOString()});
   });
   state.keeper.mentions=state.keeper.mentions.slice(0,50);
   saveKeeper(); renderMentionBadge();
@@ -387,10 +389,50 @@ function logMentions(mentioned, task){
 
 const MENTION_SCAN_DAYS=180;
 const MENTION_CACHE_MS=5*60*1000;
+const MENTION_INCREMENTAL_OVERLAP_MS=15*60*1000;
+const MENTION_REF_PREFIX="mention-ref:";
 const asanaMentions={items:[],loadedAt:0,loading:null,error:null,meta:null,hydrated:false};
+const mentionPanel={filter:"new",query:"",expanded:{}};
+let mentionPrefs=null,mentionWatcherStarted=false,mentionWatcherTimer=null;
+
 function mentionUserKey(){ return String((state.me&&state.me.gid)||"guest"); }
-function mentionCacheKey(){ return "ob-asana-mentions-v2:"+mentionUserKey(); }
-function mentionSeenKey(){ return "ob_at_seen:"+mentionUserKey(); }
+function mentionCacheKey(){ return "ob-asana-mentions-v3:"+mentionUserKey(); }
+function mentionPrefsKey(){ return "ob-mention-triage-v1:"+mentionUserKey(); }
+function mentionId(m){
+  return String(m&&(m.storyGid||m.gid||[m.taskGid,m.at,m.from,m.text].filter(Boolean).join("|"))||"");
+}
+function loadMentionPrefs(){
+  if(mentionPrefs) return mentionPrefs;
+  try{ mentionPrefs=JSON.parse(localStorage.getItem(mentionPrefsKey())||"null"); }
+  catch(_){ mentionPrefs=null; }
+  if(!mentionPrefs||typeof mentionPrefs!=="object") mentionPrefs={seen:{},hidden:{}};
+  if(!mentionPrefs.seen||typeof mentionPrefs.seen!=="object") mentionPrefs.seen={};
+  if(!mentionPrefs.hidden||typeof mentionPrefs.hidden!=="object") mentionPrefs.hidden={};
+  if(!mentionPrefs.legacySeenAt){
+    const old=localStorage.getItem("ob_at_seen:"+mentionUserKey())||localStorage.getItem("ob_at_seen")||"";
+    if(old&&!Number.isNaN(new Date(old).getTime()))mentionPrefs.legacySeenAt=old;
+  }
+  return mentionPrefs;
+}
+function saveMentionPrefs(){
+  try{ localStorage.setItem(mentionPrefsKey(),JSON.stringify(loadMentionPrefs())); }
+  catch(_){ /* keep the in-memory triage state */ }
+}
+function mentionIsSeen(m){
+  const prefs=loadMentionPrefs();
+  return !!prefs.seen[mentionId(m)] || !!(prefs.legacySeenAt&&m&&m.at&&new Date(m.at)<=new Date(prefs.legacySeenAt));
+}
+function mentionIsHidden(m){ return !!loadMentionPrefs().hidden[mentionId(m)]; }
+function markMentionsSeen(items){
+  const prefs=loadMentionPrefs(),now=Date.now();
+  (items||[]).forEach(m=>{ const id=mentionId(m); if(id)prefs.seen[id]=now; });
+  saveMentionPrefs(); renderMentionBadge();
+}
+function setMentionsHidden(items,hidden){
+  const prefs=loadMentionPrefs(),now=Date.now();
+  (items||[]).forEach(m=>{ const id=mentionId(m); if(!id)return; if(hidden)prefs.hidden[id]=now; else delete prefs.hidden[id]; });
+  saveMentionPrefs(); renderMentionBadge();
+}
 function hydrateMentionCache(){
   if(asanaMentions.hydrated) return;
   asanaMentions.hydrated=true;
@@ -412,7 +454,7 @@ function myLocalMentions(){
   return (state.keeper.mentions||[]).filter(m=>m.to===state.me.gid ||
     (DEMO && state.me.gid==="u-amy" && m.to===GIRLS[0].gid)).map(m=>{
       const task=findTask(m.taskGid);
-      return {...m,gid:"local:"+m.taskGid+":"+m.at,source:"local",taskUrl:task&&task.url||null,
+      return {...m,gid:m.gid||("local:"+m.taskGid+":"+m.at),storyGid:m.storyGid||("local:"+m.taskGid+":"+m.at),source:"local",taskUrl:task&&task.url||null,
         projectName:task&&task.projectName||null,text:m.text||""};
     });
 }
@@ -424,13 +466,39 @@ function mergedMentions(){
       Math.abs(new Date(real.at||0)-new Date(local.at||0))<10*60*1000);
     if(!duplicate) out.push(local);
   });
-  return out.sort((a,b)=>new Date(b.at||0)-new Date(a.at||0));
+  const deduped=new Map();
+  out.forEach(m=>{ const id=mentionId(m); if(id&&!deduped.has(id))deduped.set(id,{...m,_mentionId:id}); });
+  return [...deduped.values()].sort((a,b)=>new Date(b.at||0)-new Date(a.at||0));
 }
-async function refreshAsanaMentions(force=false){
+function mergeMentionResults(previous,incoming){
+  const byId=new Map();
+  (previous||[]).forEach(m=>{ const id=mentionId(m); if(id)byId.set(id,m); });
+  (incoming||[]).forEach(m=>{ const id=mentionId(m); if(id)byId.set(id,m); });
+  const cutoff=Date.now()-MENTION_SCAN_DAYS*86400000;
+  return [...byId.values()].filter(m=>!m.at||new Date(m.at).getTime()>=cutoff)
+    .sort((a,b)=>new Date(b.at||0)-new Date(a.at||0)).slice(0,300);
+}
+function announceNewMentions(items){
+  const visible=(items||[]).filter(m=>!mentionIsHidden(m)); if(!visible.length)return;
+  const btn=document.getElementById("btnAt");
+  if(btn){ btn.classList.remove("mention-pop"); void btn.offsetWidth; btn.classList.add("mention-pop"); setTimeout(()=>btn.classList.remove("mention-pop"),1300); }
+  const first=visible[0];
+  toast(visible.length===1?(first.from||"Someone")+" mentioned you in "+(first.taskName||"a task"):
+    visible.length+" new mentions found");
+}
+async function refreshAsanaMentions(force=false,deep=false){
   hydrateMentionCache();
   if(asanaMentions.loading) return asanaMentions.loading;
   if(!force&&asanaMentions.loadedAt&&Date.now()-asanaMentions.loadedAt<MENTION_CACHE_MS){ renderMentionBadge(); return asanaMentions.items; }
   asanaMentions.error=null;
+  const previousItems=[...asanaMentions.items],previousIds=new Set(previousItems.map(mentionId));
+  const hadBaseline=!!asanaMentions.loadedAt;
+  const generatedAt=asanaMentions.meta&&asanaMentions.meta.generatedAt;
+  let afterIso=null;
+  if(!deep&&generatedAt){
+    const since=new Date(generatedAt).getTime()-MENTION_INCREMENTAL_OVERLAP_MS;
+    if(Number.isFinite(since))afterIso=new Date(since).toISOString();
+  }
   asanaMentions.loading=(async()=>{
     try{
       const projectIds=[...new Set([
@@ -438,20 +506,25 @@ async function refreshAsanaMentions(force=false){
         BUGS_PROJECT,VISITS_PROJECT,SCHEDULE_PROJECT,REVAMP_PROJECT,CURRICULUM_PROJECT,cfg.msgBoard,cfg.prBoard
       ].filter(Boolean).map(String))];
       const loadedTasks=(state.tasks||[]).filter(task=>task&&task.gid&&!task.isKeeper).slice(0,180).map(task=>({
-        gid:String(task.gid),name:task.name||"Untitled task",url:task.url||null,
-        projectGid:task.projectGid||null,projectName:task.projectName||null
+        gid:String(task.gid),name:task.name||"Untitled task",url:task.url||null,modified_at:task.modifiedAt||null,
+        projectGid:task.projectGid||null,projectName:task.projectName||null,parent:task.parent||null
       }));
       const res=await call("get_mentions",{
-        days:MENTION_SCAN_DAYS,task_limit:100,mention_limit:100,project_ids:projectIds,tasks:loadedTasks
+        days:MENTION_SCAN_DAYS,after_iso:afterIso,task_limit:100,mention_limit:100,project_ids:projectIds,tasks:loadedTasks
       });
-      asanaMentions.items=Array.isArray(res.data)?res.data:[];
+      const incoming=Array.isArray(res.data)?res.data:[];
+      asanaMentions.items=(afterIso&&!deep)?mergeMentionResults(previousItems,incoming):incoming;
       asanaMentions.loadedAt=Date.now();
       asanaMentions.meta={
         scannedTasks:res.scanned_tasks||0,scannedSubtasks:res.scanned_subtasks||0,scannedComments:res.scanned_comments||0,
         windowDays:res.window_days||MENTION_SCAN_DAYS,warning:res.warning||null,diagnostics:res.diagnostics||null,
-        generatedAt:res.generated_at||new Date().toISOString()
+        generatedAt:res.generated_at||new Date().toISOString(),incremental:!!afterIso&&!deep
       };
       saveMentionCache();
+      if(hadBaseline){
+        const fresh=incoming.filter(m=>!previousIds.has(mentionId(m)));
+        if(fresh.length)announceNewMentions(fresh);
+      }
     }catch(e){ asanaMentions.error=e.message||"Could not load Asana mentions"; }
     finally{
       asanaMentions.loading=null;
@@ -463,12 +536,23 @@ async function refreshAsanaMentions(force=false){
   if(document.getElementById("mentionList")) renderMentionsModal();
   return asanaMentions.loading;
 }
+function startMentionWatcher(){
+  if(mentionWatcherStarted)return;
+  mentionWatcherStarted=true;
+  mentionWatcherTimer=setInterval(()=>{
+    if(document.visibilityState==="visible")refreshAsanaMentions(false,false);
+  },MENTION_CACHE_MS);
+  document.addEventListener("visibilitychange",()=>{
+    if(document.visibilityState==="visible"&&Date.now()-asanaMentions.loadedAt>2*60*1000)refreshAsanaMentions(true,false);
+  });
+}
 function renderMentionBadge(){
   const b=document.getElementById("atBadge"); if(!b) return;
-  const seen=localStorage.getItem(mentionSeenKey())||localStorage.getItem("ob_at_seen")||"";
-  const unseen=mergedMentions().filter(m=>m.at>seen).length;
+  const unseen=mergedMentions().filter(m=>!mentionIsHidden(m)&&!mentionIsSeen(m)).length;
   b.textContent=unseen>99?"99+":unseen;
   b.style.display=unseen?"flex":"none";
+  const btn=document.getElementById("btnAt");
+  if(btn)btn.title=unseen?unseen+" unacknowledged mention"+(unseen===1?"":"s"):"Your mentions";
 }
 function mentionDate(value){
   if(!value) return "";
@@ -477,57 +561,224 @@ function mentionDate(value){
   if(days===1) return "Yesterday";
   return d.toLocaleDateString([],{day:"numeric",month:"short",year:d.getFullYear()===now.getFullYear()?undefined:"numeric"});
 }
+function mentionThreadKey(m){ return String(m&&m.taskGid||mentionId(m)); }
+function allMentionGroups(){
+  const groups=new Map();
+  mergedMentions().forEach(m=>{
+    const key=mentionThreadKey(m);
+    if(!groups.has(key))groups.set(key,{key,taskGid:m.taskGid,taskName:m.taskName||"Untitled task",taskUrl:m.taskUrl||null,
+      projectName:m.projectName||null,parentName:m.parentName||null,isSubtask:!!m.isSubtask,items:[]});
+    const group=groups.get(key); group.items.push(m);
+    if(!group.taskUrl&&m.taskUrl)group.taskUrl=m.taskUrl;
+    if(!group.projectName&&m.projectName)group.projectName=m.projectName;
+  });
+  return [...groups.values()].map(group=>{
+    group.items.sort((a,b)=>new Date(b.at||0)-new Date(a.at||0));
+    group.latest=group.items[0];
+    group.unseen=group.items.filter(m=>!mentionIsHidden(m)&&!mentionIsSeen(m)).length;
+    group.visibleItems=group.items.filter(m=>!mentionIsHidden(m));
+    group.hiddenItems=group.items.filter(mentionIsHidden);
+    return group;
+  }).sort((a,b)=>new Date(b.latest&&b.latest.at||0)-new Date(a.latest&&a.latest.at||0));
+}
+function mentionGroupsForPanel(){
+  const q=mentionPanel.query.trim().toLowerCase();
+  return allMentionGroups().filter(group=>{
+    const items=mentionPanel.filter==="hidden"?group.hiddenItems:group.visibleItems;
+    if(!items.length)return false;
+    if(mentionPanel.filter==="new"&&!items.some(m=>!mentionIsSeen(m)))return false;
+    if(!q)return true;
+    return [group.taskName,group.projectName,group.parentName,...items.flatMap(m=>[m.from,m.text])]
+      .filter(Boolean).join(" ").toLowerCase().includes(q);
+  });
+}
+function mentionCounts(){
+  const all=mergedMentions();
+  return {
+    new:all.filter(m=>!mentionIsHidden(m)&&!mentionIsSeen(m)).length,
+    all:all.filter(m=>!mentionIsHidden(m)).length,
+    hidden:all.filter(mentionIsHidden).length
+  };
+}
+function mentionPeopleLabel(items){
+  const names=[...new Set((items||[]).map(m=>m.from||"Someone"))];
+  if(names.length===1)return names[0];
+  if(names.length===2)return names[0]+" and "+names[1];
+  return names[0]+" and "+(names.length-1)+" others";
+}
+function mentionRefsForUser(userGid=mentionUserKey()){
+  if(!state.keeper.mentionRefs||typeof state.keeper.mentionRefs!=="object")state.keeper.mentionRefs={};
+  if(!Array.isArray(state.keeper.mentionRefs[userGid]))state.keeper.mentionRefs[userGid]=[];
+  return state.keeper.mentionRefs[userGid];
+}
+function mentionRefId(taskGid){ return MENTION_REF_PREFIX+String(taskGid); }
+function mentionReferenceForTask(taskGid,userGid=mentionUserKey()){
+  return mentionRefsForUser(userGid).find(ref=>String(ref.taskGid)===String(taskGid))||null;
+}
+function isMentionTaskPinned(taskGid){ return !!mentionReferenceForTask(taskGid); }
+function myGirlForMentions(){ return GIRLS.find(g=>state.me&&String(g.gid)===String(state.me.gid))||null; }
+function latestMentionForTask(taskGid){
+  const group=allMentionGroups().find(g=>String(g.taskGid)===String(taskGid));
+  return group&&group.latest||null;
+}
+function addMentionReference(group){
+  const girl=myGirlForMentions(); if(!girl){toast("Your Asana account is not linked to a Girls column yet");return;}
+  const refs=mentionRefsForUser(),latest=group.latest||group.items&&group.items[0]||{};
+  let ref=refs.find(item=>String(item.taskGid)===String(group.taskGid));
+  const data={id:mentionRefId(group.taskGid),taskGid:String(group.taskGid),taskName:group.taskName||latest.taskName||"Mention follow-up",
+    taskUrl:group.taskUrl||latest.taskUrl||null,projectName:group.projectName||latest.projectName||null,
+    parentName:group.parentName||latest.parentName||null,from:latest.from||null,text:latest.text||"",addedAt:new Date().toISOString()};
+  if(ref)Object.assign(ref,data); else refs.unshift(data);
+  const gc=girlCfg(girl.key),sourceAlreadyVisible=(state.myTasks[girl.key]||[]).some(t=>String(t.gid)===String(group.taskGid));
+  if(!sourceAlreadyVisible&&!gc.order.includes(data.id))gc.order.unshift(data.id);
+  markMentionsSeen(group.items); saveKeeper(); renderGirls(); renderMentionsModal();
+  toast(sourceAlreadyVisible?"Mention linked to the task already in your list":"Shown in your to-do list");
+}
+function removeMentionReference(taskGid,quiet=false){
+  const girl=myGirlForMentions(),refs=mentionRefsForUser(),id=mentionRefId(taskGid);
+  const index=refs.findIndex(ref=>String(ref.taskGid)===String(taskGid));
+  if(index<0)return false;
+  refs.splice(index,1);
+  if(girl){
+    const gc=girlCfg(girl.key);
+    gc.sections.forEach(section=>{section.taskIds=section.taskIds.filter(taskId=>taskId!==id);});
+    gc.order=gc.order.filter(taskId=>taskId!==id); gc.hidden=gc.hidden.filter(taskId=>taskId!==id); gc.private=gc.private.filter(taskId=>taskId!==id);
+  }
+  saveKeeper(); renderGirls(); if(!quiet)toast("Removed from your to-do list");
+  return true;
+}
+function toggleMentionReference(group){
+  if(isMentionTaskPinned(group.taskGid))removeMentionReference(group.taskGid);
+  else addMentionReference(group);
+  renderMentionsModal();
+}
+function mentionReferenceTask(ref){
+  const latest=latestMentionForTask(ref.taskGid)||ref;
+  return {gid:ref.id||mentionRefId(ref.taskGid),name:ref.taskName||latest.taskName||"Mention follow-up",notes:latest.text||ref.text||"",due:null,
+    completed:false,url:ref.taskUrl||latest.taskUrl||null,projectGid:null,projectName:ref.parentName?"@ Mention · "+ref.parentName:(ref.projectName||"@ Mention"),
+    projectColor:"#7A5FB0",assignee:state.me?{gid:state.me.gid,name:state.me.name}:null,my:myKey(),isMentionRef:true,
+    mentionPinned:true,sourceTaskGid:String(ref.taskGid),mentionFrom:latest.from||ref.from||null,mentionText:latest.text||ref.text||""};
+}
+function mentionContextForTask(taskGid){
+  const group=allMentionGroups().find(g=>String(g.taskGid)===String(taskGid));
+  if(!group)return null;
+  return {group,latest:group.latest};
+}
+async function openMentionTask(groupOrTask){
+  const requestedTask=String(groupOrTask&&groupOrTask.taskGid||groupOrTask||"");
+  let group=groupOrTask&&groupOrTask.items?groupOrTask:allMentionGroups().find(g=>String(g.taskGid)===requestedTask);
+  if(!group){
+    const ref=mentionReferenceForTask(requestedTask);
+    if(ref){
+      const fallback={...ref,gid:"ref-context:"+requestedTask,storyGid:"ref-context:"+requestedTask,at:ref.addedAt||new Date().toISOString()};
+      group={key:requestedTask,taskGid:requestedTask,taskName:ref.taskName,taskUrl:ref.taskUrl,projectName:ref.projectName,
+        parentName:ref.parentName,isSubtask:!!ref.parentName,items:[fallback],visibleItems:[fallback],hiddenItems:[],latest:fallback};
+    }
+  }
+  if(!group)return;
+  markMentionsSeen(group.items);
+  const latest=group.latest||group.items[0];
+  state.mentionOpenContext={taskGid:String(group.taskGid),from:latest&&latest.from,text:latest&&latest.text,at:latest&&latest.at,
+    parentName:group.parentName,projectName:group.projectName};
+  let task=findTask(group.taskGid);
+  if(!task){
+    try{
+      const res=await call("get_task",{task_id:group.taskGid,opt_fields:"name,notes,due_on,due_at,completed,assignee.gid,assignee.name,permalink_url,projects.gid,projects.name,memberships.project.gid,memberships.project.name"});
+      const raw=res.data||{},project=(raw.projects&&raw.projects[0])||(raw.memberships&&raw.memberships[0]&&raw.memberships[0].project)||null;
+      task={gid:String(raw.gid||group.taskGid),name:raw.name||group.taskName||"Untitled task",notes:raw.notes||"",due:raw.due_on||null,dueAt:raw.due_at||null,
+        completed:!!raw.completed,url:raw.permalink_url||group.taskUrl||null,projectGid:project&&project.gid||null,
+        projectName:project&&project.name||group.projectName||"Asana task",projectColor:"#7A5FB0",sectionName:"",
+        assignee:raw.assignee||null,isExternalMentionTask:true};
+      state.externalTasks[task.gid]=task;
+    }catch(e){
+      if(group.taskUrl){window.open(group.taskUrl,"_blank","noopener");toast("Opened in Asana because this task could not be loaded in the app");}
+      else toast("Could not open the source task: "+e.message);
+      return;
+    }
+  }
+  closeModal(); openDrawer(String(group.taskGid));
+}
+function markAllVisibleMentionsSeen(){
+  const groups=mentionGroupsForPanel();
+  markMentionsSeen(groups.flatMap(group=>mentionPanel.filter==="hidden"?group.hiddenItems:group.visibleItems));
+  renderMentionsModal();
+}
 function renderMentionsModal(){
   const listBox=document.getElementById("mentionList"),metaBox=document.getElementById("mentionMeta"),refresh=document.getElementById("mentionRefresh");
   if(!listBox) return;
-  const list=mergedMentions();
-  if(refresh){ refresh.disabled=!!asanaMentions.loading; refresh.innerHTML=asanaMentions.loading?'<span class="spin"></span> Checking…':'↻ Refresh'; }
+  const groups=mentionGroupsForPanel(),counts=mentionCounts();
+  document.querySelectorAll("#modal [data-mention-filter]").forEach(btn=>{
+    const key=btn.dataset.mentionFilter; btn.classList.toggle("on",key===mentionPanel.filter);
+    const count=btn.querySelector("b"); if(count)count.textContent=counts[key]||0;
+  });
+  const search=document.getElementById("mentionSearch"); if(search&&document.activeElement!==search)search.value=mentionPanel.query;
+  if(refresh){ refresh.disabled=!!asanaMentions.loading; refresh.innerHTML=asanaMentions.loading?'<span class="spin"></span> Checking…':'↻ Check now'; }
   if(metaBox){
-    if(asanaMentions.loading&&!asanaMentions.loadedAt) metaBox.textContent="Checking your recent Asana task comments…";
+    if(asanaMentions.loading&&asanaMentions.loadedAt)metaBox.textContent="Showing saved mentions · checking for new ones…";
+    else if(asanaMentions.loading)metaBox.textContent="Checking recent Asana task comments…";
     else if(asanaMentions.meta){
-      const parts=["Scanned "+asanaMentions.meta.scannedTasks+" tasks"];
-      if(asanaMentions.meta.scannedSubtasks) parts.push(asanaMentions.meta.scannedSubtasks+" subtasks");
-      if(asanaMentions.meta.scannedComments) parts.push(asanaMentions.meta.scannedComments+" comments");
-      parts.push("last "+Math.round(asanaMentions.meta.windowDays/30)+" months");
-      metaBox.textContent=parts.join(" · ");
-    }
-    else metaBox.textContent="Recent task-comment mentions from Asana";
+      const mode=asanaMentions.meta.incremental?"Latest changes checked":"Full scan complete";
+      metaBox.textContent=mode+" · "+asanaMentions.meta.scannedTasks+" tasks · "+asanaMentions.meta.scannedSubtasks+" subtasks · "+asanaMentions.meta.scannedComments+" comments";
+    }else metaBox.textContent="Saved mentions appear immediately while Asana checks in the background";
   }
   const warning=asanaMentions.error||asanaMentions.meta&&asanaMentions.meta.warning;
-  const warningHtml=warning?'<div class="mention-warning">'+esc(warning)+(list.length?' Showing the mentions already saved in this app.':'')+'</div>':'';
-  if(!list.length){
-    listBox.innerHTML=warningHtml+(asanaMentions.loading?'<div class="empty"><span class="spin"></span> Looking for mentions…</div>':'<div class="empty">No accessible task-comment mentions were found in the last six months.</div>');
+  const warningHtml=warning?'<div class="mention-warning">'+esc(warning)+(mergedMentions().length?' Showing the mentions already saved in this browser.':'')+'</div>':'';
+  if(!groups.length){
+    const empty=mentionPanel.filter==="new"?"No new mentions — you are caught up.":mentionPanel.filter==="hidden"?"No hidden mentions.":"No accessible mentions match this view.";
+    listBox.innerHTML=warningHtml+'<div class="empty">'+(asanaMentions.loading?'<span class="spin"></span> ':'')+empty+'</div>';
   }else{
-    listBox.innerHTML=warningHtml+list.slice(0,60).map(m=>{
-      const initial=esc(String(m.from||"?").trim().charAt(0).toUpperCase());
-      const excerpt=m.text?'<div class="mention-excerpt">'+esc(m.text)+'</div>':'';
-      const location=m.isSubtask&&m.parentName?"Subtask of "+m.parentName:m.projectName;
-      const where=[location,mentionDate(m.at)].filter(Boolean).join(" · ");
-      return '<article class="mention-row" data-task="'+esc(m.taskGid)+'" data-url="'+esc(m.taskUrl||"")+'">'+
-        '<div class="mention-avatar">'+initial+'</div><div class="mention-copy">'+
-        '<div class="mention-who"><b>'+esc(m.from||"Someone")+'</b> mentioned you</div>'+
-        '<div class="mention-task">'+esc(m.taskName||"Untitled task")+'</div>'+excerpt+
-        '<div class="mention-where">'+esc(where)+(m.source==="local"?' · syncing from this app':'')+'</div></div><span class="mention-open">↗</span></article>';
+    listBox.innerHTML=warningHtml+groups.map(group=>{
+      const items=mentionPanel.filter==="hidden"?group.hiddenItems:group.visibleItems;
+      const latest=items[0]||group.latest,expanded=!!mentionPanel.expanded[group.key],pinned=isMentionTaskPinned(group.taskGid);
+      const initial=esc(String(latest&&latest.from||"?").trim().charAt(0).toUpperCase());
+      const location=group.isSubtask&&group.parentName?"Subtask of "+group.parentName:group.projectName;
+      const unseen=items.filter(m=>!mentionIsSeen(m)).length;
+      const comments=expanded?'<div class="mention-thread-comments">'+items.map(m=>
+        '<div class="mention-comment'+(!mentionIsSeen(m)?' is-new':'')+'"><div><b>'+esc(m.from||"Someone")+'</b><span>'+esc(mentionDate(m.at))+'</span></div><p>'+esc(m.text||"Mentioned you")+'</p></div>'
+      ).join("")+'</div>':'';
+      return '<article class="mention-thread'+(unseen?' has-new':'')+'" data-thread="'+esc(group.key)+'">'+
+        '<div class="mention-thread-main" role="button" tabindex="0" data-mention-action="toggle" data-thread="'+esc(group.key)+'">'+
+          '<div class="mention-avatar">'+initial+'</div><div class="mention-copy">'+
+            '<div class="mention-who"><b>'+esc(mentionPeopleLabel(items))+'</b> mentioned you'+(items.length>1?' '+items.length+' times':'')+'</div>'+
+            '<div class="mention-task">'+esc(group.taskName||"Untitled task")+'</div>'+
+            '<div class="mention-excerpt">'+esc(latest&&latest.text||"Mentioned you in this task")+'</div>'+
+            '<div class="mention-where">'+esc([location,mentionDate(latest&&latest.at)].filter(Boolean).join(" · "))+'</div>'+
+          '</div><div class="mention-thread-state">'+(unseen?'<span class="mention-new-dot" title="New"></span>':'')+'<span>'+(expanded?'⌃':'⌄')+'</span></div></div>'+
+        comments+
+        '<div class="mention-actions">'+
+          '<button class="btn '+(pinned?'teal':'primary')+' sm" data-mention-action="pin" data-thread="'+esc(group.key)+'">'+(pinned?'✓ In My To-Do':'Show in My To-Do')+'</button>'+
+          '<button class="btn ghost sm" data-mention-action="open" data-thread="'+esc(group.key)+'">Open task</button>'+
+          '<button class="btn ghost sm" data-mention-action="'+(mentionPanel.filter==="hidden"?'restore':'hide')+'" data-thread="'+esc(group.key)+'">'+(mentionPanel.filter==="hidden"?'Restore':'Hide')+'</button>'+
+        '</div></article>';
     }).join("");
   }
-  listBox.querySelectorAll(".mention-row").forEach(row=>row.onclick=()=>{
-    const task=findTask(row.dataset.task);
-    closeModal();
-    if(task) openDrawer(task.gid);
-    else if(row.dataset.url) window.open(row.dataset.url,"_blank","noopener");
-  });
-  localStorage.setItem(mentionSeenKey(),new Date().toISOString());
-  renderMentionBadge();
+  listBox.onclick=async event=>{
+    const actionEl=event.target.closest("[data-mention-action]"); if(!actionEl)return;
+    event.preventDefault(); event.stopPropagation();
+    const group=allMentionGroups().find(g=>g.key===actionEl.dataset.thread); if(!group)return;
+    const action=actionEl.dataset.mentionAction;
+    if(action==="toggle"){
+      mentionPanel.expanded[group.key]=!mentionPanel.expanded[group.key]; markMentionsSeen(group.visibleItems); renderMentionsModal();
+    }else if(action==="pin")toggleMentionReference(group);
+    else if(action==="open")await openMentionTask(group);
+    else if(action==="hide"){setMentionsHidden(group.visibleItems,true);delete mentionPanel.expanded[group.key];renderMentionsModal();}
+    else if(action==="restore"){setMentionsHidden(group.hiddenItems,false);renderMentionsModal();}
+  };
 }
 function openMentions(){
-  hydrateMentionCache();
-  showModal('<div class="mention-head"><div><h2>Mentions</h2><p class="hint">Where people have @mentioned you in recent Asana task and subtask comments.</p></div>'+ 
-    '<a class="btn ghost" href="https://app.asana.com/0/inbox" target="_blank" rel="noopener">Asana Inbox ↗</a></div>'+ 
-    '<div class="mention-toolbar"><span id="mentionMeta"></span><button class="btn ghost" id="mentionRefresh">↻ Refresh</button></div>'+ 
-    '<div id="mentionList" class="mention-list"></div>'+ 
-    '<div class="drawer-actions"><button class="btn ghost" data-close>Close</button></div>');
+  hydrateMentionCache(); loadMentionPrefs();
+  showModal('<div class="mention-shell"><div class="mention-sticky"><div class="mention-head"><div><h2>@ Mentions</h2><p class="hint">Notice it, deal with it, or show the original task in your to-do list.</p></div>'+ 
+    '<a class="btn ghost sm" href="https://app.asana.com/0/inbox" target="_blank" rel="noopener">Asana Inbox ↗</a></div>'+ 
+    '<div class="mention-tabs"><button class="mention-tab on" data-mention-filter="new">New <b>0</b></button><button class="mention-tab" data-mention-filter="all">All <b>0</b></button><button class="mention-tab" data-mention-filter="hidden">Hidden <b>0</b></button></div>'+ 
+    '<div class="mention-search-row"><input id="mentionSearch" placeholder="Search people, tasks or comments…"><button class="btn ghost sm" id="mentionMarkSeen">Mark all seen</button></div>'+ 
+    '<div class="mention-toolbar"><span id="mentionMeta"></span><div><button class="btn ghost sm" id="mentionRefresh">↻ Check now</button><button class="btn ghost sm" id="mentionDeepRefresh" title="Reread the last six months">Deep scan</button></div></div></div>'+ 
+    '<div id="mentionList" class="mention-list"></div><div class="mention-foot"><span>Hidden mentions stay recoverable. Showing a task in My To-Do never moves or reassigns it.</span><button class="btn ghost sm" data-close>Close</button></div></div>',"mention");
   wireModalClose();
-  document.getElementById("mentionRefresh").onclick=()=>refreshAsanaMentions(true);
+  document.querySelectorAll("#modal [data-mention-filter]").forEach(btn=>btn.onclick=()=>{mentionPanel.filter=btn.dataset.mentionFilter;renderMentionsModal();});
+  document.getElementById("mentionSearch").oninput=e=>{mentionPanel.query=e.target.value;renderMentionsModal();};
+  document.getElementById("mentionMarkSeen").onclick=markAllVisibleMentionsSeen;
+  document.getElementById("mentionRefresh").onclick=()=>refreshAsanaMentions(true,false);
+  document.getElementById("mentionDeepRefresh").onclick=()=>refreshAsanaMentions(true,true);
   renderMentionsModal();
-  refreshAsanaMentions(false);
+  refreshAsanaMentions(false,false);
 }

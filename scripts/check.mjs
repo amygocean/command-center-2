@@ -81,12 +81,53 @@ assert.doesNotMatch(drawer,/p\.gid===t\.projectGid\?" selected"/,"Current board 
 assert.match(drawer,/id="sCelebrate"/,"Settings are missing the task-celebration preference");
 assert.match(drawer,/cfg\.completionCelebrations=document\.getElementById\("sCelebrate"\)\.checked/,"Task-celebration preference is not saved");
 assert.match(drawer,/call\("get_mentions",\{[\s\S]*days:MENTION_SCAN_DAYS[\s\S]*project_ids:projectIds[\s\S]*tasks:loadedTasks/,"Mentions view does not run the deeper Asana scan");
-assert.match(drawer,/Where people have @mentioned you in recent Asana task and subtask comments/,"Mentions view does not explain its task and subtask scope");
-assert.match(drawer,/if\(task\) openDrawer\(task\.gid\)[\s\S]*window\.open\(row\.dataset\.url/,"Mentions do not route to the app or Asana source task");
-assert.match(drawer,/ob-asana-mentions-v2:/,"Mentions are not cached per user with the refreshed scanner");
+assert.match(drawer,/Notice it, deal with it, or show the original task in your to-do list\./,"Mentions panel does not explain its triage workflow");
+assert.match(drawer,/async function openMentionTask\([\s\S]*call\("get_task"[\s\S]*openDrawer\(String\(group\.taskGid\)\)/,"Mention references do not open the original task inside the app");
+assert.match(drawer,/ob-asana-mentions-v3:/,"Mentions are not cached per user with the incremental scanner");
+assert.match(drawer,/ob-mention-triage-v1:/,"Mention seen and hidden states are not saved per user");
+assert.match(drawer,/Show in My To-Do/,"Mentions are missing the My To-Do action");
+assert.match(drawer,/function addMentionReference\(/,"Mention references cannot be added to The Girls");
+assert.match(drawer,/function setMentionsHidden\(/,"Mentions cannot be hidden and restored");
+assert.match(drawer,/function startMentionWatcher\(/,"Mentions do not refresh in the background");
+assert.match(drawer,/after_iso:afterIso/,"Mention refreshes do not use incremental scan dates");
 assert.match(drawer,/assigneeOptions\(t\.assignee\?t\.assignee\.gid:"unassigned","unassigned"\)/,"Task editing does not use preferred assignee suggestions");
 assert.match(drawer,/const peopleOpts=assigneeOptions\("",""\)/,"Quick task creation does not use preferred assignee suggestions");
 assert.match(core,/projectGid:\(t\.projects&&t\.projects\[0\]&&t\.projects\[0\]\.gid\)\|\|null/,"The Girls tasks do not retain their current Asana project ID");
+assert.match(core,/externalTasks: \{\}/,"Tasks opened from Mentions are not retained for the normal drawer");
+assert.match(core,/k\.mentionRefs/,"Shared dashboard state does not retain My To-Do mention references");
+
+// Exercise the personal mention triage state and the safe Girls reference.
+const mentionStart=drawer.indexOf("const MENTION_SCAN_DAYS=180;");
+assert.ok(mentionStart>=0,"Could not isolate the mention triage implementation");
+const mentionStorage=new Map();
+const mentionKeeper={mentions:[],mentionRefs:{},girls:{amy:{sections:[{id:"top3",name:"Top 3",taskIds:[]}],order:[],hidden:[],private:[]}}};
+const mentionContext=vm.createContext({
+  console,Date,Map,Set,Promise,setTimeout,clearTimeout,setInterval:()=>1,
+  localStorage:{getItem:key=>mentionStorage.get(key)||null,setItem:(key,value)=>mentionStorage.set(key,value)},
+  document:{visibilityState:"visible",getElementById:()=>null,querySelectorAll:()=>[],addEventListener(){}},
+  window:{open(){}},
+  state:{me:{gid:"amy-1",name:"Amy Gray"},keeper:mentionKeeper,myTasks:{amy:[]},tasks:[],externalTasks:{},users:[]},
+  GIRLS:[{key:"amy",gid:"amy-1",name:"Amy Gray"}],DEMO:false,
+  cfg:{projects:[]},PB:{},CC_PROJECT:null,WA_PROJECT:null,COMMUNITIES_PROJECT:null,BUGS_PROJECT:null,VISITS_PROJECT:null,SCHEDULE_PROJECT:null,REVAMP_PROJECT:null,CURRICULUM_PROJECT:null,
+  findTask:()=>null,girlCfg:key=>mentionKeeper.girls[key],myKey:()=>"amy",saveKeeper(){},renderGirls(){},toast(){},
+  esc:value=>String(value??""),call:async()=>({data:{}}),closeModal(){},openDrawer(){},showModal(){},wireModalClose(){}
+});
+vm.runInContext(drawer.slice(mentionStart),mentionContext,{filename:"mention-triage.js"});
+vm.runInContext(`asanaMentions.items=[
+  {storyGid:"story-1",taskGid:"task-1",taskName:"Recipe review",taskUrl:"https://app.asana.com/task-1",projectName:"Campaign",from:"Jess",text:"@Amy please review",at:"2026-07-21T10:00:00Z"},
+  {storyGid:"story-2",taskGid:"task-1",taskName:"Recipe review",taskUrl:"https://app.asana.com/task-1",projectName:"Campaign",from:"Caitlin",text:"@Amy adding the latest file",at:"2026-07-21T11:00:00Z"}
+]`,mentionContext);
+assert.equal(vm.runInContext("mentionCounts().new",mentionContext),2,"New mention count is incorrect");
+vm.runInContext("markMentionsSeen([asanaMentions.items[0]])",mentionContext);
+assert.equal(vm.runInContext("mentionCounts().new",mentionContext),1,"Acknowledging one mention marks the entire inbox seen");
+vm.runInContext("setMentionsHidden([asanaMentions.items[1]],true)",mentionContext);
+assert.equal(vm.runInContext("mentionCounts().hidden",mentionContext),1,"Hidden mentions are not retained");
+vm.runInContext("addMentionReference(allMentionGroups()[0])",mentionContext);
+assert.equal(vm.runInContext("mentionRefsForUser().length",mentionContext),1,"Show in My To-Do did not create a reference");
+assert.equal(vm.runInContext("mentionReferenceTask(mentionRefsForUser()[0]).sourceTaskGid",mentionContext),"task-1","The Girls reference lost the original task link");
+assert.equal(vm.runInContext("mentionReferenceTask(mentionRefsForUser()[0]).isMentionRef",mentionContext),true,"The Girls reference is not distinguishable from a real Asana task");
+vm.runInContext("removeMentionReference('task-1',true)",mentionContext);
+assert.equal(vm.runInContext("mentionRefsForUser().length",mentionContext),0,"Removing a mention reference failed");
 
 const campaigns=fs.readFileSync(path.join(root,"js/campaigns.js"),"utf8");
 assert.match(campaigns,/const people=assigneeOptions\("",""\)/,"Campaign task creation does not use preferred assignee suggestions");
@@ -111,6 +152,9 @@ assert.doesNotMatch(data,/Rise and brine/i,"Retired greeting returned");
 assert.match(data,/Still here, \{n\}\? Iconic\./,"Updated evening greeting pack is missing");
 
 const styles=fs.readFileSync(path.join(root,"styles.css"),"utf8");
+assert.match(styles,/\.modal-wrap\.mention-mode \.modal/,"Mentions do not open as a dedicated side panel");
+assert.match(styles,/\.mention-list\{flex:1;min-height:0;max-height:none;overflow-y:auto/,"Mentions list is not independently scrollable");
+assert.match(styles,/\.mention-ref-card/,"Mention references are not visually distinct in The Girls");
 assert.match(styles,/\.wc-grid\{grid-auto-rows:minmax\(88px,auto\)/,"Communities calendar rows do not grow with message volume");
 assert.match(styles,/#commCal \.wc-dow,#commCal \.wc-grid\{width:max\(100%,760px\)/,"Communities calendar is not responsive on narrow screens");
 assert.match(styles,/\.completion-moment\{/,"Completion success card styling is missing");

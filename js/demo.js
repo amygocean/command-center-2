@@ -192,8 +192,13 @@ async function demoCall(tool,args){
       return {data:mt};
     }
     case "get_task": {
-      const t=DEMO_TASKS.find(x=>x.gid===args.task_id)||{};
-      return {data:{notes:t.notes||"",comments:[{text:"Looks great — let's lock it in 🎬",created_at:new Date().toISOString(),created_by:{name:"Jessica Pallister"}}]}};
+      let t=DEMO_TASKS.find(x=>x.gid===args.task_id)||null;
+      if(!t){for(const rows of Object.values(DEMO_SUBTASKS)){t=rows.find(x=>x.gid===args.task_id);if(t)break;}}
+      t=t||{};
+      return {data:{gid:t.gid||args.task_id,name:t.name||"Demo task",notes:t.notes||"",due_on:t.due_on||null,due_at:t.due_at||null,
+        completed:!!t.completed,assignee:t.assignee||null,permalink_url:t.permalink_url||("https://app.asana.com/demo/"+args.task_id),
+        projects:t.memberships&&t.memberships[0]&&t.memberships[0].project?[t.memberships[0].project]:[],
+        comments:[{text:"Looks great — let's lock it in 🎬",created_at:new Date().toISOString(),created_by:{name:"Jessica Pallister"}}]}};
     }
     case "get_mentions": {
       const now=Date.now();

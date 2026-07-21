@@ -28,7 +28,16 @@ function saveGirlLaneSizes(){
 
 function visibleGirlTasks(key){
   const gc=girlCfg(key);
-  return state.myTasks[key].filter(t=>{
+  const girl=GIRLS.find(g=>g.key===key);
+  const base=state.myTasks[key].map(task=>{
+    const ref=girl&&typeof mentionReferenceForTask==="function"?mentionReferenceForTask(task.gid,girl.gid):null;
+    return ref?{...task,mentionPinned:true,mentionRef:ref,sourceTaskGid:task.gid}:task;
+  });
+  if(isMe(key)&&typeof mentionRefsForUser==="function"&&typeof mentionReferenceTask==="function"){
+    const existing=new Set(base.map(task=>String(task.gid)));
+    mentionRefsForUser().forEach(ref=>{ if(!existing.has(String(ref.taskGid)))base.push(mentionReferenceTask(ref)); });
+  }
+  return base.filter(t=>{
     if(gc.private.includes(t.gid) && !isMe(key)) return false;
     return true;
   });
@@ -39,9 +48,12 @@ function girlCardHTML(t,key){
   const gc=girlCfg(key);
   const today=todayD(); const over=t.due&&pd(t.due)<today;
   const hidden=gc.hidden.includes(t.gid), priv=gc.private.includes(t.gid);
-  return '<div class="card gcard'+(hidden?" is-hidden":"")+'" draggable="true" data-gid="'+t.gid+'" data-key="'+key+'">'+
+  const mentionSource=t.sourceTaskGid||t.gid;
+  const mentionBadge=t.mentionPinned?'<span class="mention-ref-tag">@ mention</span>':'';
+  return '<div class="card gcard'+(hidden?" is-hidden":"")+(t.isMentionRef?' mention-ref-card':'')+'" draggable="true" data-gid="'+t.gid+'" data-key="'+key+'"'+
+    (t.mentionPinned?' data-mention-source="'+esc(String(mentionSource))+'"':'')+(t.isMentionRef?' data-mention-ref="1"':'')+'>'+
     '<span class="grip">⠿</span>'+
-    '<div class="c-in"><div class="cn">'+esc(t.name)+(priv?' <span class="pv-tag">private</span>':'')+'</div>'+
+    '<div class="c-in"><div class="cn">'+esc(t.name)+' '+mentionBadge+(priv?' <span class="pv-tag">private</span>':'')+'</div>'+
     '<div class="cmeta">'+esc(t.projectName)+
     (t.due?'<span class="'+(over?"overdue":"")+'">'+(over?"⚠ ":"")+pd(t.due).toDateString().slice(4,10)+'</span>':'<span>no date</span>')+'</div></div>'+
     '<span class="c-acts">'+
@@ -159,7 +171,11 @@ function captureGirlLayoutFromDOM(board,key){
 let gDragging=null;
 function wireGirls(board){
   board.querySelectorAll(".gcard").forEach(card=>{
-    card.onclick=e=>{ if(e.target.closest(".c-acts")||e.target.closest(".grip")) return; openDrawer(card.dataset.gid); };
+    card.onclick=e=>{
+      if(e.target.closest(".c-acts")||e.target.closest(".grip")) return;
+      if(card.dataset.mentionSource&&typeof openMentionTask==="function")openMentionTask(card.dataset.mentionSource);
+      else openDrawer(card.dataset.gid);
+    };
     card.ondragstart=e=>{ gDragging=card; e.dataTransfer.setData("text/gid",card.dataset.gid); setTimeout(()=>card.classList.add("ghosting"),0); };
     card.ondragend=()=>{ if(gDragging) gDragging.classList.remove("ghosting"); gDragging=null; };
   });
@@ -211,6 +227,7 @@ function wireGirls(board){
       const fromPool=gDragging.dataset.pool==="1";
       const key=zone.dataset.key;
       if(!key){ return; }
+      if(gDragging.dataset.mentionRef==="1"&&gDragging.dataset.key!==key){ toast("Mention reminders stay in your own to-do list"); renderGirls(); return; }
       if(fromPool || gDragging.dataset.key!==key){ assignToGirl(gid,key,fromPool); return; }
       const gc=girlCfg(key);
       gc.sections.forEach(s=>{ s.taskIds=s.taskIds.filter(id=>id!==gid); });
@@ -224,6 +241,7 @@ function wireGirls(board){
       if(!gDragging) return;
       e.preventDefault();
       const key=lane.dataset.key;
+      if(gDragging.dataset.mentionRef==="1"&&gDragging.dataset.key!==key){ toast("Mention reminders stay in your own to-do list"); renderGirls(); return; }
       if(gDragging.dataset.pool==="1" || (gDragging.dataset.key&&gDragging.dataset.key!==key))
         assignToGirl(gDragging.dataset.gid,key,gDragging.dataset.pool==="1");
     };
@@ -334,6 +352,9 @@ function wireGirlLaneResize(board){
 }
 
 async function assignToGirl(gid,key,fromPool){
+  if(String(gid).startsWith(typeof MENTION_REF_PREFIX==="string"?MENTION_REF_PREFIX:"mention-ref:")){
+    toast("Mention reminders stay in your own to-do list"); return;
+  }
   const g=GIRLS.find(x=>x.key===key); if(!g) return;
   try{
     await call("update_tasks",{tasks:[{task:gid,assignee:g.gid}]});
@@ -343,6 +364,13 @@ async function assignToGirl(gid,key,fromPool){
 }
 
 async function completeGirlTask(gid,key){
+  if(String(gid).startsWith(typeof MENTION_REF_PREFIX==="string"?MENTION_REF_PREFIX:"mention-ref:")){
+    const taskGid=String(gid).slice((typeof MENTION_REF_PREFIX==="string"?MENTION_REF_PREFIX:"mention-ref:").length);
+    const context=typeof mentionContextForTask==="function"?mentionContextForTask(taskGid):null;
+    if(context&&typeof markMentionsSeen==="function")markMentionsSeen(context.group.items);
+    if(typeof removeMentionReference==="function")removeMentionReference(taskGid,true);
+    toast("Mention handled"); renderGirls(); return;
+  }
   const list=state.myTasks[key];
   const i=list.findIndex(t=>t.gid===gid);
   const t=i>=0?list[i]:null;
@@ -359,6 +387,7 @@ async function completeGirlTask(gid,key){
   saveKeeper(); renderGirls();
   try{
     await call("update_tasks",{tasks:[{task:gid,completed:true}]});
+    if(typeof isMentionTaskPinned==="function"&&isMentionTaskPinned(gid)&&typeof removeMentionReference==="function")removeMentionReference(gid,true);
     celebrateCompletion(t||{name:"Task complete"});
   }
   catch(e){
