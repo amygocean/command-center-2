@@ -305,7 +305,7 @@ export default async function handler(req, res){
         const utl = await patFetch(`/users/me/user_task_list?workspace=${WORKSPACE}`);
         const listGid = utl.data && utl.data.gid;
         if(!listGid){ out = { data: [] }; break; }
-        const fields = "name,due_on,completed,completed_at,notes,permalink_url,projects.name";
+        const fields = "name,due_on,completed,completed_at,notes,permalink_url,projects.gid,projects.name";
         const q = args.completed_since
           ? `?completed_since=${encodeURIComponent(args.completed_since)}&limit=100&opt_fields=${fields}`
           : `?completed_since=now&limit=100&opt_fields=${fields}`;

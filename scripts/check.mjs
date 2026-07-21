@@ -44,6 +44,14 @@ const drawer=fs.readFileSync(path.join(root,"js/drawer.js"),"utf8");
 assert.match(drawer,/id="dTime"[\s\S]*t\.sendTime/,"Communities task drawer cannot edit the send time");
 assert.match(drawer,/upd\.due_at=communityDueAt\(due,sendTime\); upd\.due_on=null/,"Timed drawer edits do not clear due_on");
 assert.match(drawer,/upd\.due_on=due; upd\.due_at=null/,"Date-only drawer edits do not clear due_at");
+assert.match(drawer,/id="dMoveBoard"/,"Task drawer is missing the explicit move-board control");
+assert.match(drawer,/The board will not change unless you tick this\./,"Task drawer does not explain the safe board behaviour");
+assert.match(drawer,/const wantsMove=d\.querySelector\("#dMoveBoard"\)\.checked/,"Saving a task does not require explicit move intent");
+assert.match(drawer,/const proj=wantsMove\?d\.querySelector\("#dProject"\)\.value:""/,"The destination board can still default implicitly");
+assert.match(drawer,/if\(wantsMove&&!proj\)\{ toast\("Choose the board you want to move this task to"\)/,"Move mode does not require a destination board");
+assert.match(drawer,/if\(t\.projectGid\) upd\.remove_projects=\[t\.projectGid\]/,"Tasks without a current project are not handled safely");
+assert.doesNotMatch(drawer,/p\.gid===t\.projectGid\?" selected"/,"Current board is still being selected through the unsafe destination dropdown");
+assert.match(core,/projectGid:\(t\.projects&&t\.projects\[0\]&&t\.projects\[0\]\.gid\)\|\|null/,"The Girls tasks do not retain their current Asana project ID");
 
 const communities=fs.readFileSync(path.join(root,"js/communities.js"),"utf8");
 assert.match(communities,/create_shared_tasks/,"Communities tasks are not created through the shared identity");
@@ -69,6 +77,7 @@ assert.match(asana,/`\/attachments\?\$\{qs\(\{[\s\S]*parent:args\.task_id/,"Atta
 assert.doesNotMatch(asana,/\/tasks\/\$\{args\.task_id\}\/attachments/,"Obsolete task attachment-list route returned");
 assert.match(asana,/new FormData\(\)/,"Attachment upload is not multipart form data");
 assert.match(asana,/method:"POST"[\s\S]*body: form/,"Attachment upload is not posted to Asana");
+assert.match(asana,/projects\.gid,projects\.name/,"My Tasks loading does not request the current board ID");
 
 // Exercise the composer logic without a browser. This catches the important
 // integration contract: description -> task notes, then image -> attachment.

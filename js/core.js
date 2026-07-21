@@ -430,6 +430,7 @@ async function loadMyTasks(){
       state.myTasks[g.key] = (r.data||[]).filter(t=>!t.completed).map(t=>({
         gid:t.gid, name:t.name, notes:t.notes||"", due:t.due_on||null,
         completed:false, url:t.permalink_url,
+        projectGid:(t.projects&&t.projects[0]&&t.projects[0].gid)||null,
         projectName:(t.projects&&t.projects[0]&&t.projects[0].name)||"My Tasks",
         projectColor:"#5BC4BF", assignee:{gid:g.gid,name:g.name}, my:g.key
       }));

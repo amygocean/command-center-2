@@ -7,7 +7,10 @@ function openDrawer(gid){
   const w=document.getElementById("drawerWrap"), d=document.getElementById("drawer");
   const peopleOpts='<option value="unassigned">Unassigned</option>'+
     state.users.map(u=>'<option value="'+u.gid+'"'+(t.assignee&&t.assignee.gid===u.gid?" selected":"")+'>'+esc(u.name)+'</option>').join("");
-  const projOpts=cfg.projects.map(p=>'<option value="'+p.gid+'"'+(p.gid===t.projectGid?" selected":"")+'>'+esc(p.name)+'</option>').join("");
+  const currentBoardName=t.projectName||"Current Asana board";
+  const projOpts='<option value="">Choose a destination board…</option>'+cfg.projects
+    .filter(p=>p.gid!==t.projectGid)
+    .map(p=>'<option value="'+p.gid+'">'+esc(p.name)+'</option>').join("");
   const cm = t.isComms ? communityOf(t) : null;
   const pu = t.isComms ? purposeOf(t) : null;
   d.innerHTML=
@@ -21,8 +24,12 @@ function openDrawer(gid){
     '<div class="row"><div class="fld"><label>'+(t.isComms?'Send date':'Due date')+'</label><input type="date" id="dDue" value="'+(t.due||"")+'"></div>'+
     (t.isComms?'<div class="fld"><label>Send time</label><input type="time" id="dTime" step="300" value="'+(t.sendTime||"")+'"></div>':'')+
     '<div class="fld"><label>Assignee</label><select id="dAssignee">'+peopleOpts+'</select></div></div>'+
-    '<div class="fld"><label>Board (move task between projects)</label><select id="dProject">'+projOpts+'</select></div>'+
-    '<div class="fld" id="dSecWrap" style="display:none"><label>Section in new board</label><select id="dSection"><option value="">(no section)</option></select></div>'+
+    '<div class="fld"><label>Board</label><div class="current-board"><span>Current board</span><b>'+esc(currentBoardName)+'</b></div>'+
+      '<label class="move-board-toggle"><input type="checkbox" id="dMoveBoard"><span><b>Move this task to another board</b><small>The board will not change unless you tick this.</small></span></label></div>'+
+    '<div class="move-board-fields" id="dMoveWrap" style="display:none">'+
+      '<div class="fld"><label>Destination board</label><select id="dProject">'+projOpts+'</select></div>'+
+      '<div class="fld" id="dSecWrap" style="display:none"><label>Section in destination board</label><select id="dSection"><option value="">(no section)</option></select></div>'+
+    '</div>'+
     '<div class="drawer-actions">'+
       '<button class="btn primary" id="dSave">Save to Asana</button>'+
       '<button class="btn '+(t.completed?"ghost":"teal")+'" id="dDone">'+(t.completed?"Reopen":(t.isComms?"Sent ✓":"✓ Done"))+'</button>'+
@@ -51,9 +58,18 @@ function openDrawer(gid){
   d.querySelector("#dCmtInput").onkeydown=e=>{
     if(e.key==="Enter" && document.getElementById("atDrop").style.display==="none") d.querySelector("#dCmtBtn").click();
   };
+  const moveToggle=d.querySelector("#dMoveBoard"), moveWrap=d.querySelector("#dMoveWrap");
+  moveToggle.onchange=()=>{
+    moveWrap.style.display=moveToggle.checked?"block":"none";
+    if(!moveToggle.checked){
+      d.querySelector("#dProject").value="";
+      d.querySelector("#dSecWrap").style.display="none";
+      d.querySelector("#dSection").innerHTML='<option value="">(no section)</option>';
+    }
+  };
   d.querySelector("#dProject").onchange=async(e)=>{
     const proj=e.target.value, wrap=d.querySelector("#dSecWrap"), sel=d.querySelector("#dSection");
-    if(proj===t.projectGid){ wrap.style.display="none"; return; }
+    if(!proj){ wrap.style.display="none"; sel.innerHTML='<option value="">(no section)</option>'; return; }
     wrap.style.display="block"; sel.innerHTML='<option value="">Loading…</option>';
     try{ const res=await call("get_project",{project_id:proj,include_sections:true,opt_fields:"sections.name"});
       const secs=(res.data&&res.data.sections)||[];
@@ -66,8 +82,10 @@ function openDrawer(gid){
     const sendTime=t.isComms&&d.querySelector("#dTime")?d.querySelector("#dTime").value:"";
     if(sendTime&&!due){ toast("Pick a send date before choosing a time"); return; }
     const asg=d.querySelector("#dAssignee").value;
-    const proj=d.querySelector("#dProject").value;
-    const moved = proj && proj!==t.projectGid;
+    const wantsMove=d.querySelector("#dMoveBoard").checked;
+    const proj=wantsMove?d.querySelector("#dProject").value:"";
+    if(wantsMove&&!proj){ toast("Choose the board you want to move this task to"); return; }
+    const moved=!!(wantsMove&&proj&&proj!==t.projectGid);
     const notes=d.querySelector("#dNotes").value;
     const upd={task:gid}; if(name&&name!==t.name)upd.name=name;
     if(t.isComms){
@@ -80,10 +98,15 @@ function openDrawer(gid){
     upd.notes=notes;
     upd.assignee = asg==="unassigned"?null:asg;
     if(moved){ const sec=d.querySelector("#dSection").value;
-      upd.add_projects=[sec?{project_id:proj,section_id:sec}:{project_id:proj}]; upd.remove_projects=[t.projectGid]; }
+      upd.add_projects=[sec?{project_id:proj,section_id:sec}:{project_id:proj}];
+      if(t.projectGid) upd.remove_projects=[t.projectGid];
+    }
     try{ await call(t.isComms?"update_shared_tasks":"update_tasks",{tasks:[upd]});
       closeDrawer();
-      if(moved){ toast("Moved to "+(cfg.projects.find(p=>p.gid===proj)||{}).name); loadAll(); }
+      if(moved){
+        const destination=(cfg.projects.find(p=>p.gid===proj)||{}).name||"the selected board";
+        toast((t.projectGid?"Moved to ":"Added to ")+destination); loadAll();
+      }
       else { t.name=name||t.name; t.due=due; t.sendTime=sendTime||null; t.dueAt=(due&&sendTime)?communityDueAt(due,sendTime):null; t.notes=notes; t.assignee=asg==="unassigned"?null:{gid:asg,name:userName(asg)}; renderAll(); toast("Saved ✓"); }
     }catch(e){ toast("Failed: "+e.message); }
   };
