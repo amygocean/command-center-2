@@ -226,7 +226,7 @@ function commsBusy(dt){
 }
 function wireMonth(){
   document.querySelectorAll(".pill").forEach(p=>{
-    p.onclick=e=>{ e.stopPropagation(); openDrawer(p.dataset.gid); };
+    p.onclick=e=>{ e.stopPropagation(); if(p.classList.contains("wa")) openCommPreview(p.dataset.gid); else openDrawer(p.dataset.gid); };
     p.ondragstart=e=>{ e.dataTransfer.setData("text/gid",p.dataset.gid); p.classList.add("lift"); };
     p.ondragend=()=>p.classList.remove("lift");
   });

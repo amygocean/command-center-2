@@ -474,6 +474,17 @@ input:focus,textarea:focus,select:focus{outline:none}
 .ctgt::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--cc)}
 .ctgt:has(input:checked)::before{background:rgba(255,255,255,.7)}
 #waPurpose{border:none;background:var(--fill);border-radius:980px;padding:7px 10px;font-family:var(--font);font-size:12px;color:var(--muted)}
+.comm-compose{display:flex;flex-direction:column;gap:2px}
+.comm-compose .fld{margin-bottom:9px}
+.comm-compose .fld>label span{font-weight:500;text-transform:none;letter-spacing:0;color:var(--faint)}
+#waMessage{min-height:112px;resize:vertical;line-height:1.45}
+.comm-compose-row{display:grid;grid-template-columns:minmax(145px,.65fr) minmax(230px,1.35fr);gap:12px;align-items:start}
+.wa-compose-image{display:flex;align-items:center;gap:8px;min-height:42px;flex-wrap:wrap}
+.wa-compose-image .hint{margin:0}
+.wa-compose-file{font-size:11.5px;font-weight:650;color:var(--muted);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wa-thumb.compose{width:54px;height:54px}
+.comm-compose-foot{display:flex;gap:6px;align-items:center;justify-content:space-between}
+.comm-compose-foot #waPurpose{flex:1;min-width:0}
 .wc-grid .cell{min-height:76px}
 .wc-cell .dnum{font-size:11px}
 .wmsg{
@@ -494,6 +505,27 @@ input:focus,textarea:focus,select:focus{outline:none}
 .wa-txt{flex:1;min-width:0;font-size:13px;font-weight:600}
 .wa-meta{display:block;font-size:11px;color:var(--faint);font-weight:500;margin-top:1px}
 .wa-sent{opacity:0;transition:opacity .15s}
+
+/* ---- WhatsApp preview modal ---- */
+.wa-prev-h{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.wa-prev-h h2{margin:0}
+.wa-prev-sub{display:flex;align-items:center;gap:7px}
+.wa-comm{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--cc);background:color-mix(in srgb,var(--cc) 14%,transparent);border-radius:980px;padding:3px 10px}
+.wa-comm i{width:7px;height:7px;border-radius:50%;background:var(--cc)}
+.wa-purpose{font-size:11px;font-weight:600;color:var(--faint)}
+.wa-stage{background:#e5ddd5;background-image:radial-gradient(rgba(0,0,0,.035) 1px,transparent 1px);background-size:18px 18px;border-radius:14px;padding:20px 16px 12px;display:flex;flex-direction:column;align-items:center}
+.wa-bubble{align-self:flex-end;max-width:82%;background:#d9fdd3;border-radius:10px 10px 2px 10px;box-shadow:0 1px 1px rgba(0,0,0,.14);padding:6px 8px 5px;position:relative}
+.wa-bubble .wa-img{margin:-2px -3px 5px;border-radius:8px;overflow:hidden}
+.wa-bubble .wa-img img{display:block;width:100%;max-height:340px;object-fit:cover}
+.wa-text{font-size:14px;line-height:1.4;color:#111b21;white-space:pre-wrap;word-wrap:break-word;padding:0 2px}
+.wa-ph{color:#667781;font-style:italic}
+.wa-time{display:flex;align-items:center;justify-content:flex-end;gap:3px;font-size:11px;color:#667781;margin-top:2px;padding-right:2px}
+.wa-tick{color:#53bdeb;font-size:11px;letter-spacing:-2px}
+.wa-stage-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#7d766c;margin-top:12px}
+.wa-imgrow{display:flex;align-items:center;gap:10px;margin:12px 0 4px;min-height:36px;flex-wrap:wrap}
+.wa-thumb{width:46px;height:46px;border-radius:8px;overflow:hidden;flex-shrink:0;box-shadow:var(--shadow-sm)}
+.wa-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.wa-img-error{font-size:11.5px;font-weight:650;color:#9a4a24}
 .ins-tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:0;margin-bottom:16px}
 .tile{padding:2px 6px;text-align:left;border-left:1px solid var(--hair)}
 .tile:first-child{border-left:none;padding-left:0}
@@ -1098,3 +1130,9 @@ body.lane-resize-active .girls-board .glane{transition:none}
 .tabs{max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto}
+
+@media(max-width:760px){
+  .comm-compose-row{grid-template-columns:1fr}
+  .comm-compose-foot{align-items:stretch}
+  .comm-compose-foot .qadd-btn{flex:0 0 auto}
+}

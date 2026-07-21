@@ -6,7 +6,7 @@
 //  authenticated shared-board identity described below.
 //  Keeping this shape means the dashboard's own logic barely changed.
 // ------------------------------------------------------------------
-import { asanaFetch, readSession, WORKSPACE } from "./_lib.js";
+import { asanaFetch, getAsanaAccessToken, readSession, WORKSPACE } from "./_lib.js";
 
 // Reads and writes for explicitly shared app data go through ONE service token so every
 // signed-in teammate sees the same boards, regardless of what their own
@@ -318,6 +318,52 @@ export default async function handler(req, res){
         out = { data: tasks };
         break;
       }
+
+      // ---- attachments (image push to Asana) ----
+      // List a task's attachments so the WhatsApp preview can show the image.
+      case "get_attachments":
+        if(!args.task_id){ res.status(400).json({error:"task_id required"}); return; }
+        out = await sharedFetch(req,res,`/attachments?${qs({
+          parent:args.task_id,
+          opt_fields:"name,download_url,view_url,permanent_url,resource_subtype,host,created_at",
+          limit:100
+        })}`);
+        break;
+
+      // Upload a real file to Asana. The tool proxy only speaks JSON, so the
+      // browser sends the image base64-encoded; here we decode it and forward
+      // it to Asana's /attachments endpoint as proper multipart form-data,
+      // using the shared board identity so every teammate sees it.
+      case "upload_attachment": {
+        if(!readSession(req)){ res.status(401).json({error:"not authenticated"}); return; }
+        if(!args.task_id || !args.data_base64){ res.status(400).json({error:"task_id and data_base64 required"}); return; }
+        if(!/^image\/[a-z0-9.+-]+$/i.test(args.mime||"")){ res.status(400).json({error:"Only image uploads are supported"}); return; }
+        let buf;
+        try{ buf = Buffer.from(String(args.data_base64), "base64"); }
+        catch{ res.status(400).json({error:"Invalid image data"}); return; }
+        // The frontend downsizes images before sending them. Keep a server-side
+        // guard too so a malformed request cannot exceed the serverless body
+        // and memory budget.
+        if(!buf.length || buf.length>3*1024*1024){ res.status(413).json({error:"Image is too large after processing"}); return; }
+        const token = SHARED_PAT || await getAsanaAccessToken(req,res);
+        const safeName=String(args.filename||"community-image.jpg")
+          .replace(/[^\x20-\x7E]/g,"_").replace(/[\\/]/g,"-").slice(0,180);
+        const form = new FormData();
+        form.append("parent", String(args.task_id));
+        form.append("file", new Blob([buf], { type: args.mime }), safeName||"community-image.jpg");
+        const r = await fetch("https://app.asana.com/api/1.0/attachments", {
+          method:"POST", headers:{ Authorization:"Bearer "+token, Accept:"application/json" }, body: form
+        });
+        const text = await r.text(); let json; try{ json = text?JSON.parse(text):{}; }catch{ json = { raw:text }; }
+        if(!r.ok){ res.status(r.status).json({ error:(json.errors&&json.errors[0]&&json.errors[0].message)||("Asana "+r.status) }); return; }
+        out = json;
+        break;
+      }
+
+      case "delete_attachment":
+        if(!args.attachment_id){ res.status(400).json({error:"attachment_id required"}); return; }
+        await serviceFetch(req,res,`/attachments/${args.attachment_id}`, { method:"DELETE" });
+        out = { data:{} }; break;
 
       default:
         res.status(400).json({ error:"unknown tool: "+tool }); return;

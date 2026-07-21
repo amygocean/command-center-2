@@ -54,17 +54,26 @@ async function refresh(session){
   return session;
 }
 
-// --- call Asana REST as the user; auto-refreshes and re-saves the cookie ---
-export async function asanaFetch(req, res, path, opts={}){
+// Return a valid OAuth access token for endpoints that cannot use the normal
+// JSON-only asanaFetch helper (for example multipart attachment uploads).
+// Keeping refresh handling here means callers do not need to duplicate the
+// session-expiry logic or accidentally use an expired browser session.
+export async function getAsanaAccessToken(req, res){
   let session = readSession(req);
   if(!session) { const e = new Error("not authenticated"); e.status = 401; throw e; }
   if(!session.expires_at || Date.now() > session.expires_at){
     session = await refresh(session);
     setSessionCookie(res, session);
   }
+  return session.access_token;
+}
+
+// --- call Asana REST as the user; auto-refreshes and re-saves the cookie ---
+export async function asanaFetch(req, res, path, opts={}){
+  const accessToken = await getAsanaAccessToken(req, res);
   const r = await fetch("https://app.asana.com/api/1.0"+path, {
     method: opts.method || "GET",
-    headers: { "Authorization":"Bearer "+session.access_token, "Content-Type":"application/json" },
+    headers: { "Authorization":"Bearer "+accessToken, "Content-Type":"application/json" },
     body: opts.body ? JSON.stringify(opts.body) : undefined
   });
   const text = await r.text();

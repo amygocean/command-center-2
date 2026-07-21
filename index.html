@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A3D62">
 <title>Academy Command Center</title>
-<link rel="stylesheet" href="/styles.css?v=20260720f">
+<link rel="stylesheet" href="/styles.css?v=20260721b">
 </head>
 <body>
 <!--
@@ -238,12 +238,32 @@
       </div>
       <div class="comm-col">
         <h3 class="comm-h">Plan a message</h3>
-        <div class="qadd" style="margin:0">
-          <input class="qadd-name" id="waName" placeholder="What's Caitlin sending?">
-          <input type="date" class="qadd-date" id="waDate" style="width:auto">
+        <div class="comm-compose">
+          <div class="fld">
+            <label>Short title <span>(for the calendar and Asana task)</span></label>
+            <input id="waName" placeholder="e.g. Whole-shell mussels reminder">
+          </div>
+          <div class="fld">
+            <label>WhatsApp message</label>
+            <textarea id="waMessage" placeholder="Write or paste the full message here…"></textarea>
+          </div>
+          <div class="comm-compose-row">
+            <div class="fld">
+              <label>Send date</label>
+              <input type="date" id="waDate">
+            </div>
+            <div class="fld">
+              <label>Image <span>(optional)</span></label>
+              <div class="wa-compose-image" id="waComposeImage">
+                <button class="btn glow sm" id="waComposeImageBtn" type="button">📷 Add image</button>
+                <span class="hint">Attached to every Asana task created.</span>
+              </div>
+              <input type="file" id="waComposeFile" accept="image/*" style="display:none">
+            </div>
+          </div>
         </div>
         <div id="commTargets"></div>
-        <div style="display:flex;gap:6px;align-items:center">
+        <div class="comm-compose-foot">
           <select id="waPurpose"></select>
           <button class="qadd-btn" id="waAdd">Queue it</button>
         </div>
@@ -306,19 +326,19 @@
 <div id="fridayWrap"></div>
 <div id="runWrap"></div>
 
-<script src="/js/data.js?v=20260720f"></script>
-<script src="/js/core.js?v=20260720f"></script>
-<script src="/js/demo.js?v=20260720f"></script>
-<script src="/js/calendar.js?v=20260720f"></script>
-<script src="/js/campaigns.js?v=20260720f"></script>
-<script src="/js/people.js?v=20260720f"></script>
-<script src="/js/content.js?v=20260720f"></script>
-<script src="/js/communities.js?v=20260720f"></script>
-<script src="/js/drawer.js?v=20260720f"></script>
-<script src="/js/stores.js?v=20260720f"></script>
-<script src="/js/platform.js?v=20260720f"></script>
-<script src="/js/pr.js?v=20260720f"></script>
-<script src="/js/friday.js?v=20260720f"></script>
-<script src="/js/news.js?v=20260720f"></script>
+<script src="/js/data.js?v=20260721b"></script>
+<script src="/js/core.js?v=20260721b"></script>
+<script src="/js/demo.js?v=20260721b"></script>
+<script src="/js/calendar.js?v=20260721b"></script>
+<script src="/js/campaigns.js?v=20260721b"></script>
+<script src="/js/people.js?v=20260721b"></script>
+<script src="/js/content.js?v=20260721b"></script>
+<script src="/js/communities.js?v=20260721b"></script>
+<script src="/js/drawer.js?v=20260721b"></script>
+<script src="/js/stores.js?v=20260721b"></script>
+<script src="/js/platform.js?v=20260721b"></script>
+<script src="/js/pr.js?v=20260721b"></script>
+<script src="/js/friday.js?v=20260721b"></script>
+<script src="/js/news.js?v=20260721b"></script>
 </body>
 </html>

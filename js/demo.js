@@ -48,6 +48,7 @@ const DEMO_CAMPAIGNS = [
 ];
 const DEMO_PROJECTS = Object.fromEntries(DEMO_CAMPAIGNS.map(c=>[c.gid,{...c,sections:Object.values(DEMO_CAMPAIGN_SECTIONS)}]));
 const DEMO_SUBTASKS = {};
+const DEMO_ATTACH = {};   // task gid -> [{gid,name,download_url}] for the WhatsApp preview demo
 
 const DEMO_TASKS = [
   // ---- Content & Comms: shoots ----
@@ -162,7 +163,11 @@ async function demoCall(tool,args){
     case "save_dashboard_state": return {data:{gid:args.task_id||"demo-keeper"}};
     case "find_project_by_name": return {data:{gid:"demo-pr",name:"PR & Positioning",permalink_url:"https://app.asana.com/demo/pr"}};
     case "ensure_shared_project_access": return {data:{gid:"demo-membership",member:{gid:args.team_id}}};
-    case "ensure_shared_sections": return {data:[["pr-0","Idea"],["pr-1","Pitched"],["pr-2","In progress"],["pr-3","Delivered"]].map(([gid,name])=>({gid,name}))};
+    case "ensure_shared_sections": {
+      if(args.project_id==="demo-pr") return {data:[["pr-0","Idea"],["pr-1","Pitched"],["pr-2","In progress"],["pr-3","Delivered"]].map(([gid,name])=>({gid,name}))};
+      const existing=Object.values(SEC);
+      return {data:(args.names||[]).map((name,i)=>existing.find(s=>s.name===name)||{gid:"demo-section-"+i,name})};
+    }
     case "get_users": return {data:DEMO_USERS};
     case "get_tasks":
       if(args.project===CURRICULUM_PROJECT) return {data:DEMO_CURRICULUM};
@@ -206,6 +211,20 @@ async function demoCall(tool,args){
     }
     case "delete_task": {
       const i=DEMO_TASKS.findIndex(x=>x.gid===args.task); if(i>=0) DEMO_TASKS.splice(i,1);
+      return {data:{}};
+    }
+    // ---- attachments (kept in-memory as data URLs so the preview shows the
+    //      real image the user picked, without any network) ----
+    case "get_attachments": return {data:(DEMO_ATTACH[args.task_id]||[]).map(a=>({...a}))};
+    case "upload_attachment": {
+      const list=DEMO_ATTACH[args.task_id]||(DEMO_ATTACH[args.task_id]=[]);
+      const att={gid:"att-"+(_dgid++),name:args.filename||"image.jpg",
+        resource_subtype:"asana",created_at:new Date().toISOString(),
+        download_url:"data:"+(args.mime||"image/jpeg")+";base64,"+args.data_base64};
+      list.push(att); return {data:{...att}};
+    }
+    case "delete_attachment": {
+      for(const k of Object.keys(DEMO_ATTACH)) DEMO_ATTACH[k]=DEMO_ATTACH[k].filter(a=>a.gid!==args.attachment_id);
       return {data:{}};
     }
     case "create_section": return {data:{gid:"s-new-"+Date.now(),name:args.name}};
