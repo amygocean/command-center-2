@@ -325,10 +325,12 @@ function openRunSheet(shootGid){
   const rb=document.getElementById("runBrief"); if(rb) rb.onclick=(e)=>{e.preventDefault(); closeRunSheet(); openBriefModal(bt.gid);};
   w.querySelectorAll(".run-shot").forEach(r=>r.onclick=async()=>{
     const t=state.tasks.find(x=>x.gid===r.dataset.rg); if(!t) return;
-    await toggleDone(t.gid,!t.completed);
+    const completing=!t.completed;
+    const finalShot=completing&&shotsFor(s).filter(x=>!x.completed).length===1;
+    const saved=await toggleDone(t.gid,completing,{suppressCelebration:finalShot});
     const remaining=shotsFor(s).filter(x=>!x.completed).length;
     openRunSheet(shootGid);
-    if(remaining===0 && shotsFor(s).length){ confetti(); toast("That's a wrap."); }
+    if(saved&&finalShot&&remaining===0) celebrateCompletion({name:s.name,isShoot:true},{phrase:"Shot list complete. That's a wrap."});
   });
 }
 function closeRunSheet(){

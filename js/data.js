@@ -253,5 +253,6 @@ const DEFAULT_CFG = {
   showStores: true,
   msgBoard: COMMUNITIES_PROJECT, // fixed existing Communities board; never created by the app
   prBoard: null,                // resolved from shared dashboard state / Asana by name
-  commTimeFavourites: ["10:00","15:00","18:00"]
+  commTimeFavourites: ["10:00","15:00","18:00"],
+  completionCelebrations: true // personal browser preference; Asana data is unaffected
 };

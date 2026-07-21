@@ -61,6 +61,11 @@ function loadCfg(){
         s._m11=true;
       }
       if(!Array.isArray(s.commTimeFavourites)) s.commTimeFavourites=["10:00","15:00","18:00"];
+      if(!s._m12){
+        if(s.completionCelebrations===undefined) s.completionCelebrations=true;
+        s._m12=true;
+      }
+      if(s.completionCelebrations===undefined) s.completionCelebrations=true;
       localStorage.setItem(LS_KEY, JSON.stringify(s));
       return s;
     }
@@ -554,31 +559,83 @@ async function reassign(gid,personGid){
     toast(personGid==="unassigned"?"Unassigned":"Handed to "+firstName(userName(personGid)));
   }catch(e){ t.assignee=prev; renderPeople(); toast("Failed: "+e.message); }
 }
-async function toggleDone(gid,val){
-  const t=findTask(gid); if(!t) return;
-  t.completed=val; renderAll();
-  if(val){ if(t.isComms){ confetti(); toast(pick(SENT_LINES)); } else { toast(pick(DONE_LINES)); if(t.isShoot) confetti(); } }
-  else toast("Back in play");
-  try{ await call(t.isComms?"update_shared_tasks":"update_tasks",{tasks:[{task:gid,completed:val}]}); }
-  catch(e){ t.completed=!val; renderAll(); toast("Failed: "+e.message); }
+const completionPending=new Set();
+async function toggleDone(gid,val,options={}){
+  const t=findTask(gid); if(!t || completionPending.has(gid)) return false;
+  const prev=t.completed, prevAt=t.completedAt;
+  if(prev===val) return true;
+  completionPending.add(gid);
+  t.completed=val;
+  t.completedAt=val?new Date().toISOString():null;
+  renderAll();
+  if(!val) toast("Back in play");
+  try{
+    await call(t.isComms?"update_shared_tasks":"update_tasks",{tasks:[{task:gid,completed:val}]});
+    if(val && !options.suppressCelebration) celebrateCompletion(t,options);
+    return true;
+  }catch(e){
+    t.completed=prev; t.completedAt=prevAt; renderAll(); toast("Failed: "+e.message); return false;
+  }finally{ completionPending.delete(gid); }
+}
+
+/* ---- task completion moment (no dependencies) ---- */
+let completionMomentTimer=null;
+function completionLine(t,options={}){
+  if(options.phrase) return options.phrase;
+  if(t&&t.isComms) return pick(SENT_LINES);
+  if(t&&t.isShoot) return "That's a wrap.";
+  if(options.compact||t&&t.isSubtask) return pick(["Nice. One piece closer.","Ticked off.","Small win secured."]);
+  return pick(["Boom. Done and dusted.","Nailed it.","One less thing between us and launch.","Chef's kiss. That's finished."]);
+}
+function celebrateCompletion(t={},options={}){
+  const line=completionLine(t,options);
+  if(cfg.completionCelebrations===false){ toast(line); return; }
+  const reduce=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(!reduce) confetti({count:options.compact?70:150});
+  showCompletionMoment(t.name||"Task complete",line,options);
+}
+function showCompletionMoment(name,line,options={}){
+  document.querySelectorAll(".completion-moment").forEach(x=>x.remove());
+  if(completionMomentTimer) clearTimeout(completionMomentTimer);
+  const el=document.createElement("div");
+  el.className="completion-moment"+(options.compact?" compact":"");
+  el.setAttribute("role","status"); el.setAttribute("aria-live","polite");
+  el.innerHTML='<span class="completion-check" aria-hidden="true">✓</span><span class="completion-copy"><small>DONE</small><strong>'+esc(name)+'</strong><em>'+esc(line)+'</em></span>';
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add("show"));
+  completionMomentTimer=setTimeout(()=>{
+    el.classList.remove("show"); el.classList.add("out");
+    setTimeout(()=>el.remove(),320);
+  },options.compact?1500:2300);
 }
 
 /* ---- confetti (tiny, no deps) ---- */
-function confetti(){
-  const c = document.createElement("canvas");
+function confetti(options={}){
+  if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const c=document.createElement("canvas");
   c.className="confetti"; document.body.appendChild(c);
-  const ctx=c.getContext("2d"); c.width=innerWidth; c.height=innerHeight;
+  const ratio=Math.min(window.devicePixelRatio||1,2), width=innerWidth, height=innerHeight;
+  c.width=width*ratio; c.height=height*ratio; c.style.width=width+"px"; c.style.height=height+"px";
+  const ctx=c.getContext("2d"); ctx.scale(ratio,ratio);
   const colors=["#0A3D62","#00A8A8","#F7C325","#E4784D","#5BC4BF","#7A5FB0"];
-  const ps=Array.from({length:120},()=>({x:Math.random()*c.width,y:-20-Math.random()*c.height*.5,
-    r:4+Math.random()*5,vy:2+Math.random()*3.5,vx:-1.5+Math.random()*3,rot:Math.random()*6,vr:-.15+Math.random()*.3,
-    col:colors[Math.floor(Math.random()*colors.length)]}));
-  let frames=0;
+  const count=Math.max(30,Math.min(220,options.count||120));
+  const ps=Array.from({length:count},(_,i)=>({
+    x:width*(.18+Math.random()*.64), y:height+18+Math.random()*24,
+    w:5+Math.random()*7,h:3+Math.random()*5,
+    vx:(Math.random()-.5)*(5.5+Math.random()*4), vy:-(7+Math.random()*9),
+    gravity:.16+Math.random()*.08, drag:.992, rot:Math.random()*6.28, vr:(Math.random()-.5)*.35,
+    col:colors[(i+Math.floor(Math.random()*colors.length))%colors.length],life:0,max:115+Math.random()*55
+  }));
+  let frame=0;
   (function tick(){
-    ctx.clearRect(0,0,c.width,c.height);
-    ps.forEach(p=>{ p.y+=p.vy; p.x+=p.vx; p.rot+=p.vr;
-      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
-      ctx.fillStyle=p.col; ctx.fillRect(-p.r/2,-p.r/4,p.r,p.r/2); ctx.restore(); });
-    if(++frames<170) requestAnimationFrame(tick); else c.remove();
+    ctx.clearRect(0,0,width,height); let alive=false;
+    ps.forEach(p=>{
+      p.life++; if(p.life>p.max||p.y>height+35) return; alive=true;
+      p.vx*=p.drag; p.vy+=p.gravity; p.x+=p.vx; p.y+=p.vy; p.rot+=p.vr;
+      ctx.save(); ctx.globalAlpha=Math.max(0,1-p.life/p.max); ctx.translate(p.x,p.y); ctx.rotate(p.rot);
+      ctx.fillStyle=p.col; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h); ctx.restore();
+    });
+    if(alive&&frame++<190) requestAnimationFrame(tick); else c.remove();
   })();
 }
 

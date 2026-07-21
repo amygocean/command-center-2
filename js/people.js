@@ -356,8 +356,11 @@ async function completeGirlTask(gid,key){
   gc.order=gc.order.filter(id=>id!==gid);
   gc.hidden=gc.hidden.filter(id=>id!==gid);
   gc.private=gc.private.filter(id=>id!==gid);
-  saveKeeper(); renderGirls(); toast(pick(DONE_LINES));
-  try{ await call("update_tasks",{tasks:[{task:gid,completed:true}]}); }
+  saveKeeper(); renderGirls();
+  try{
+    await call("update_tasks",{tasks:[{task:gid,completed:true}]});
+    celebrateCompletion(t||{name:"Task complete"});
+  }
   catch(e){
     if(t) list.splice(i,0,t);
     gc.sections=snapshot.sections; gc.order=snapshot.order; gc.hidden=snapshot.hidden; gc.private=snapshot.private;

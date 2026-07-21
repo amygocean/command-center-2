@@ -39,6 +39,10 @@ assert.match(core,/Africa\/Johannesburg/,"Communities times are not converted in
 assert.match(core,/due_at:t\.dueAt,due_on:null/,"Dragging a timed Communities message does not preserve its time safely");
 assert.match(core,/t\.isComms\?"update_shared_tasks":"update_tasks"[\s\S]*completed:val/,"Marking a Communities message sent does not use the shared Asana identity");
 assert.match(core,/t\.isComms\?"update_shared_tasks":"update_tasks"/,"Communities rescheduling does not use the shared Asana identity");
+assert.match(core,/await call\(t\.isComms\?"update_shared_tasks":"update_tasks"[\s\S]*if\(val && !options\.suppressCelebration\) celebrateCompletion/,"Task celebration does not wait for Asana to confirm completion");
+assert.match(core,/function celebrateCompletion\(/,"Shared task-completion celebration is missing");
+assert.match(core,/prefers-reduced-motion: reduce/,"Completion celebrations do not respect reduced-motion preferences");
+assert.match(core,/completionPending=new Set\(\)/,"Rapid completion clicks are not guarded against duplicate writes");
 
 const drawer=fs.readFileSync(path.join(root,"js/drawer.js"),"utf8");
 assert.match(drawer,/create_shared_project/,"Campaign projects are not created through the shared Academy identity");
@@ -54,6 +58,8 @@ assert.match(drawer,/const proj=wantsMove\?d\.querySelector\("#dProject"\)\.valu
 assert.match(drawer,/if\(wantsMove&&!proj\)\{ toast\("Choose the board you want to move this task to"\)/,"Move mode does not require a destination board");
 assert.match(drawer,/if\(t\.projectGid\) upd\.remove_projects=\[t\.projectGid\]/,"Tasks without a current project are not handled safely");
 assert.doesNotMatch(drawer,/p\.gid===t\.projectGid\?" selected"/,"Current board is still being selected through the unsafe destination dropdown");
+assert.match(drawer,/id="sCelebrate"/,"Settings are missing the task-celebration preference");
+assert.match(drawer,/cfg\.completionCelebrations=document\.getElementById\("sCelebrate"\)\.checked/,"Task-celebration preference is not saved");
 assert.match(core,/projectGid:\(t\.projects&&t\.projects\[0\]&&t\.projects\[0\]\.gid\)\|\|null/,"The Girls tasks do not retain their current Asana project ID");
 
 const communities=fs.readFileSync(path.join(root,"js/communities.js"),"utf8");
@@ -70,10 +76,13 @@ assert.match(communities,/t\.due_at=communityDueAt\(date,time\)/,"Selected times
 const data=fs.readFileSync(path.join(root,"js/data.js"),"utf8");
 assert.match(data,/name:"Bar \/ Deli"/,"Bar / Deli is missing from Communities roles");
 assert.match(data,/commTimeFavourites: \["10:00","15:00","18:00"\]/,"Default favourite times are incorrect");
+assert.match(data,/completionCelebrations: true/,"Task completion celebrations are not enabled by default");
 
 const styles=fs.readFileSync(path.join(root,"styles.css"),"utf8");
 assert.match(styles,/\.wc-grid\{grid-auto-rows:minmax\(88px,auto\)/,"Communities calendar rows do not grow with message volume");
 assert.match(styles,/#commCal \.wc-dow,#commCal \.wc-grid\{width:max\(100%,760px\)/,"Communities calendar is not responsive on narrow screens");
+assert.match(styles,/\.completion-moment\{/,"Completion success card styling is missing");
+assert.match(styles,/@media\(prefers-reduced-motion:reduce\)/,"Reduced-motion styling for completions is missing");
 
 const asana=fs.readFileSync(path.join(root,"api/asana.js"),"utf8");
 assert.match(asana,/const parent=args\.parent_id\|\|args\.task_id[\s\S]*`\/attachments\?\$\{qs\(\{[\s\S]*parent,/,"Attachment listing does not use Asana's parent query");
@@ -83,7 +92,13 @@ assert.match(asana,/method:"POST"[\s\S]*body: form/,"Attachment upload is not po
 assert.match(asana,/projects\.gid,projects\.name/,"My Tasks loading does not request the current board ID");
 
 
+const people=fs.readFileSync(path.join(root,"js/people.js"),"utf8");
+assert.match(people,/await call\("update_tasks"[\s\S]*celebrateCompletion\(t/,"The Girls completion path does not celebrate after a successful save");
+const content=fs.readFileSync(path.join(root,"js/content.js"),"utf8");
+assert.match(content,/finalShot[\s\S]*suppressCelebration:finalShot[\s\S]*Shot list complete\. That's a wrap\./,"Final shoot shots can still trigger overlapping completion effects");
+
 const campaigns=fs.readFileSync(path.join(root,"js/campaigns.js"),"utf8");
+assert.match(campaigns,/toggleCampaignSubtask[\s\S]*celebrateCompletion\(\{name:sub\.name,isSubtask:true\},\{compact:true\}\)/,"Campaign subtasks do not use the compact completion celebration");
 assert.match(campaigns,/offset:-14,name:"Course material sent out and available to teams"/,"Course delivery is not anchored 14 days before launch");
 assert.match(campaigns,/offset:-28,name:"Shoot Day — \{\{name\}\}"/,"Shoot day is not anchored 28 days before launch");
 assert.match(campaigns,/Smart update whole plan/i,"Campaign Smart Update control is missing");

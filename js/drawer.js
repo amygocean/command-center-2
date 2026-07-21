@@ -183,6 +183,7 @@ function openSettings(){
     '<div class="fld"><label>Crew lanes</label><div class="setlist">'+peopleRows+'</div></div>'+
     '<div class="fld"><label>WhatsApp communities</label><div class="setlist">'+commRows+'</div></div>'+
     '<div class="fld"><label>OB Fit marathon (edits sync to the Curriculum board)</label><div class="setlist">'+curRows+'</div></div>'+
+    '<div class="fld"><label>Experience</label><div class="setlist"><label class="setrow celebration-setting"><input type="checkbox" id="sCelebrate" '+(cfg.completionCelebrations!==false?"checked":"")+'><span><b>Celebrate completed tasks</b><small>Confetti and a short completion moment. This is a personal browser setting.</small></span></label></div></div>'+
     '<div class="row"><div class="fld"><label>Max pages/board (100 tasks each)</label><input type="number" id="sCap" min="1" max="15" value="'+cfg.pageCap+'"></div></div>'+
     '<div class="drawer-actions"><button class="btn primary" id="sSave">Save & reload</button>'+
     '<button class="btn ghost" data-close>Cancel</button></div>'
@@ -196,6 +197,7 @@ function openSettings(){
       if(cn) c.name=cn.value.trim()||c.name; if(cc) c.color=cc.value;
     });
     cfg.pageCap=Math.max(1,Math.min(15,+document.getElementById("sCap").value||6));
+    cfg.completionCelebrations=document.getElementById("sCelebrate").checked;
     // curriculum edits -> Asana Curriculum board (create or rename "Month: Title" tasks)
     const curUpdates=[], curCreates=[];
     state.curriculum.forEach((c,i)=>{
