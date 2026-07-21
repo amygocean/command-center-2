@@ -5,8 +5,7 @@
 function openDrawer(gid){
   const t=findTask(gid); if(!t) return;
   const w=document.getElementById("drawerWrap"), d=document.getElementById("drawer");
-  const peopleOpts='<option value="unassigned">Unassigned</option>'+
-    state.users.map(u=>'<option value="'+u.gid+'"'+(t.assignee&&t.assignee.gid===u.gid?" selected":"")+'>'+esc(u.name)+'</option>').join("");
+  const peopleOpts=assigneeOptions(t.assignee?t.assignee.gid:"unassigned","unassigned");
   const currentBoardName=t.projectName||"Current Asana board";
   const projOpts='<option value="">Choose a destination board…</option>'+cfg.projects
     .filter(p=>p.gid!==t.projectGid)
@@ -140,7 +139,7 @@ function wireModalClose(){ document.querySelectorAll("#modal [data-close]").forE
 /* ---- add task ---- */
 function openAdd(){
   const projOpts=cfg.projects.map(p=>'<option value="'+p.gid+'">'+esc(p.name)+'</option>').join("");
-  const peopleOpts='<option value="">Unassigned</option>'+state.users.map(u=>'<option value="'+u.gid+'">'+esc(u.name)+'</option>').join("");
+  const peopleOpts=assigneeOptions("","");
   showModal(
     '<h2>Add task</h2>'+
     '<div class="fld"><label>Task name</label><input id="aName" placeholder="e.g. Shoot Day 12 – Winter menu"></div>'+

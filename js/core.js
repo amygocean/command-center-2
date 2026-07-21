@@ -475,6 +475,42 @@ function initials(n){ return (n||"?").split(" ").map(x=>x[0]).slice(0,2).join(""
 function esc(s){ return (s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 function userName(gid){ const u=state.users.find(x=>x.gid===gid); return u?u.name:gid; }
 function firstName(n){ return (n||"").split(" ")[0]; }
+
+// Keep the three people who receive most Academy work immediately visible in
+// every assignee picker. Match by first name or email prefix so this remains
+// stable even if Asana returns a different user order or a display name changes
+// from Jess to Jessica. Everyone else remains available alphabetically.
+const ASSIGNEE_SUGGESTIONS=[
+  {key:"amy",first:["amy"]},
+  {key:"jess",first:["jess","jessica"]},
+  {key:"caitlin",first:["caitlin"]}
+];
+function isSuggestedAssignee(user,rule){
+  const first=String(user&&user.name||"").trim().split(/\s+/)[0].toLowerCase();
+  const email=String(user&&user.email||"").toLowerCase();
+  const local=email.split("@")[0];
+  return rule.first.includes(first) || rule.first.some(name=>
+    local===name || local.startsWith(name+".") || local.startsWith(name+"_") || local.startsWith(name+"-")
+  );
+}
+function assigneeUserGroups(){
+  const remaining=state.users.slice();
+  const suggested=[];
+  ASSIGNEE_SUGGESTIONS.forEach(rule=>{
+    const ix=remaining.findIndex(user=>isSuggestedAssignee(user,rule));
+    if(ix>=0) suggested.push(remaining.splice(ix,1)[0]);
+  });
+  remaining.sort((a,b)=>String(a.name||"").localeCompare(String(b.name||""),"en",{sensitivity:"base"}));
+  return {suggested,others:remaining};
+}
+function assigneeOptions(selectedValue="",unassignedValue=""){
+  const selected=String(selectedValue==null?"":selectedValue);
+  const option=user=>'<option value="'+esc(String(user.gid))+'"'+(selected===String(user.gid)?' selected':'')+'>'+esc(user.name)+'</option>';
+  const groups=assigneeUserGroups();
+  return '<option value="'+esc(String(unassignedValue))+'"'+(selected===String(unassignedValue)?' selected':'')+'>Unassigned</option>'+
+    (groups.suggested.length?'<optgroup label="Suggested">'+groups.suggested.map(option).join("")+'</optgroup>':'')+
+    (groups.others.length?'<optgroup label="Everyone else">'+groups.others.map(option).join("")+'</optgroup>':'');
+}
 // Who is running this visit? The "Trainer" custom field is the source of
 // truth; fall back to a "trainer: X" note (demo data) then the assignee.
 function trainerOf(t){

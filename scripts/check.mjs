@@ -43,6 +43,26 @@ assert.match(core,/await call\(t\.isComms\?"update_shared_tasks":"update_tasks"[
 assert.match(core,/function celebrateCompletion\(/,"Shared task-completion celebration is missing");
 assert.match(core,/prefers-reduced-motion: reduce/,"Completion celebrations do not respect reduced-motion preferences");
 assert.match(core,/completionPending=new Set\(\)/,"Rapid completion clicks are not guarded against duplicate writes");
+assert.match(core,/const ASSIGNEE_SUGGESTIONS=\[[\s\S]*key:"amy"[\s\S]*key:"jess"[\s\S]*key:"caitlin"/,"Preferred assignees are missing or in the wrong order");
+assert.match(core,/function assigneeOptions\(/,"Shared assignee-option helper is missing");
+const assigneeStart=core.indexOf("const ASSIGNEE_SUGGESTIONS=");
+const assigneeEnd=core.indexOf("// Who is running this visit?",assigneeStart);
+assert.ok(assigneeStart>=0&&assigneeEnd>assigneeStart,"Could not isolate assignee helper for runtime test");
+const assigneeContext=vm.createContext({
+  state:{users:[
+    {gid:"u-z",name:"Zola Ndlovu",email:"zola@example.com"},
+    {gid:"u-c",name:"Caitlin Smith",email:"caitlin.smith@example.com"},
+    {gid:"u-j",name:"Jessica Pallister",email:"jessica@example.com"},
+    {gid:"u-a",name:"Amy Gray",email:"amy.gray@example.com"},
+    {gid:"u-b",name:"Brian Adams",email:"brian@example.com"}
+  ]},
+  esc:value=>String(value??"").replace(/[&<>"]/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[ch]))
+});
+vm.runInContext(core.slice(assigneeStart,assigneeEnd),assigneeContext);
+const assigneeHtml=vm.runInContext('assigneeOptions("u-b","")',assigneeContext);
+assert.ok(assigneeHtml.indexOf("Amy Gray")<assigneeHtml.indexOf("Jessica Pallister")&&assigneeHtml.indexOf("Jessica Pallister")<assigneeHtml.indexOf("Caitlin Smith"),"Suggested assignees are not ordered Amy, Jess, Caitlin");
+assert.ok(assigneeHtml.indexOf("Caitlin Smith")<assigneeHtml.indexOf("Brian Adams"),"Suggested assignees do not appear before everyone else");
+assert.match(assigneeHtml,/value="u-b" selected/,"A current non-suggested assignee is not preserved");
 
 const drawer=fs.readFileSync(path.join(root,"js/drawer.js"),"utf8");
 assert.match(drawer,/create_shared_project/,"Campaign projects are not created through the shared Academy identity");
@@ -64,7 +84,13 @@ assert.match(drawer,/call\("get_mentions",\{days:MENTION_SCAN_DAYS/,"Mentions vi
 assert.match(drawer,/Where people have @mentioned you in recent Asana task comments/,"Mentions view does not explain its Asana scope");
 assert.match(drawer,/if\(task\) openDrawer\(task\.gid\)[\s\S]*window\.open\(row\.dataset\.url/,"Mentions do not route to the app or Asana source task");
 assert.match(drawer,/ob-asana-mentions-v1:/,"Mentions are not cached per user");
+assert.match(drawer,/assigneeOptions\(t\.assignee\?t\.assignee\.gid:"unassigned","unassigned"\)/,"Task editing does not use preferred assignee suggestions");
+assert.match(drawer,/const peopleOpts=assigneeOptions\("",""\)/,"Quick task creation does not use preferred assignee suggestions");
 assert.match(core,/projectGid:\(t\.projects&&t\.projects\[0\]&&t\.projects\[0\]\.gid\)\|\|null/,"The Girls tasks do not retain their current Asana project ID");
+
+const campaigns=fs.readFileSync(path.join(root,"js/campaigns.js"),"utf8");
+assert.match(campaigns,/const people=assigneeOptions\("",""\)/,"Campaign task creation does not use preferred assignee suggestions");
+assert.match(campaigns,/assigneeOptions\(r\.assignee\|\|"",""\)/,"Smart Plan ownership does not use preferred assignee suggestions");
 
 const communities=fs.readFileSync(path.join(root,"js/communities.js"),"utf8");
 assert.match(communities,/create_shared_tasks/,"Communities tasks are not created through the shared identity");
@@ -107,7 +133,6 @@ assert.match(people,/await call\("update_tasks"[\s\S]*celebrateCompletion\(t/,"T
 const content=fs.readFileSync(path.join(root,"js/content.js"),"utf8");
 assert.match(content,/finalShot[\s\S]*suppressCelebration:finalShot[\s\S]*Shot list complete\. That's a wrap\./,"Final shoot shots can still trigger overlapping completion effects");
 
-const campaigns=fs.readFileSync(path.join(root,"js/campaigns.js"),"utf8");
 assert.match(campaigns,/toggleCampaignSubtask[\s\S]*celebrateCompletion\(\{name:sub\.name,isSubtask:true\},\{compact:true\}\)/,"Campaign subtasks do not use the compact completion celebration");
 assert.match(campaigns,/offset:-14,name:"Course material sent out and available to teams"/,"Course delivery is not anchored 14 days before launch");
 assert.match(campaigns,/offset:-28,name:"Shoot Day — \{\{name\}\}"/,"Shoot day is not anchored 28 days before launch");
@@ -262,4 +287,4 @@ assert.equal(mentionResponse.data.length,1,"Mention endpoint did not return the 
 assert.ok(fetched.some(x=>x.url.includes("followers.any=me")),"Mention endpoint did not search collaborator tasks");
 assert.ok(fetched.some(x=>x.url.endsWith("/batch")),"Mention endpoint did not batch story reads");
 
-console.log(`Verified ${files.length} code files, shared UI safeguards, real Asana mentions, Communities scheduling, and launch-anchored Smart Campaign workflows.`);
+console.log(`Verified ${files.length} code files, preferred assignee suggestions, shared UI safeguards, real Asana mentions, Communities scheduling, and launch-anchored Smart Campaign workflows.`);

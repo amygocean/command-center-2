@@ -186,3 +186,7 @@ Your Asana tokens live in an **httpOnly cookie** — the browser holds it but pa
 ---
 
 *Companion files: `Command-Center-Copilot-Handover.docx` (architecture & roadmap) and `command-center.html` (the original prototype).*
+
+## Preferred assignees
+
+Assignee pickers show Amy, Jess and Caitlin first in a Suggested group. All other workspace members remain available alphabetically, and editing a task preserves its current assignee.
