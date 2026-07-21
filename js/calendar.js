@@ -15,6 +15,15 @@ function wireCalendarControls(){
   document.getElementById("navPrev").onclick=()=>stepCursor(-1);
   document.getElementById("navNext").onclick=()=>stepCursor(1);
   document.getElementById("navToday").onclick=()=>{ state.cursor=new Date(); renderCalendar(); };
+  const commsToggle=document.getElementById("showCommunityMessages");
+  if(commsToggle){
+    commsToggle.checked=cfg.showComms!==false;
+    commsToggle.onchange=()=>{
+      cfg.showComms=commsToggle.checked;
+      saveCfg();
+      renderCalendar();
+    };
+  }
 }
 function setView(v){
   const from=VIEWS.indexOf(state.view), to=VIEWS.indexOf(v);
@@ -65,7 +74,6 @@ function renderChips(){
     (on?"Hide ":"Show ")+label,
     fn
   ));
-  layer("💬","Comms",cfg.showComms,()=>{ cfg.showComms=!cfg.showComms; saveCfg(); renderChips(); renderCalendar(); });
   layer("🎉","Occasions",cfg.showOccasions,()=>{ cfg.showOccasions=!cfg.showOccasions; saveCfg(); renderChips(); renderCalendar(); });
   layer("📍","Stores & visits",cfg.showStores,()=>{ cfg.showStores=!cfg.showStores; saveCfg(); renderChips(); renderCalendar(); });
 }
@@ -98,6 +106,8 @@ function renderCurriculumBar(){
 }
 
 function renderCalendar(dir){
+  const commsToggle=document.getElementById("showCommunityMessages");
+  if(commsToggle) commsToggle.checked=cfg.showComms!==false;
   const sl=document.getElementById("zoomSlider");
   if(sl && +sl.value!==VIEWS.indexOf(state.view)) sl.value=VIEWS.indexOf(state.view);
   document.querySelectorAll(".ztick").forEach(t=>t.classList.toggle("on",t.dataset.v===state.view));
