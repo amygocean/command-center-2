@@ -195,6 +195,13 @@ async function demoCall(tool,args){
       const t=DEMO_TASKS.find(x=>x.gid===args.task_id)||{};
       return {data:{notes:t.notes||"",comments:[{text:"Looks great — let's lock it in 🎬",created_at:new Date().toISOString(),created_by:{name:"Jessica Pallister"}}]}};
     }
+    case "get_mentions": {
+      const now=Date.now();
+      return {data:[
+        {gid:"demo-mention-1",storyGid:"demo-mention-1",source:"asana",taskGid:"t-shoot",taskName:"Shoot Day 14 — Summer Menu",taskUrl:"https://app.asana.com/demo/t-shoot",projectName:"Content & Comms",from:"Jessica Pallister",text:"@Amy can you confirm which recipes must be prioritised before the shoot brief goes out?",at:new Date(now-42*60000).toISOString()},
+        {gid:"demo-mention-2",storyGid:"demo-mention-2",source:"asana",taskGid:"t-lms",taskName:"LMS completion data check",taskUrl:"https://app.asana.com/demo/t-lms",projectName:"Day to Day",from:"Caitlin Fourie",text:"@Amy I found another duplicate learner pattern — adding the screenshots here.",at:new Date(now-26*3600000).toISOString()}
+      ],scanned_tasks:28,window_days:180,generated_at:new Date().toISOString()};
+    }
     case "update_shared_tasks":
     case "update_tasks": {
       (args.tasks||[]).forEach(u=>{ let t=DEMO_TASKS.find(x=>x.gid===u.task);

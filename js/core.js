@@ -257,6 +257,10 @@ async function loadAll(){
       toast("Display hiccup: "+rerr.message+" — try a hard refresh (⌘⇧R / Ctrl+Shift+R)");
     }
     loadCurriculum(); // async, re-renders the bar when done
+    // Mentions are workspace-wide and more expensive than the normal board
+    // load. Refresh them quietly from a short browser cache after the app is
+    // already usable, so the @ badge reflects real Asana comments.
+    if(typeof refreshAsanaMentions==="function") setTimeout(()=>refreshAsanaMentions(false),80);
   }catch(e){
     state.loading=false; state.error=e.message; renderSub();
     toast("Hmm, Asana's not talking: "+e.message);

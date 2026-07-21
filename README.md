@@ -117,6 +117,14 @@ gets the brief at 07:30 SAST on weekdays without opening the app.
 then `http://localhost:3999/?demo=1`) — the whole dashboard runs on sample data.
 Great for showing people around; nothing is written anywhere.
 
+
+## Real Asana mentions
+
+The header **@** button scans recent Asana task comments and shows where the
+signed-in person was actually mentioned. Results include the person, comment
+excerpt, task, project, date and a direct route back to the source. The scan is
+user-specific, cached briefly in the browser and can be refreshed manually.
+
 ## Smart Campaigns
 
 Each campaign is anchored to a **launch date**. The standard runway is calculated backwards—for example, course material is due 14 days before launch and the main shoot day 28 days before launch. You can edit or untick any proposed item before the campaign is created.

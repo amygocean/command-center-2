@@ -7,6 +7,7 @@
 //  Keeping this shape means the dashboard's own logic barely changed.
 // ------------------------------------------------------------------
 import { asanaFetch, getAsanaAccessToken, readSession, WORKSPACE } from "./_lib.js";
+import { mentionsFromTaskStories } from "./_mentions.js";
 
 // Reads and writes for explicitly shared app data go through ONE service token so every
 // signed-in teammate sees the same boards, regardless of what their own
@@ -274,6 +275,59 @@ export default async function handler(req, res){
         const st = await sharedFetch(req,res,`/tasks/${args.task_id}/stories?${qs({opt_fields:"text,type,created_at,created_by.name"})}`);
         p.data.comments = (st.data||[]).filter(s=>s.type==="comment").map(s=>({ text:s.text, created_at:s.created_at, created_by:s.created_by }));
         out = p; break;
+      }
+
+      // Asana does not expose its Inbox through the public API. Reconstruct the
+      // signed-in user's real @mentions by searching recently modified tasks
+      // they follow, then reading the structured user links in comment stories.
+      case "get_mentions": {
+        const days=Math.max(7,Math.min(Number(args.days)||180,365));
+        const taskLimit=Math.max(10,Math.min(Number(args.task_limit)||60,100));
+        const mentionLimit=Math.max(10,Math.min(Number(args.mention_limit)||50,100));
+        const afterDate=new Date(Date.now()-days*86400000);
+        const afterIso=afterDate.toISOString();
+        const me=await asanaFetch(req,res,`/users/me?${qs({opt_fields:"name,email"})}`);
+        let search;
+        try{
+          search=await asanaFetch(req,res,`/workspaces/${WORKSPACE}/tasks/search?${qs({
+            "followers.any":"me",
+            "modified_at.after":afterIso,
+            sort_by:"modified_at",sort_ascending:false,limit:taskLimit,
+            opt_fields:"name,permalink_url,modified_at,completed,memberships.project.gid,memberships.project.name"
+          })}`);
+        }catch(e){
+          if(e.status===402){
+            out={data:[],warning:"Asana task search is not available for this account.",scanned_tasks:0,window_days:days,generated_at:new Date().toISOString()};
+            break;
+          }
+          throw e;
+        }
+        const tasks=(search.data||[]).slice(0,taskLimit);
+        const all=[];
+        const fields="gid,type,resource_subtype,created_at,created_by.gid,created_by.name,text,html_text";
+        for(let i=0;i<tasks.length;i+=10){
+          const chunk=tasks.slice(i,i+10);
+          let results=[];
+          try{
+            const batch=await asanaFetch(req,res,"/batch",{method:"POST",body:{data:{actions:chunk.map(task=>({
+              method:"get",relative_path:`tasks/${task.gid}/stories?${qs({limit:100,opt_fields:fields})}`
+            }))}}});
+            results=(batch.data||[]).map(result=>result&&result.status_code>=200&&result.status_code<300?(result.body&&result.body.data)||[]:[]);
+          }catch(_){
+            // Older/stricter workspaces can reject an otherwise valid batch.
+            // Fall back to normal requests so the feature still works.
+            for(const task of chunk){
+              try{
+                const stories=await asanaFetch(req,res,`/tasks/${task.gid}/stories?${qs({limit:100,opt_fields:fields})}`);
+                results.push(stories.data||[]);
+              }catch(__){ results.push([]); }
+            }
+          }
+          chunk.forEach((task,index)=>all.push(...mentionsFromTaskStories(task,results[index]||[],me.data.gid,afterIso)));
+        }
+        all.sort((a,b)=>new Date(b.at||0)-new Date(a.at||0));
+        out={data:all.slice(0,mentionLimit),scanned_tasks:tasks.length,window_days:days,generated_at:new Date().toISOString()};
+        break;
       }
 
       // ---- campaigns portfolio ----
