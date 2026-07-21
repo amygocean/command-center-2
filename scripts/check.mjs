@@ -89,6 +89,9 @@ assert.match(drawer,/Show in My To-Do/,"Mentions are missing the My To-Do action
 assert.match(drawer,/function addMentionReference\(/,"Mention references cannot be added to The Girls");
 assert.match(drawer,/function setMentionsHidden\(/,"Mentions cannot be hidden and restored");
 assert.match(drawer,/function startMentionWatcher\(/,"Mentions do not refresh in the background");
+assert.match(drawer,/data-mention-filter="all"[\s\S]*data-mention-filter="hidden"/,"Mentions panel is missing All and Hidden views");
+assert.doesNotMatch(drawer,/data-mention-filter="new"/,"Separate New mentions tab returned");
+assert.match(drawer,/mention-section-label[\s\S]*New[\s\S]*Earlier/,"All mentions view does not group new mentions above earlier mentions");
 assert.match(drawer,/after_iso:afterIso/,"Mention refreshes do not use incremental scan dates");
 assert.match(drawer,/assigneeOptions\(t\.assignee\?t\.assignee\.gid:"unassigned","unassigned"\)/,"Task editing does not use preferred assignee suggestions");
 assert.match(drawer,/const peopleOpts=assigneeOptions\("",""\)/,"Quick task creation does not use preferred assignee suggestions");
@@ -128,6 +131,11 @@ assert.equal(vm.runInContext("mentionReferenceTask(mentionRefsForUser()[0]).sour
 assert.equal(vm.runInContext("mentionReferenceTask(mentionRefsForUser()[0]).isMentionRef",mentionContext),true,"The Girls reference is not distinguishable from a real Asana task");
 vm.runInContext("removeMentionReference('task-1',true)",mentionContext);
 assert.equal(vm.runInContext("mentionRefsForUser().length",mentionContext),0,"Removing a mention reference failed");
+vm.runInContext(`asanaMentions.items=[
+  {storyGid:"sort-unseen",taskGid:"task-unseen",taskName:"Older but new",from:"Jess",text:"@Amy new",at:"2026-07-21T09:00:00Z"},
+  {storyGid:"sort-seen",taskGid:"task-seen",taskName:"Newer but seen",from:"Caitlin",text:"@Amy seen",at:"2026-07-21T12:00:00Z"}
+]; mentionPanel.filter="all"; markMentionsSeen([asanaMentions.items[1]])`,mentionContext);
+assert.deepEqual(JSON.parse(vm.runInContext("JSON.stringify(mentionGroupsForPanel().map(group=>group.taskGid))",mentionContext)),["task-unseen","task-seen"],"All mentions does not place unacknowledged threads above newer seen threads");
 
 const campaigns=fs.readFileSync(path.join(root,"js/campaigns.js"),"utf8");
 assert.match(campaigns,/const people=assigneeOptions\("",""\)/,"Campaign task creation does not use preferred assignee suggestions");

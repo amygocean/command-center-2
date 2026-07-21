@@ -124,11 +124,12 @@ The header **@** button opens a right-side, scrollable mention inbox without
 adding another main app tab. It reconstructs genuine task and subtask mentions
 from accessible Asana comments and groups them by source task.
 
-Each person has their own **New**, **All** and **Hidden** states. Opening the
-panel does not acknowledge everything: a mention becomes seen when its thread
-is opened, when it is shown in My To-Do, or through the explicit **Mark all
-seen** action. Hidden mentions remain recoverable and no longer contribute to
-the badge.
+Each person has **All** and **Hidden** views. In **All**, unacknowledged
+threads appear first under a **New** heading, followed by seen threads under
+**Earlier**. Opening the panel does not acknowledge everything: a mention
+becomes seen when its thread is opened, when it is shown in My To-Do, or
+through the explicit **Mark all seen** action. Hidden mentions remain
+recoverable and no longer contribute to the badge.
 
 **Show in My To-Do** adds a linked reference in the signed-in person's Girls
 column. The reference opens the original task in the normal drawer for comments

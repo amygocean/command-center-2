@@ -392,7 +392,7 @@ const MENTION_CACHE_MS=5*60*1000;
 const MENTION_INCREMENTAL_OVERLAP_MS=15*60*1000;
 const MENTION_REF_PREFIX="mention-ref:";
 const asanaMentions={items:[],loadedAt:0,loading:null,error:null,meta:null,hydrated:false};
-const mentionPanel={filter:"new",query:"",expanded:{}};
+const mentionPanel={filter:"all",query:"",expanded:{}};
 let mentionPrefs=null,mentionWatcherStarted=false,mentionWatcherTimer=null;
 
 function mentionUserKey(){ return String((state.me&&state.me.gid)||"guest"); }
@@ -586,10 +586,18 @@ function mentionGroupsForPanel(){
   return allMentionGroups().filter(group=>{
     const items=mentionPanel.filter==="hidden"?group.hiddenItems:group.visibleItems;
     if(!items.length)return false;
-    if(mentionPanel.filter==="new"&&!items.some(m=>!mentionIsSeen(m)))return false;
     if(!q)return true;
     return [group.taskName,group.projectName,group.parentName,...items.flatMap(m=>[m.from,m.text])]
       .filter(Boolean).join(" ").toLowerCase().includes(q);
+  }).sort((a,b)=>{
+    const aItems=mentionPanel.filter==="hidden"?a.hiddenItems:a.visibleItems;
+    const bItems=mentionPanel.filter==="hidden"?b.hiddenItems:b.visibleItems;
+    if(mentionPanel.filter!=="hidden"){
+      const aNew=aItems.some(m=>!mentionIsSeen(m));
+      const bNew=bItems.some(m=>!mentionIsSeen(m));
+      if(aNew!==bNew)return bNew-aNew;
+    }
+    return new Date(bItems[0]&&bItems[0].at||0)-new Date(aItems[0]&&aItems[0].at||0);
   });
 }
 function mentionCounts(){
@@ -711,6 +719,8 @@ function renderMentionsModal(){
     const key=btn.dataset.mentionFilter; btn.classList.toggle("on",key===mentionPanel.filter);
     const count=btn.querySelector("b"); if(count)count.textContent=counts[key]||0;
   });
+  const newCount=document.getElementById("mentionNewCount");
+  if(newCount){newCount.textContent=counts.new?counts.new+" new":"";newCount.style.display=counts.new?"inline-flex":"none";}
   const search=document.getElementById("mentionSearch"); if(search&&document.activeElement!==search)search.value=mentionPanel.query;
   if(refresh){ refresh.disabled=!!asanaMentions.loading; refresh.innerHTML=asanaMentions.loading?'<span class="spin"></span> Checking…':'↻ Check now'; }
   if(metaBox){
@@ -724,31 +734,41 @@ function renderMentionsModal(){
   const warning=asanaMentions.error||asanaMentions.meta&&asanaMentions.meta.warning;
   const warningHtml=warning?'<div class="mention-warning">'+esc(warning)+(mergedMentions().length?' Showing the mentions already saved in this browser.':'')+'</div>':'';
   if(!groups.length){
-    const empty=mentionPanel.filter==="new"?"No new mentions — you are caught up.":mentionPanel.filter==="hidden"?"No hidden mentions.":"No accessible mentions match this view.";
+    const empty=mentionPanel.filter==="hidden"?"No hidden mentions.":"No accessible mentions match this view.";
     listBox.innerHTML=warningHtml+'<div class="empty">'+(asanaMentions.loading?'<span class="spin"></span> ':'')+empty+'</div>';
   }else{
+    const hasNew=mentionPanel.filter==="all"&&groups.some(group=>group.visibleItems.some(m=>!mentionIsSeen(m)));
+    let lastSection="";
     listBox.innerHTML=warningHtml+groups.map(group=>{
       const items=mentionPanel.filter==="hidden"?group.hiddenItems:group.visibleItems;
       const latest=items[0]||group.latest,expanded=!!mentionPanel.expanded[group.key],pinned=isMentionTaskPinned(group.taskGid);
       const initial=esc(String(latest&&latest.from||"?").trim().charAt(0).toUpperCase());
       const location=group.isSubtask&&group.parentName?"Subtask of "+group.parentName:group.projectName;
       const unseen=items.filter(m=>!mentionIsSeen(m)).length;
+      let section="";
+      if(mentionPanel.filter==="all"&&hasNew){
+        const sectionKey=unseen?"new":"earlier";
+        if(sectionKey!==lastSection){
+          lastSection=sectionKey;
+          section='<div class="mention-section-label '+sectionKey+'"><span>'+(sectionKey==="new"?'New':'Earlier')+'</span>'+(sectionKey==="new"?'<b>'+counts.new+'</b>':'')+'</div>';
+        }
+      }
       const comments=expanded?'<div class="mention-thread-comments">'+items.map(m=>
         '<div class="mention-comment'+(!mentionIsSeen(m)?' is-new':'')+'"><div><b>'+esc(m.from||"Someone")+'</b><span>'+esc(mentionDate(m.at))+'</span></div><p>'+esc(m.text||"Mentioned you")+'</p></div>'
       ).join("")+'</div>':'';
-      return '<article class="mention-thread'+(unseen?' has-new':'')+'" data-thread="'+esc(group.key)+'">'+
+      return section+'<article class="mention-thread'+(unseen?' has-new':'')+'" data-thread="'+esc(group.key)+'">'+
         '<div class="mention-thread-main" role="button" tabindex="0" data-mention-action="toggle" data-thread="'+esc(group.key)+'">'+
           '<div class="mention-avatar">'+initial+'</div><div class="mention-copy">'+
-            '<div class="mention-who"><b>'+esc(mentionPeopleLabel(items))+'</b> mentioned you'+(items.length>1?' '+items.length+' times':'')+'</div>'+
-            '<div class="mention-task">'+esc(group.taskName||"Untitled task")+'</div>'+
-            '<div class="mention-excerpt">'+esc(latest&&latest.text||"Mentioned you in this task")+'</div>'+
-            '<div class="mention-where">'+esc([location,mentionDate(latest&&latest.at)].filter(Boolean).join(" · "))+'</div>'+
-          '</div><div class="mention-thread-state">'+(unseen?'<span class="mention-new-dot" title="New"></span>':'')+'<span>'+(expanded?'⌃':'⌄')+'</span></div></div>'+
+            '<div class="mention-who"><b>'+esc(mentionPeopleLabel(items))+'</b> mentioned you'+(items.length>1?' '+items.length+' times':'')+'</div>'+ 
+            '<div class="mention-task">'+esc(group.taskName||"Untitled task")+'</div>'+ 
+            '<div class="mention-excerpt">'+esc(latest&&latest.text||"Mentioned you in this task")+'</div>'+ 
+            '<div class="mention-where">'+esc([location,mentionDate(latest&&latest.at)].filter(Boolean).join(" · "))+'</div>'+ 
+          '</div><div class="mention-thread-state">'+(unseen?'<span class="mention-new-dot" title="New"></span>':'')+'<span>'+(expanded?'⌃':'⌄')+'</span></div></div>'+ 
         comments+
         '<div class="mention-actions">'+
-          '<button class="btn '+(pinned?'teal':'primary')+' sm" data-mention-action="pin" data-thread="'+esc(group.key)+'">'+(pinned?'✓ In My To-Do':'Show in My To-Do')+'</button>'+
-          '<button class="btn ghost sm" data-mention-action="open" data-thread="'+esc(group.key)+'">Open task</button>'+
-          '<button class="btn ghost sm" data-mention-action="'+(mentionPanel.filter==="hidden"?'restore':'hide')+'" data-thread="'+esc(group.key)+'">'+(mentionPanel.filter==="hidden"?'Restore':'Hide')+'</button>'+
+          '<button class="btn '+(pinned?'teal':'primary')+' sm" data-mention-action="pin" data-thread="'+esc(group.key)+'">'+(pinned?'✓ In My To-Do':'Show in My To-Do')+'</button>'+ 
+          '<button class="btn ghost sm" data-mention-action="open" data-thread="'+esc(group.key)+'">Open task</button>'+ 
+          '<button class="btn ghost sm" data-mention-action="'+(mentionPanel.filter==="hidden"?'restore':'hide')+'" data-thread="'+esc(group.key)+'">'+(mentionPanel.filter==="hidden"?'Restore':'Hide')+'</button>'+ 
         '</div></article>';
     }).join("");
   }
@@ -767,9 +787,10 @@ function renderMentionsModal(){
 }
 function openMentions(){
   hydrateMentionCache(); loadMentionPrefs();
+  mentionPanel.filter=mentionPanel.filter==="hidden"?"hidden":"all";
   showModal('<div class="mention-shell"><div class="mention-sticky"><div class="mention-head"><div><h2>@ Mentions</h2><p class="hint">Notice it, deal with it, or show the original task in your to-do list.</p></div>'+ 
     '<a class="btn ghost sm" href="https://app.asana.com/0/inbox" target="_blank" rel="noopener">Asana Inbox ↗</a></div>'+ 
-    '<div class="mention-tabs"><button class="mention-tab on" data-mention-filter="new">New <b>0</b></button><button class="mention-tab" data-mention-filter="all">All <b>0</b></button><button class="mention-tab" data-mention-filter="hidden">Hidden <b>0</b></button></div>'+ 
+    '<div class="mention-tabs"><button class="mention-tab on" data-mention-filter="all">All <b>0</b><span class="mention-tab-new" id="mentionNewCount"></span></button><button class="mention-tab" data-mention-filter="hidden">Hidden <b>0</b></button></div>'+ 
     '<div class="mention-search-row"><input id="mentionSearch" placeholder="Search people, tasks or comments…"><button class="btn ghost sm" id="mentionMarkSeen">Mark all seen</button></div>'+ 
     '<div class="mention-toolbar"><span id="mentionMeta"></span><div><button class="btn ghost sm" id="mentionRefresh">↻ Check now</button><button class="btn ghost sm" id="mentionDeepRefresh" title="Reread the last six months">Deep scan</button></div></div></div>'+ 
     '<div id="mentionList" class="mention-list"></div><div class="mention-foot"><span>Hidden mentions stay recoverable. Showing a task in My To-Do never moves or reassigns it.</span><button class="btn ghost sm" data-close>Close</button></div></div>',"mention");
