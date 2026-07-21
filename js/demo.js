@@ -25,7 +25,8 @@ function _mk(proj, name, opts){
   if(opts.trainSection) cf.push({name:"Section",display_value:opts.trainSection});
   return { gid:"demo-"+(_dgid++), name,
     notes:opts.notes||"", assignee:opts.assignee?DEMO_USERS.find(u=>u.gid===opts.assignee):null,
-    due_on:opts.due||null, start_on:null, completed:!!opts.done, completed_at:opts.done?_d(-1)+"T10:00:00Z":null,
+    due_on:opts.dueAt?null:(opts.due||null), due_at:opts.dueAt||null, start_on:null,
+    completed:!!opts.done, completed_at:opts.done?_d(-1)+"T10:00:00Z":null,
     memberships:[{section:opts.section||{gid:"s-none",name:opts.sectionName||""}}],
     custom_fields:cf,
     permalink_url:"https://app.asana.com/demo", _proj:proj };
@@ -35,7 +36,8 @@ const SEC = {
   plan:{gid:SEC_PLAN,name:"Planned"},
   day:{gid:PB.day,name:"Day to Day"}, notes:{gid:PB.notes,name:"Notes"}, passion:{gid:PB.passion,name:"Passion Projects"},
   mgmt:{gid:"s-mgmt",name:"Management"}, foh1:{gid:"s-foh1",name:"Front of House 1"},
-  foh2:{gid:"s-foh2",name:"Front of House 2"}, boh:{gid:"s-boh",name:"Back of House"}, sushi:{gid:"s-sushi",name:"Sushi"}
+  foh2:{gid:"s-foh2",name:"Front of House 2"}, boh:{gid:"s-boh",name:"Back of House"},
+  bar:{gid:"s-bar",name:"Bar / Deli"}, sushi:{gid:"s-sushi",name:"Sushi"}
 };
 
 const DEMO_CAMPAIGN_SECTIONS = {
@@ -192,7 +194,8 @@ async function demoCall(tool,args){
         if(!t){ for(const arr of Object.values(DEMO_SUBTASKS)){ t=arr.find(x=>x.gid===u.task); if(t)break; } }
         if(!t) return;
         if("completed" in u) t.completed=u.completed;
-        if("due_on" in u) t.due_on=u.due_on;
+        if("due_on" in u){ t.due_on=u.due_on; t.due_at=null; }
+        if("due_at" in u){ t.due_at=u.due_at; t.due_on=null; }
         if("notes" in u) t.notes=u.notes;
         if("name" in u) t.name=u.name;
         if("assignee" in u) t.assignee=u.assignee?DEMO_USERS.find(x=>x.gid===u.assignee)||null:null;
@@ -203,7 +206,7 @@ async function demoCall(tool,args){
     case "create_tasks": {
       const made=(args.tasks||[]).map(t=>{
         const allSections=[...Object.values(SEC),...Object.values(DEMO_PROJECTS).flatMap(p=>p.sections||[])];
-        const nt=_mk(t.project_id||CC_PROJECT,t.name,{due:t.due_on,notes:t.notes,assignee:t.assignee,
+        const nt=_mk(t.project_id||CC_PROJECT,t.name,{due:t.due_on,dueAt:t.due_at,notes:t.notes,assignee:t.assignee,
           section: t.section_id ? allSections.find(s=>s.gid===t.section_id) : null});
         DEMO_TASKS.push(nt); return {gid:nt.gid,name:nt.name};
       });

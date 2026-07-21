@@ -42,6 +42,25 @@ function loadCfg(){
         s.projects = s.projects.filter(p=>p.gid!==SCHEDULE_PROJECT);
         s._m8=true;
       }
+      if(!s._m9){
+        s.communities=s.communities||[];
+        if(!s.communities.some(c=>c.key==="bar" || String(c.name||"").toLowerCase()==="bar / deli"))
+          s.communities.push({key:"bar",name:"Bar / Deli",color:"#C64B8C"});
+        s._m9=true;
+      }
+      if(!s._m10){
+        if(!Array.isArray(s.commTimeFavourites)) s.commTimeFavourites=["10:00","15:00","18:00"];
+        s._m10=true;
+      }
+      // An earlier unfinished build used 19:00 as the evening default. Only
+      // migrate that untouched default; never overwrite somebody's choices.
+      if(!s._m11){
+        const favs=Array.isArray(s.commTimeFavourites)?s.commTimeFavourites:[];
+        if(favs.length===3 && favs.includes("10:00") && favs.includes("15:00") && favs.includes("19:00"))
+          s.commTimeFavourites=["10:00","15:00","18:00"];
+        s._m11=true;
+      }
+      if(!Array.isArray(s.commTimeFavourites)) s.commTimeFavourites=["10:00","15:00","18:00"];
       localStorage.setItem(LS_KEY, JSON.stringify(s));
       return s;
     }
@@ -108,7 +127,22 @@ async function askAI(prompt, data){
 }
 
 /* ---- loading ---- */
-const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,start_on,completed,completed_at,memberships.section.name,memberships.section.gid,permalink_url,notes,custom_fields.name,custom_fields.display_value";
+const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,due_at,start_on,completed,completed_at,memberships.section.name,memberships.section.gid,permalink_url,notes,custom_fields.name,custom_fields.display_value";
+function johannesburgDateTime(value){
+  if(!value) return {date:null,time:null};
+  const date=new Date(value);
+  if(Number.isNaN(date.getTime())) return {date:null,time:null};
+  const parts=new Intl.DateTimeFormat("en-GB",{
+    timeZone:"Africa/Johannesburg",year:"numeric",month:"2-digit",day:"2-digit",
+    hour:"2-digit",minute:"2-digit",hourCycle:"h23"
+  }).formatToParts(date).reduce((out,part)=>(out[part.type]=part.value,out),{});
+  return {date:parts.year+"-"+parts.month+"-"+parts.day,time:parts.hour+":"+parts.minute};
+}
+function communityDueAt(date,time){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(date||"") || !/^\d{2}:\d{2}$/.test(time||"")) return null;
+  // South Africa remains UTC+02:00 year-round. Asana stores due_at in UTC.
+  return new Date(date+"T"+time+":00+02:00").toISOString();
+}
 async function fetchProject(p){
   let out = [], offset = null, pages = 0;
   do{
@@ -124,10 +158,11 @@ async function fetchProject(p){
       (t.custom_fields||[]).forEach(f=>{ if(f&&f.name) cf[f.name]=f.display_value; });
       const trainDateRaw = cf["Date of Training"] || null;      // Feedback board only
       const trainSupport = (cf["Trainer Support"]||"").split(",").map(s=>s.trim()).filter(Boolean);
+      const dueParts=johannesburgDateTime(t.due_at);
       out.push({
         gid:t.gid, name:t.name, notes:t.notes||"",
         assignee:t.assignee? {gid:t.assignee.gid,name:t.assignee.name}:null,
-        due:t.due_on||null, start:t.start_on||null,
+        due:t.due_on||dueParts.date||null, dueAt:t.due_at||null, sendTime:dueParts.time||null, start:t.start_on||null,
         completed:!!t.completed, completedAt:t.completed_at||null,
         sectionName: sec?sec.name:"", sectionGid: sec?sec.gid:"",
         url:t.permalink_url,
@@ -456,7 +491,11 @@ function occasionsOn(dt){
   return [...asana.map(a=>({name:a.name, gid:a.gid})), ...app];
 }
 function tasksOn(dt){ return visibleTasks().filter(t=>t.due && sameDay(pd(t.due),dt)); }
-function commsOn(dt){ return state.tasks.filter(t=>t.isComms && !t.isKeeper && t.due && sameDay(pd(t.due),dt)); }
+function commsOn(dt){
+  return state.tasks
+    .filter(t=>t.isComms && !t.isKeeper && t.due && sameDay(pd(t.due),dt))
+    .sort((a,b)=>(a.sendTime||"99:99").localeCompare(b.sendTime||"99:99") || String(a.name||"").localeCompare(String(b.name||"")));
+}
 function campaignsOn(dt){
   return (cfg.campaigns||[]).filter(c=>{ const s=pd(c.start),e=pd(c.due); return s&&e&&dt>=s&&dt<=e; });
 }
@@ -477,9 +516,18 @@ function purposeOf(t){
 /* ---- write-backs ---- */
 async function reschedule(gid,dateStr){
   const t=findTask(gid); if(!t) return;
-  const prev=t.due; t.due=dateStr; renderCalendar(); renderPeople(); renderCommunities();
-  try{ await call("update_tasks",{tasks:[{task:gid,due_on:dateStr}]}); toast("Rescheduled → "+dateStr); renderGreeting(); }
-  catch(e){ t.due=prev; renderCalendar(); toast("Failed: "+e.message); }
+  const prev=t.due, prevAt=t.dueAt; t.due=dateStr;
+  if(t.isComms&&t.sendTime) t.dueAt=communityDueAt(dateStr,t.sendTime);
+  renderCalendar(); renderPeople(); renderCommunities();
+  const fields=t.isComms
+    ? (t.sendTime?{task:gid,due_at:t.dueAt,due_on:null}:{task:gid,due_on:dateStr,due_at:null})
+    : {task:gid,due_on:dateStr};
+  try{
+    await call(t.isComms?"update_shared_tasks":"update_tasks",{tasks:[fields]});
+    toast("Rescheduled → "+dateStr+(t.sendTime?" at "+t.sendTime:"")); renderGreeting();
+  }catch(e){
+    t.due=prev; t.dueAt=prevAt; renderCalendar(); renderCommunities(); toast("Failed: "+e.message);
+  }
 }
 async function reassign(gid,personGid){
   const t=state.tasks.find(x=>x.gid===gid); if(!t) return;
@@ -496,7 +544,7 @@ async function toggleDone(gid,val){
   t.completed=val; renderAll();
   if(val){ if(t.isComms){ confetti(); toast(pick(SENT_LINES)); } else { toast(pick(DONE_LINES)); if(t.isShoot) confetti(); } }
   else toast("Back in play");
-  try{ await call("update_tasks",{tasks:[{task:gid,completed:val}]}); }
+  try{ await call(t.isComms?"update_shared_tasks":"update_tasks",{tasks:[{task:gid,completed:val}]}); }
   catch(e){ t.completed=!val; renderAll(); toast("Failed: "+e.message); }
 }
 

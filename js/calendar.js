@@ -188,7 +188,8 @@ function pillHTML(t){
 }
 function commsPillHTML(t){
   const c=communityOf(t);
-  return '<span class="pill wa'+(t.completed?" done":"")+'" draggable="true" data-gid="'+t.gid+'" style="--pc:'+(c?c.color:"#7A5FB0")+'" title="'+esc(t.name)+(c?' → '+c.name:'')+'">'+esc(t.name.replace(/^\[.+?\]\s*/,""))+'</span>';
+  return '<span class="pill wa'+(t.completed?" done":"")+'" draggable="true" data-gid="'+t.gid+'" style="--pc:'+(c?c.color:"#7A5FB0")+'" title="'+esc(t.name)+(c?' → '+c.name:'')+(t.sendTime?' · '+t.sendTime:'')+'">'+
+    (t.sendTime?'<b class="pill-time">'+t.sendTime+'</b> ':'')+esc(t.name.replace(/^\[.+?\]\s*/,""))+'</span>';
 }
 
 /* ---- MONTH ---- */

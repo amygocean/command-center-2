@@ -18,7 +18,8 @@ function openDrawer(gid){
       (pu?' · '+pu.label:"")+'</div>'+
     '<div class="fld"><label>Name</label><input id="dName" value="'+esc(t.name)+'"></div>'+
     '<div class="fld"><label>Description</label><textarea id="dNotes" placeholder="Add a description…">'+esc(t.notes||"")+'</textarea></div>'+
-    '<div class="row"><div class="fld"><label>Due date</label><input type="date" id="dDue" value="'+(t.due||"")+'"></div>'+
+    '<div class="row"><div class="fld"><label>'+(t.isComms?'Send date':'Due date')+'</label><input type="date" id="dDue" value="'+(t.due||"")+'"></div>'+
+    (t.isComms?'<div class="fld"><label>Send time</label><input type="time" id="dTime" step="300" value="'+(t.sendTime||"")+'"></div>':'')+
     '<div class="fld"><label>Assignee</label><select id="dAssignee">'+peopleOpts+'</select></div></div>'+
     '<div class="fld"><label>Board (move task between projects)</label><select id="dProject">'+projOpts+'</select></div>'+
     '<div class="fld" id="dSecWrap" style="display:none"><label>Section in new board</label><select id="dSection"><option value="">(no section)</option></select></div>'+
@@ -62,18 +63,28 @@ function openDrawer(gid){
   d.querySelector("#dSave").onclick=async()=>{
     const name=d.querySelector("#dName").value.trim();
     const due=d.querySelector("#dDue").value||null;
+    const sendTime=t.isComms&&d.querySelector("#dTime")?d.querySelector("#dTime").value:"";
+    if(sendTime&&!due){ toast("Pick a send date before choosing a time"); return; }
     const asg=d.querySelector("#dAssignee").value;
     const proj=d.querySelector("#dProject").value;
     const moved = proj && proj!==t.projectGid;
     const notes=d.querySelector("#dNotes").value;
-    const upd={task:gid}; if(name&&name!==t.name)upd.name=name; upd.due_on=due; upd.notes=notes;
+    const upd={task:gid}; if(name&&name!==t.name)upd.name=name;
+    if(t.isComms){
+      // due_on and due_at are mutually exclusive in Asana. Explicitly clear
+      // the other field so switching between timed and date-only stays safe.
+      if(due&&sendTime){ upd.due_at=communityDueAt(due,sendTime); upd.due_on=null; }
+      else if(due){ upd.due_on=due; upd.due_at=null; }
+      else { upd.due_on=null; upd.due_at=null; }
+    }else upd.due_on=due;
+    upd.notes=notes;
     upd.assignee = asg==="unassigned"?null:asg;
     if(moved){ const sec=d.querySelector("#dSection").value;
       upd.add_projects=[sec?{project_id:proj,section_id:sec}:{project_id:proj}]; upd.remove_projects=[t.projectGid]; }
-    try{ await call("update_tasks",{tasks:[upd]});
+    try{ await call(t.isComms?"update_shared_tasks":"update_tasks",{tasks:[upd]});
       closeDrawer();
       if(moved){ toast("Moved to "+(cfg.projects.find(p=>p.gid===proj)||{}).name); loadAll(); }
-      else { t.name=name||t.name; t.due=due; t.notes=notes; t.assignee=asg==="unassigned"?null:{gid:asg,name:userName(asg)}; renderAll(); toast("Saved ✓"); }
+      else { t.name=name||t.name; t.due=due; t.sendTime=sendTime||null; t.dueAt=(due&&sendTime)?communityDueAt(due,sendTime):null; t.notes=notes; t.assignee=asg==="unassigned"?null:{gid:asg,name:userName(asg)}; renderAll(); toast("Saved ✓"); }
     }catch(e){ toast("Failed: "+e.message); }
   };
   d.querySelector("#dDone").onclick=()=>{ toggleDone(gid,!t.completed); closeDrawer(); };

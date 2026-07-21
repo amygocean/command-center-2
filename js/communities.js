@@ -13,7 +13,7 @@ function wireCommunityControls(){
   document.getElementById("wcPrev").onclick=()=>{ commCursor.setMonth(commCursor.getMonth()-1); renderCommunities(); };
   document.getElementById("wcNext").onclick=()=>{ commCursor.setMonth(commCursor.getMonth()+1); renderCommunities(); };
   const nameInput=document.getElementById("waName");
-  if(nameInput) nameInput.onkeydown=e=>{ if(e.key==="Enter") addWAMessage(); };
+  if(nameInput) nameInput.onkeydown=e=>{ if(e.key==="Enter"&&!e.shiftKey) addWAMessage(); };
   const fileInput=document.getElementById("waComposeFile");
   if(fileInput) fileInput.onchange=e=>handleComposeImage(e.target);
 }
@@ -54,6 +54,46 @@ function renderCommLegend(){
 }
 
 /* ---- composer ---- */
+function commValidTime(value){
+  const match=String(value||"").match(/^(\d{2}):(\d{2})$/);
+  if(!match) return false;
+  const hour=Number(match[1]), minute=Number(match[2]);
+  return hour>=0&&hour<24&&minute>=0&&minute<60;
+}
+function commFriendlyTime(value){
+  if(!commValidTime(value)) return "";
+  const hour=Number(value.slice(0,2)), minute=value.slice(3);
+  return (hour%12||12)+":"+minute+" "+(hour<12?"AM":"PM");
+}
+function commScheduleLabel(t){
+  if(!t.due) return "no date";
+  return pd(t.due).toDateString().slice(0,10)+(t.sendTime?" · "+t.sendTime:"");
+}
+function renderCommTimePicker(){
+  const input=document.getElementById("waTime");
+  const favBox=document.getElementById("waTimeFavs");
+  const star=document.getElementById("waTimeStar");
+  if(!input||!favBox||!star) return;
+  const favs=[...new Set((cfg.commTimeFavourites||[]).filter(commValidTime))].sort();
+  favBox.innerHTML=favs.length
+    ? favs.map(time=>'<button type="button" class="wa-time-fav'+(input.value===time?' on':'')+'" data-time="'+time+'"><span>★</span>'+time+'</button>').join("")
+    : '<span class="hint">No favourite times yet.</span>';
+  favBox.querySelectorAll("[data-time]").forEach(button=>button.onclick=()=>{
+    input.value=button.dataset.time; renderCommTimePicker();
+  });
+  const selected=commValidTime(input.value)?input.value:"";
+  const isFavourite=selected&&favs.includes(selected);
+  star.disabled=!selected;
+  star.textContent=isFavourite?"★ Unfavourite":"☆ Favourite";
+  input.onchange=renderCommTimePicker;
+  star.onclick=()=>{
+    const time=input.value; if(!commValidTime(time)) return;
+    const next=new Set(cfg.commTimeFavourites||[]);
+    if(next.has(time)) next.delete(time); else next.add(time);
+    cfg.commTimeFavourites=[...next].filter(commValidTime).sort();
+    saveCfg(); renderCommTimePicker();
+  };
+}
 function renderCommComposer(){
   const box=document.getElementById("commTargets"); if(!box) return;
   box.innerHTML = cfg.communities.map(c=>
@@ -63,6 +103,7 @@ function renderCommComposer(){
     pr.innerHTML='<option value="">purpose (optional)</option>'+MSG_PURPOSES.map(p=>'<option value="'+p.key+'">'+p.label+'</option>').join("");
     pr.dataset.filled="1";
   }
+  renderCommTimePicker();
   renderComposeImageArea();
 }
 function renderComposeImageArea(){
@@ -91,9 +132,15 @@ function commTitleFromBody(body){
   return first.trim().replace(/\s+/g," ").slice(0,72);
 }
 async function addWAMessage(){
-  const titleEl=document.getElementById("waName"), msgEl=document.getElementById("waMessage"), dt=document.getElementById("waDate"), pr=document.getElementById("waPurpose");
+  const titleEl=document.getElementById("waName");
+  const msgEl=document.getElementById("waMessage");
+  const dt=document.getElementById("waDate");
+  const tm=document.getElementById("waTime");
+  const pr=document.getElementById("waPurpose");
   const body=msgEl.value.trim(); if(!body){toast("Write the WhatsApp message first");return;}
   const name=titleEl.value.trim()||commTitleFromBody(body);
+  const date=dt.value, time=tm.value;
+  if(time&&!date){toast("Pick a send date before choosing a time");return;}
   const targets=[...document.querySelectorAll("#commTargets input:checked")].map(i=>cfg.communities.find(c=>c.key===i.value)).filter(Boolean);
   if(!targets.length){ toast("Pick at least one community"); return; }
   const board = await ensureMsgBoard(); if(!board) return;
@@ -101,7 +148,8 @@ async function addWAMessage(){
   const notes = body+(pr.value?"\n\n#purpose:"+pr.value:"");
   const tasks = targets.map(c=>{
     const t={name, project_id:board, notes};
-    if(dt.value) t.due_on=dt.value;
+    if(date&&time) t.due_at=communityDueAt(date,time);
+    else if(date) t.due_on=date;
     if(secMap && secMap[c.name]) t.section_id=secMap[c.name];
     else t.name="["+c.name+"] "+name;
     return t;
@@ -118,16 +166,13 @@ async function addWAMessage(){
     if(commComposeImage){
       btn.textContent="Uploading image…";
       const uploads=await Promise.allSettled(created.map(t=>call("upload_attachment",{
-        task_id:t.gid,
-        filename:commComposeImage.filename,
-        mime:commComposeImage.mime,
-        data_base64:commComposeImage.base64
+        task_id:t.gid, filename:commComposeImage.filename, mime:commComposeImage.mime, data_base64:commComposeImage.base64
       })));
       uploadFailures=uploads.filter(r=>r.status==="rejected").length;
     }
-    titleEl.value=""; msgEl.value=""; dt.value=""; pr.value=""; commComposeImage=null;
+    titleEl.value=""; msgEl.value=""; dt.value=""; tm.value=""; pr.value=""; commComposeImage=null;
     document.querySelectorAll("#commTargets input:checked").forEach(i=>i.checked=false);
-    renderComposeImageArea();
+    renderCommTimePicker(); renderComposeImageArea();
     let successMessage;
     if(failed.length) successMessage="Created "+created.length+"; "+failed.length+" task"+(failed.length===1?"":"s")+" failed";
     else if(uploadFailures) successMessage="Messages queued; "+uploadFailures+" image upload"+(uploadFailures===1?"":"s")+" failed";
@@ -162,35 +207,35 @@ function renderCommCalendar(){
   const gridStart=new Date(first); gridStart.setDate(1-start);
   const today=todayD();
   const msgs=commMsgs().filter(t=>!commFilter || (communityOf(t)&&communityOf(t).key===commFilter));
-  let html='<div class="dow">'+DOW.map(d=>"<div>"+d+"</div>").join("")+'</div><div class="grid wc-grid">';
+  let html='<div class="dow wc-dow">'+DOW.map(d=>"<div>"+d+"</div>").join("")+'</div><div class="grid wc-grid">';
   for(let i=0;i<42;i++){
     const dt=new Date(gridStart); dt.setDate(gridStart.getDate()+i);
     const dim=dt.getMonth()!==c.getMonth();
     const dstr=iso(dt);
-    const dayMsgs=msgs.filter(t=>t.due===dstr);
+    const dayMsgs=msgs.filter(t=>t.due===dstr).sort((a,b)=>(a.sendTime||"99:99").localeCompare(b.sendTime||"99:99") || String(a.name||"").localeCompare(String(b.name||"")));
     const byComm={};
     dayMsgs.forEach(t=>{ const cm=communityOf(t); const k=cm?cm.name:"?"; byComm[k]=(byComm[k]||0)+1; });
     const busy=Object.values(byComm).some(n=>n>3);
     html+='<div class="cell wc-cell'+(dim?" dim":"")+(sameDay(dt,today)?" today":"")+'" data-date="'+dstr+'">'+
       '<span class="dnum">'+dt.getDate()+(busy?' <span title="More than 3 to one community — easy tiger">🔥</span>':'')+'</span>';
-    dayMsgs.slice(0,3).forEach(t=>{
+    dayMsgs.forEach(t=>{
       const cm=communityOf(t);
-      html+='<span class="wmsg'+(t.completed?" sent":"")+'" data-gid="'+t.gid+'" style="--cc:'+(cm?cm.color:"#999")+'" title="'+esc(t.name)+(cm?" → "+cm.name:"")+(t.completed?" · sent ✓":"")+'">'+
-        (t.completed?"✓ ":"")+esc(t.name.replace(/^\[.+?\]\s*/,""))+'</span>';
+      html+='<button type="button" class="wmsg'+(t.completed?" sent":"")+'" data-gid="'+t.gid+'" style="--cc:'+(cm?cm.color:"#999")+'" title="'+esc(t.name)+(cm?" → "+cm.name:"")+(t.sendTime?" · "+t.sendTime:"")+(t.completed?" · sent ✓":"")+'">'+
+        (t.completed?'<span class="wmsg-check">✓</span> ':"")+(t.sendTime?'<b class="wmsg-time">'+t.sendTime+'</b> ':"")+esc(t.name.replace(/^\[.+?\]\s*/,""))+'</button>';
     });
-    if(dayMsgs.length>3) html+='<span class="more">+'+(dayMsgs.length-3)+'</span>';
     html+='</div>';
   }
   cal.innerHTML=html+'</div>';
   cal.querySelectorAll(".wmsg").forEach(m=>m.onclick=()=>openCommPreview(m.dataset.gid));
 }
-
 /* ---- upcoming list ---- */
 function renderCommList(){
   const box=document.getElementById("waList"); if(!box) return;
   const today=todayD();
   let msgs=commMsgs().filter(t=>!commFilter || (communityOf(t)&&communityOf(t).key===commFilter));
-  const upcoming=msgs.filter(t=>!t.completed).sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1).slice(0,12);
+  const upcoming=msgs.filter(t=>!t.completed)
+    .sort((a,b)=>((a.due||"9999")+"T"+(a.sendTime||"99:99")).localeCompare((b.due||"9999")+"T"+(b.sendTime||"99:99")))
+    .slice(0,12);
   if(!upcoming.length){ box.innerHTML='<div class="empty">Nothing queued yet.</div>'; return; }
   box.innerHTML=upcoming.map(t=>{
     const cm=communityOf(t); const pu=purposeOf(t);
@@ -198,7 +243,7 @@ function renderCommList(){
     return '<div class="warow" data-gid="'+t.gid+'">'+
       '<span class="wc-dot" style="background:'+(cm?cm.color:"#999")+'" title="'+(cm?esc(cm.name):"no community")+'"></span>'+
       '<span class="wa-txt">'+esc(t.name.replace(/^\[.+?\]\s*/,""))+
-        '<span class="wa-meta">'+(cm?esc(cm.name):"—")+(pu?" · "+pu.label:"")+(t.due?' · <b class="'+(od?"overdue":"")+'">'+(od?"⚠ ":"")+pd(t.due).toDateString().slice(0,10)+'</b>':' · no date')+'</span></span>'+
+        '<span class="wa-meta">'+(cm?esc(cm.name):"—")+(pu?" · "+pu.label:"")+(t.due?' · <b class="'+(od?"overdue":"")+'">'+(od?"⚠ ":"")+pd(t.due).toDateString().slice(0,10)+(t.sendTime?" · "+t.sendTime:"")+'</b>':' · no date')+'</span></span>'+
       '<button class="btn teal sm wa-sent" data-gid="'+t.gid+'">Sent ✓</button></div>';
   }).join("");
   box.querySelectorAll(".warow").forEach(r=>r.onclick=e=>{ if(!e.target.closest(".wa-sent")) openCommPreview(r.dataset.gid); });
@@ -281,10 +326,10 @@ function commImageAtt(list){
 function commImgUrl(att){ return att?(att.download_url||att.view_url||null):null; }
 function waNow(){ const d=new Date(); let h=d.getHours(); const m=d.getMinutes(); const ap=h<12?"AM":"PM"; h=h%12||12; return h+":"+String(m).padStart(2,"0")+" "+ap; }
 function commImgHtml(url){ return url?'<div class="wa-img"><img src="'+esc(url)+'" alt="attachment"></div>':''; }
-function commBubbleInner(url,text){
+function commBubbleInner(url,text,sendTime){
   return commImgHtml(url)+
     '<div class="wa-text" id="waText">'+(text?esc(text).replace(/\n/g,"<br>"):'<span class="wa-ph">Your message will appear here…</span>')+'</div>'+
-    '<div class="wa-time">'+waNow()+'<span class="wa-tick">✓✓</span></div>';
+    '<div class="wa-time">'+(sendTime||waNow())+'<span class="wa-tick">✓✓</span></div>';
 }
 
 let commPrevAtt=[];      // attachments for the message currently in the preview
@@ -302,8 +347,9 @@ async function openCommPreview(gid){
     '<div class="wa-prev">'+
       '<div class="wa-prev-h"><h2>Message preview</h2><span class="wa-prev-sub">'+
         (cm?'<span class="wa-comm" style="--cc:'+cm.color+'"><i></i>'+esc(cm.name)+'</span>':'')+
-        (pu?'<span class="wa-purpose">'+esc(pu.label)+'</span>':'')+'</span></div>'+
-      '<div class="wa-stage"><div class="wa-bubble" id="waBubble">'+commBubbleInner(null, previewText)+'</div>'+
+        (pu?'<span class="wa-purpose">'+esc(pu.label)+'</span>':'')+
+        (t.due?'<span class="wa-purpose">📅 '+esc(commScheduleLabel(t))+'</span>':'')+'</span></div>'+
+      '<div class="wa-stage"><div class="wa-bubble" id="waBubble">'+commBubbleInner(null, previewText, t.sendTime)+'</div>'+
         '<div class="wa-stage-label">how it looks on WhatsApp</div></div>'+
       '<div class="fld"><label>Message text</label><textarea id="waMsg" placeholder="Write the message you\'ll send…">'+esc(previewText)+'</textarea></div>'+
       '<div class="wa-imgrow" id="waImgRow"><span class="hint" style="margin:0"><span class="spin"></span> checking for an image…</span></div>'+

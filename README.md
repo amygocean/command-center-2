@@ -121,8 +121,11 @@ Great for showing people around; nothing is written anywhere.
   cached in the browser immediately, then synced to Asana with automatic retry.
 - Prep-kit tasks are named `「prep」 … — <shoot name>` so the app can track them.
 - Communities uses the existing Asana project `1216476690596926`; the app no
-  longer creates a second message board. Each community is a section, and
-  message purpose is stored as `#purpose:<tag>` in the task notes.
+  longer creates a second message board. Each community—including Bar / Deli—is
+  a section, and message purpose is stored as `#purpose:<tag>` in the task notes.
+  Optional send times are stored as Asana `due_at` timestamps, with personal
+  favourite-time shortcuts defaulting to 10:00, 15:00 and 18:00. The Communities
+  calendar shows every planned message and grows each week row to fit its busiest day.
 - The OB Fit month bar reads the Curriculum board when tasks are named
   `January: <focus>` etc. — edit there or in Settings, both stay in sync.
 - Holidays/occasions (ZA · CY · UK + food days) live in `js/data.js`, not Asana.

@@ -98,6 +98,7 @@ const COMMUNITIES_DEFAULT = [
   {key:"foh1", name:"Front of House 1", color:"#00A8A8"},
   {key:"foh2", name:"Front of House 2", color:"#5BC4BF"},
   {key:"boh",  name:"Back of House",  color:"#E4784D"},
+  {key:"bar",  name:"Bar / Deli",     color:"#C64B8C"},
   {key:"sushi",name:"Sushi",          color:"#7A5FB0"}
 ];
 const MSG_PURPOSES = [
@@ -251,5 +252,6 @@ const DEFAULT_CFG = {
   showOccasions: true,
   showStores: true,
   msgBoard: COMMUNITIES_PROJECT, // fixed existing Communities board; never created by the app
-  prBoard: null                 // resolved from shared dashboard state / Asana by name
+  prBoard: null,                // resolved from shared dashboard state / Asana by name
+  commTimeFavourites: ["10:00","15:00","18:00"]
 };
