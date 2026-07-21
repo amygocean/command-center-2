@@ -120,10 +120,15 @@ Great for showing people around; nothing is written anywhere.
 
 ## Real Asana mentions
 
-The header **@** button scans recent Asana task comments and shows where the
-signed-in person was actually mentioned. Results include the person, comment
-excerpt, task, project, date and a direct route back to the source. The scan is
-user-specific, cached briefly in the browser and can be refreshed manually.
+The header **@** button scans recent Asana comments and shows where the signed-in
+person was genuinely @mentioned. The scanner checks followed top-level tasks,
+followed subtasks, Academy-project work and subtasks discovered directly from
+recent parent tasks. Results include the person, comment excerpt, task or
+subtask, parent task, project, date and a route back to the source.
+
+The panel reports its scan counts and displays permission or Stories-scope
+failures instead of silently presenting them as zero mentions. Results are
+user-specific, cached for five minutes and can be refreshed manually.
 
 ## Smart Campaigns
 

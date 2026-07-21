@@ -1,48 +1,57 @@
-# Real Asana Mentions
+# Real Asana Mentions — deeper subtask scan
+
+## Why the first version could miss genuine mentions
+
+The original panel searched only a limited group of recently followed tasks and
+then read the first page of comments. Two failures were hidden:
+
+- subtasks were not searched as their own task type;
+- comment-reading errors were silently treated as "no mentions".
+
+That could produce an empty panel even when the signed-in person had genuinely
+been @mentioned.
 
 ## What changed
 
-The header **@** panel now shows real places where the signed-in person was
-mentioned in Asana task comments, including tasks outside the Academy boards
-already loaded into the app.
+The **@** panel now reconstructs task-comment mentions through several paths:
 
-Each mention includes:
+1. recent followed top-level tasks;
+2. recent followed subtasks, using Asana's explicit `is_subtask=true` filter;
+3. recent tasks from the Academy projects loaded by the Command Center;
+4. direct subtask discovery from recent parent tasks, including subtasks that
+   are not independently added to a project;
+5. browser-loaded tasks as immediate seeds while Asana search indexing catches up.
 
-- Who mentioned you
-- The task name
-- The actual comment excerpt
-- The task's project when available
-- The mention date or time
-- A direct route to the source task
+For every candidate task or subtask, the server reads paginated comment stories
+and matches the signed-in user's exact Asana GID in the structured rich-text
+mention link.
 
-When the source task is already loaded in the Command Center, it opens in the
-normal task drawer. Otherwise it opens directly in Asana.
+## Better failure handling
 
-## How the scan works
+- Comment reads first use the signed-in person's OAuth session.
+- When available, `ASANA_SHARED_PAT` is used as a fallback for Academy work the
+  shared identity can access.
+- The panel now reports how many tasks, subtasks and comments were scanned.
+- Permission, task-search and Stories-scope failures are shown as warnings
+  instead of being converted into a false empty result.
+- The browser cache key was changed, so an empty result saved by the old scanner
+  is not reused after deployment.
 
-Asana does not expose the user's Inbox through its public API. The app therefore:
+## What the panel shows
 
-1. Searches recently modified tasks followed by the signed-in user.
-2. Reads their comment stories in batches.
-3. Detects Asana's structured rich-text user links for the signed-in user's GID.
-4. Returns the newest 60 mentions from the last 180 days.
+Each result includes:
 
-Mentions created from inside this app are merged into the list immediately while
-Asana's search index catches up.
+- who mentioned you;
+- the real comment excerpt;
+- the task or subtask name;
+- the parent task for subtasks;
+- the project when available;
+- the mention date;
+- a direct route to the task in the app or Asana.
 
-## Performance and privacy
+## Honest boundary
 
-- Results are cached in that person's browser for five minutes.
-- The scan uses the signed-in person's own Asana OAuth session.
-- The cache is stored separately per Asana user.
-- No additional environment variable or API key is required.
-- A manual **Refresh** button is available in the Mentions panel.
-- The panel also includes a direct link to the full Asana Inbox.
-
-## Honest limitations
-
-- The public API does not provide an exact unread Inbox count.
-- The panel scans task-comment mentions, not every possible Asana notification.
-- Results are limited to recently active collaborator tasks from the last six months.
-- If Asana task search is unavailable for the account, the panel continues to
-  show mentions made from within the Command Center and explains the limitation.
+Asana does not expose the Inbox notification feed through this API workflow.
+The panel reconstructs genuine user mentions from accessible task and subtask
+comments from the last 180 days. It cannot show comments on work that neither
+the signed-in person nor the configured shared Asana identity may read.

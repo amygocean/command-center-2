@@ -199,8 +199,9 @@ async function demoCall(tool,args){
       const now=Date.now();
       return {data:[
         {gid:"demo-mention-1",storyGid:"demo-mention-1",source:"asana",taskGid:"t-shoot",taskName:"Shoot Day 14 — Summer Menu",taskUrl:"https://app.asana.com/demo/t-shoot",projectName:"Content & Comms",from:"Jessica Pallister",text:"@Amy can you confirm which recipes must be prioritised before the shoot brief goes out?",at:new Date(now-42*60000).toISOString()},
-        {gid:"demo-mention-2",storyGid:"demo-mention-2",source:"asana",taskGid:"t-lms",taskName:"LMS completion data check",taskUrl:"https://app.asana.com/demo/t-lms",projectName:"Day to Day",from:"Caitlin Fourie",text:"@Amy I found another duplicate learner pattern — adding the screenshots here.",at:new Date(now-26*3600000).toISOString()}
-      ],scanned_tasks:28,window_days:180,generated_at:new Date().toISOString()};
+        {gid:"demo-mention-2",storyGid:"demo-mention-2",source:"asana",taskGid:"t-lms",taskName:"LMS completion data check",taskUrl:"https://app.asana.com/demo/t-lms",projectName:"Day to Day",from:"Caitlin Fourie",text:"@Amy I found another duplicate learner pattern — adding the screenshots here.",at:new Date(now-26*3600000).toISOString()},
+        {gid:"demo-mention-3",storyGid:"demo-mention-3",source:"asana",taskGid:"st-shot-1",taskName:"Capture final plated mussels",taskUrl:"https://app.asana.com/demo/st-shot-1",isSubtask:true,parentGid:"t-shoot",parentName:"Shoot Day 14 — Summer Menu",projectName:"Content & Comms",from:"Jessica Pallister",text:"@Amy please add the half-shell comparison before we close the shot list.",at:new Date(now-49*3600000).toISOString()}
+      ],scanned_tasks:42,scanned_subtasks:17,scanned_comments:86,window_days:180,generated_at:new Date().toISOString()};
     }
     case "update_shared_tasks":
     case "update_tasks": {

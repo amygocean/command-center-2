@@ -389,7 +389,7 @@ const MENTION_SCAN_DAYS=180;
 const MENTION_CACHE_MS=5*60*1000;
 const asanaMentions={items:[],loadedAt:0,loading:null,error:null,meta:null,hydrated:false};
 function mentionUserKey(){ return String((state.me&&state.me.gid)||"guest"); }
-function mentionCacheKey(){ return "ob-asana-mentions-v1:"+mentionUserKey(); }
+function mentionCacheKey(){ return "ob-asana-mentions-v2:"+mentionUserKey(); }
 function mentionSeenKey(){ return "ob_at_seen:"+mentionUserKey(); }
 function hydrateMentionCache(){
   if(asanaMentions.hydrated) return;
@@ -433,10 +433,24 @@ async function refreshAsanaMentions(force=false){
   asanaMentions.error=null;
   asanaMentions.loading=(async()=>{
     try{
-      const res=await call("get_mentions",{days:MENTION_SCAN_DAYS,task_limit:60,mention_limit:60});
+      const projectIds=[...new Set([
+        ...(cfg.projects||[]).map(project=>project.gid),PB.proj,CC_PROJECT,WA_PROJECT,COMMUNITIES_PROJECT,
+        BUGS_PROJECT,VISITS_PROJECT,SCHEDULE_PROJECT,REVAMP_PROJECT,CURRICULUM_PROJECT,cfg.msgBoard,cfg.prBoard
+      ].filter(Boolean).map(String))];
+      const loadedTasks=(state.tasks||[]).filter(task=>task&&task.gid&&!task.isKeeper).slice(0,180).map(task=>({
+        gid:String(task.gid),name:task.name||"Untitled task",url:task.url||null,
+        projectGid:task.projectGid||null,projectName:task.projectName||null
+      }));
+      const res=await call("get_mentions",{
+        days:MENTION_SCAN_DAYS,task_limit:100,mention_limit:100,project_ids:projectIds,tasks:loadedTasks
+      });
       asanaMentions.items=Array.isArray(res.data)?res.data:[];
       asanaMentions.loadedAt=Date.now();
-      asanaMentions.meta={scannedTasks:res.scanned_tasks||0,windowDays:res.window_days||MENTION_SCAN_DAYS,warning:res.warning||null,generatedAt:res.generated_at||new Date().toISOString()};
+      asanaMentions.meta={
+        scannedTasks:res.scanned_tasks||0,scannedSubtasks:res.scanned_subtasks||0,scannedComments:res.scanned_comments||0,
+        windowDays:res.window_days||MENTION_SCAN_DAYS,warning:res.warning||null,diagnostics:res.diagnostics||null,
+        generatedAt:res.generated_at||new Date().toISOString()
+      };
       saveMentionCache();
     }catch(e){ asanaMentions.error=e.message||"Could not load Asana mentions"; }
     finally{
@@ -470,18 +484,25 @@ function renderMentionsModal(){
   if(refresh){ refresh.disabled=!!asanaMentions.loading; refresh.innerHTML=asanaMentions.loading?'<span class="spin"></span> Checking…':'↻ Refresh'; }
   if(metaBox){
     if(asanaMentions.loading&&!asanaMentions.loadedAt) metaBox.textContent="Checking your recent Asana task comments…";
-    else if(asanaMentions.meta) metaBox.textContent="Scanned "+asanaMentions.meta.scannedTasks+" recent collaborator tasks · last "+Math.round(asanaMentions.meta.windowDays/30)+" months";
+    else if(asanaMentions.meta){
+      const parts=["Scanned "+asanaMentions.meta.scannedTasks+" tasks"];
+      if(asanaMentions.meta.scannedSubtasks) parts.push(asanaMentions.meta.scannedSubtasks+" subtasks");
+      if(asanaMentions.meta.scannedComments) parts.push(asanaMentions.meta.scannedComments+" comments");
+      parts.push("last "+Math.round(asanaMentions.meta.windowDays/30)+" months");
+      metaBox.textContent=parts.join(" · ");
+    }
     else metaBox.textContent="Recent task-comment mentions from Asana";
   }
   const warning=asanaMentions.error||asanaMentions.meta&&asanaMentions.meta.warning;
   const warningHtml=warning?'<div class="mention-warning">'+esc(warning)+(list.length?' Showing the mentions already saved in this app.':'')+'</div>':'';
   if(!list.length){
-    listBox.innerHTML=warningHtml+(asanaMentions.loading?'<div class="empty"><span class="spin"></span> Looking for mentions…</div>':'<div class="empty">No task-comment mentions found in the last six months. Very peaceful.</div>');
+    listBox.innerHTML=warningHtml+(asanaMentions.loading?'<div class="empty"><span class="spin"></span> Looking for mentions…</div>':'<div class="empty">No accessible task-comment mentions were found in the last six months.</div>');
   }else{
     listBox.innerHTML=warningHtml+list.slice(0,60).map(m=>{
       const initial=esc(String(m.from||"?").trim().charAt(0).toUpperCase());
       const excerpt=m.text?'<div class="mention-excerpt">'+esc(m.text)+'</div>':'';
-      const where=[m.projectName,mentionDate(m.at)].filter(Boolean).join(" · ");
+      const location=m.isSubtask&&m.parentName?"Subtask of "+m.parentName:m.projectName;
+      const where=[location,mentionDate(m.at)].filter(Boolean).join(" · ");
       return '<article class="mention-row" data-task="'+esc(m.taskGid)+'" data-url="'+esc(m.taskUrl||"")+'">'+
         '<div class="mention-avatar">'+initial+'</div><div class="mention-copy">'+
         '<div class="mention-who"><b>'+esc(m.from||"Someone")+'</b> mentioned you</div>'+
@@ -500,7 +521,7 @@ function renderMentionsModal(){
 }
 function openMentions(){
   hydrateMentionCache();
-  showModal('<div class="mention-head"><div><h2>Mentions</h2><p class="hint">Where people have @mentioned you in recent Asana task comments.</p></div>'+ 
+  showModal('<div class="mention-head"><div><h2>Mentions</h2><p class="hint">Where people have @mentioned you in recent Asana task and subtask comments.</p></div>'+ 
     '<a class="btn ghost" href="https://app.asana.com/0/inbox" target="_blank" rel="noopener">Asana Inbox ↗</a></div>'+ 
     '<div class="mention-toolbar"><span id="mentionMeta"></span><button class="btn ghost" id="mentionRefresh">↻ Refresh</button></div>'+ 
     '<div id="mentionList" class="mention-list"></div>'+ 

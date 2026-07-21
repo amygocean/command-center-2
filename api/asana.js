@@ -7,7 +7,7 @@
 //  Keeping this shape means the dashboard's own logic barely changed.
 // ------------------------------------------------------------------
 import { asanaFetch, getAsanaAccessToken, readSession, WORKSPACE } from "./_lib.js";
-import { mentionsFromTaskStories } from "./_mentions.js";
+import { dedupeTasks, mentionsFromTaskStories } from "./_mentions.js";
 
 // Reads and writes for explicitly shared app data go through ONE service token so every
 // signed-in teammate sees the same boards, regardless of what their own
@@ -38,6 +38,94 @@ async function readBody(req){
   try { return JSON.parse(Buffer.concat(chunks).toString()||"{}"); } catch { return {}; }
 }
 const qs = o => Object.entries(o).filter(([,v])=>v!=null&&v!=="").map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&");
+
+
+function parseBatchResultBody(body){
+  if(!body) return {};
+  if(typeof body==="string"){ try{return JSON.parse(body);}catch{return {};} }
+  return body;
+}
+
+function compactTask(task,extra={}){
+  if(!task||!task.gid) return null;
+  return {
+    gid:String(task.gid),name:task.name||"Untitled task",permalink_url:task.permalink_url||null,
+    modified_at:task.modified_at||null,memberships:task.memberships||[],parent:task.parent||null,...extra
+  };
+}
+
+async function mentionTaskSearch(fetcher,filters,taskLimit){
+  const fields="name,permalink_url,modified_at,memberships.project.gid,memberships.project.name,parent.gid,parent.name";
+  const result=await fetcher(`/workspaces/${WORKSPACE}/tasks/search?${qs({
+    ...filters,sort_by:"modified_at",sort_ascending:false,limit:taskLimit,opt_fields:fields
+  })}`);
+  return (result.data||[]).map(compactTask).filter(Boolean);
+}
+
+async function batchSubtasks(req,res,parents){
+  const out=[];
+  const fields="name,permalink_url,modified_at,memberships.project.gid,memberships.project.name,parent.gid,parent.name";
+  for(let i=0;i<parents.length;i+=10){
+    const chunk=parents.slice(i,i+10);
+    let batch=null;
+    try{
+      batch=await serviceFetch(req,res,"/batch",{method:"POST",body:{data:{actions:chunk.map(task=>({
+        method:"get",relative_path:`tasks/${task.gid}/subtasks?${qs({limit:100,opt_fields:fields})}`
+      }))}}});
+    }catch(_){ batch=null; }
+    if(batch){
+      (batch.data||[]).forEach((result,index)=>{
+        if(!result||result.status_code<200||result.status_code>=300) return;
+        const body=parseBatchResultBody(result.body);
+        (body.data||[]).forEach(task=>{
+          const item=compactTask(task,{parent:task.parent||{gid:chunk[index].gid,name:chunk[index].name}});
+          if(item) out.push(item);
+        });
+      });
+      continue;
+    }
+    for(const parent of chunk){
+      try{
+        const page=await serviceFetch(req,res,`/tasks/${parent.gid}/subtasks?${qs({limit:100,opt_fields:fields})}`);
+        (page.data||[]).forEach(task=>{ const item=compactTask(task,{parent:task.parent||{gid:parent.gid,name:parent.name}}); if(item)out.push(item); });
+      }catch(_){ /* inaccessible parent; other discovery paths may still find it */ }
+    }
+  }
+  return out;
+}
+
+async function storyPages(req,res,task,fields){
+  const stories=[];
+  let offset=null,pages=0,usedShared=false,lastError=null;
+  do{
+    const path=`/tasks/${task.gid}/stories?${qs({limit:100,offset,opt_fields:fields})}`;
+    let page=null;
+    try{ page=await asanaFetch(req,res,path); }
+    catch(e){
+      lastError=e;
+      try{ page=await serviceFetch(req,res,path); usedShared=true; }
+      catch(sharedError){ lastError=sharedError; break; }
+    }
+    stories.push(...(page.data||[]));
+    offset=page.next_page&&page.next_page.offset||null;
+    pages++;
+  }while(offset&&pages<4);
+  return {stories,usedShared,error:lastError&&stories.length===0?lastError:null,pages};
+}
+
+async function mapWithConcurrency(items,limit,fn){
+  const results=new Array(items.length);
+  let cursor=0;
+  async function worker(){
+    while(true){
+      const index=cursor++;
+      if(index>=items.length) return;
+      results[index]=await fn(items[index],index);
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(limit,items.length)},worker));
+  return results;
+}
 
 async function ensureTeamProjectMembership(req,res,projectId,teamId){
   if(!projectId||!teamId) return null;
@@ -277,56 +365,94 @@ export default async function handler(req, res){
         out = p; break;
       }
 
-      // Asana does not expose its Inbox through the public API. Reconstruct the
-      // signed-in user's real @mentions by searching recently modified tasks
-      // they follow, then reading the structured user links in comment stories.
+      // Asana does not expose its Inbox through the public API. Reconstruct
+      // mentions from several reliable task-discovery paths instead of assuming
+      // every mention lives on one of the user's 60 most recent top-level tasks.
       case "get_mentions": {
         const days=Math.max(7,Math.min(Number(args.days)||180,365));
-        const taskLimit=Math.max(10,Math.min(Number(args.task_limit)||60,100));
-        const mentionLimit=Math.max(10,Math.min(Number(args.mention_limit)||50,100));
-        const afterDate=new Date(Date.now()-days*86400000);
-        const afterIso=afterDate.toISOString();
+        const taskLimit=Math.max(20,Math.min(Number(args.task_limit)||100,100));
+        const mentionLimit=Math.max(10,Math.min(Number(args.mention_limit)||100,100));
+        const afterIso=new Date(Date.now()-days*86400000).toISOString();
         const me=await asanaFetch(req,res,`/users/me?${qs({opt_fields:"name,email"})}`);
-        let search;
+        const diagnostics={followedTop:0,followedSubtasks:0,projectTasks:0,discoveredSubtasks:0,storyTasks:0,comments:0,storyErrors:0,sharedFallbacks:0,pages:0};
+        const warnings=[];
+        const candidates=[];
+        const userFetcher=path=>asanaFetch(req,res,path);
+
+        // Explicitly run top-level and subtask searches. Asana exposes
+        // is_subtask as a distinct search filter; relying on the default was
+        // the main reason genuine subtask mentions could disappear.
         try{
-          search=await asanaFetch(req,res,`/workspaces/${WORKSPACE}/tasks/search?${qs({
-            "followers.any":"me",
-            "modified_at.after":afterIso,
-            sort_by:"modified_at",sort_ascending:false,limit:taskLimit,
-            opt_fields:"name,permalink_url,modified_at,completed,memberships.project.gid,memberships.project.name"
-          })}`);
+          const top=await mentionTaskSearch(userFetcher,{"followers.any":"me","modified_at.after":afterIso,is_subtask:false},taskLimit);
+          diagnostics.followedTop=top.length; candidates.push(...top);
+          const subs=await mentionTaskSearch(userFetcher,{"followers.any":"me","modified_at.after":afterIso,is_subtask:true},taskLimit);
+          diagnostics.followedSubtasks=subs.length; candidates.push(...subs);
         }catch(e){
-          if(e.status===402){
-            out={data:[],warning:"Asana task search is not available for this account.",scanned_tasks:0,window_days:days,generated_at:new Date().toISOString()};
-            break;
-          }
-          throw e;
+          if(e.status===402) warnings.push("Asana task search is unavailable for this account; using the Academy-board scan instead.");
+          else warnings.push("The personal collaborator-task scan failed: "+e.message);
         }
-        const tasks=(search.data||[]).slice(0,taskLimit);
-        const all=[];
-        const fields="gid,type,resource_subtype,created_at,created_by.gid,created_by.name,text,html_text";
-        for(let i=0;i<tasks.length;i+=10){
-          const chunk=tasks.slice(i,i+10);
-          let results=[];
-          try{
-            const batch=await asanaFetch(req,res,"/batch",{method:"POST",body:{data:{actions:chunk.map(task=>({
-              method:"get",relative_path:`tasks/${task.gid}/stories?${qs({limit:100,opt_fields:fields})}`
-            }))}}});
-            results=(batch.data||[]).map(result=>result&&result.status_code>=200&&result.status_code<300?(result.body&&result.body.data)||[]:[]);
-          }catch(_){
-            // Older/stricter workspaces can reject an otherwise valid batch.
-            // Fall back to normal requests so the feature still works.
-            for(const task of chunk){
+
+        // Scan the actual Academy projects loaded by the app as a second path.
+        // This catches comments where an @mention produced a notification but
+        // the task was not returned by followers.any=me.
+        const projectIds=[...new Set((args.project_ids||[]).map(String).filter(id=>/^\d+$/.test(id)))].slice(0,80);
+        if(projectIds.length){
+          for(let i=0;i<projectIds.length;i+=20){
+            const ids=projectIds.slice(i,i+20).join(",");
+            for(const isSubtask of [false,true]){
               try{
-                const stories=await asanaFetch(req,res,`/tasks/${task.gid}/stories?${qs({limit:100,opt_fields:fields})}`);
-                results.push(stories.data||[]);
-              }catch(__){ results.push([]); }
+                const rows=await mentionTaskSearch(path=>serviceFetch(req,res,path),{"projects.any":ids,"modified_at.after":afterIso,is_subtask:isSubtask},taskLimit);
+                diagnostics.projectTasks+=rows.length; candidates.push(...rows);
+              }catch(e){
+                if(!warnings.some(w=>w.startsWith("The Academy-project scan"))) warnings.push("The Academy-project scan could not read every board: "+e.message);
+              }
             }
           }
-          chunk.forEach((task,index)=>all.push(...mentionsFromTaskStories(task,results[index]||[],me.data.gid,afterIso)));
+        }
+
+        // Tasks already loaded in the browser are useful parent seeds even if
+        // Asana search has not indexed a recent change yet.
+        for(const task of (args.tasks||[]).slice(0,180)){
+          const item=compactTask({
+            gid:task.gid,name:task.name,permalink_url:task.permalink_url||task.url,modified_at:task.modified_at,
+            memberships:task.projectGid?[{project:{gid:task.projectGid,name:task.projectName||""}}]:[],parent:task.parent||null
+          });
+          if(item)candidates.push(item);
+        }
+
+        // Discover ordinary subtasks from recent parent tasks. Subtasks do not
+        // always inherit project membership, so a projects.any search alone is
+        // not enough. Keep this bounded for serverless reliability.
+        const firstPass=dedupeTasks(candidates).sort((a,b)=>new Date(b.modified_at||0)-new Date(a.modified_at||0));
+        const parentSeeds=firstPass.filter(task=>!task.parent).slice(0,80);
+        if(parentSeeds.length){
+          const found=await batchSubtasks(req,res,parentSeeds);
+          diagnostics.discoveredSubtasks=found.length; candidates.push(...found);
+        }
+
+        const tasks=dedupeTasks(candidates)
+          .sort((a,b)=>new Date(b.modified_at||0)-new Date(a.modified_at||0))
+          .slice(0,Math.max(taskLimit*2,120));
+        const fields="gid,type,resource_subtype,created_at,created_by.gid,created_by.name,text,html_text";
+        const all=[];
+        const storyResults=await mapWithConcurrency(tasks,6,task=>storyPages(req,res,task,fields));
+        storyResults.forEach((result,index)=>{
+          if(!result)return;
+          diagnostics.storyTasks++; diagnostics.pages+=result.pages||0;
+          if(result.usedShared)diagnostics.sharedFallbacks++;
+          if(result.error){ diagnostics.storyErrors++; return; }
+          diagnostics.comments+=(result.stories||[]).filter(story=>story&&((story.type==="comment")||(story.resource_subtype==="comment_added"))).length;
+          all.push(...mentionsFromTaskStories(tasks[index],result.stories||[],me.data.gid,afterIso));
+        });
+        if(diagnostics.storyErrors){
+          warnings.push(`Could not read comments on ${diagnostics.storyErrors} task${diagnostics.storyErrors===1?"":"s"}. This is usually an Asana permission or Stories-scope issue.`);
         }
         all.sort((a,b)=>new Date(b.at||0)-new Date(a.at||0));
-        out={data:all.slice(0,mentionLimit),scanned_tasks:tasks.length,window_days:days,generated_at:new Date().toISOString()};
+        out={
+          data:all.slice(0,mentionLimit),scanned_tasks:tasks.length,scanned_subtasks:tasks.filter(t=>t.parent).length,
+          scanned_comments:diagnostics.comments,window_days:days,generated_at:new Date().toISOString(),
+          warning:warnings.length?warnings.join(" "):null,diagnostics
+        };
         break;
       }
 

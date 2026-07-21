@@ -80,10 +80,10 @@ assert.match(drawer,/if\(t\.projectGid\) upd\.remove_projects=\[t\.projectGid\]/
 assert.doesNotMatch(drawer,/p\.gid===t\.projectGid\?" selected"/,"Current board is still being selected through the unsafe destination dropdown");
 assert.match(drawer,/id="sCelebrate"/,"Settings are missing the task-celebration preference");
 assert.match(drawer,/cfg\.completionCelebrations=document\.getElementById\("sCelebrate"\)\.checked/,"Task-celebration preference is not saved");
-assert.match(drawer,/call\("get_mentions",\{days:MENTION_SCAN_DAYS/,"Mentions view does not load real Asana mentions");
-assert.match(drawer,/Where people have @mentioned you in recent Asana task comments/,"Mentions view does not explain its Asana scope");
+assert.match(drawer,/call\("get_mentions",\{[\s\S]*days:MENTION_SCAN_DAYS[\s\S]*project_ids:projectIds[\s\S]*tasks:loadedTasks/,"Mentions view does not run the deeper Asana scan");
+assert.match(drawer,/Where people have @mentioned you in recent Asana task and subtask comments/,"Mentions view does not explain its task and subtask scope");
 assert.match(drawer,/if\(task\) openDrawer\(task\.gid\)[\s\S]*window\.open\(row\.dataset\.url/,"Mentions do not route to the app or Asana source task");
-assert.match(drawer,/ob-asana-mentions-v1:/,"Mentions are not cached per user");
+assert.match(drawer,/ob-asana-mentions-v2:/,"Mentions are not cached per user with the refreshed scanner");
 assert.match(drawer,/assigneeOptions\(t\.assignee\?t\.assignee\.gid:"unassigned","unassigned"\)/,"Task editing does not use preferred assignee suggestions");
 assert.match(drawer,/const peopleOpts=assigneeOptions\("",""\)/,"Quick task creation does not use preferred assignee suggestions");
 assert.match(core,/projectGid:\(t\.projects&&t\.projects\[0\]&&t\.projects\[0\]\.gid\)\|\|null/,"The Girls tasks do not retain their current Asana project ID");
@@ -255,8 +255,9 @@ const mentionHelpers=await import(pathToFileURL(path.join(root,"api/_mentions.js
 const mentionHtml='<body>Hello <a href="https://app.asana.com/0/123/list" data-asana-dynamic="true" data-asana-gid="amy-1" data-asana-type="user">@Amy Gray</a>, please review.</body>';
 assert.equal(mentionHelpers.htmlMentionsUser(mentionHtml,"amy-1"),true,"Structured Asana user mention was not detected");
 assert.equal(mentionHelpers.htmlMentionsUser(mentionHtml,"other-user"),false,"Mention parser matched the wrong user");
+assert.equal(mentionHelpers.htmlMentionsUser('<body><a data-asana-gid="amy-1">@Amy Gray</a></body>',"amy-1"),true,"Mention parser did not support Asana rich text without an explicit type attribute");
 const parsedMentions=mentionHelpers.mentionsFromTaskStories(
-  {gid:"task-1",name:"Recipe review",permalink_url:"https://app.asana.com/task-1",memberships:[{project:{gid:"proj-1",name:"Campaign"}}]},
+  {gid:"task-1",name:"Recipe review",permalink_url:"https://app.asana.com/task-1",memberships:[{project:{gid:"12345",name:"Campaign"}}]},
   [{gid:"story-1",type:"comment",resource_subtype:"comment_added",created_at:"2026-07-20T12:00:00Z",created_by:{gid:"jess-1",name:"Jess"},html_text:mentionHtml,text:"Hello @Amy Gray, please review."}],
   "amy-1","2026-01-01T00:00:00Z"
 );
@@ -272,19 +273,35 @@ const [{default:asanaHandler},{packSession}]=await Promise.all([
 const realFetch=globalThis.fetch;
 const fetched=[];
 globalThis.fetch=async(url,opts={})=>{
-  fetched.push({url:String(url),opts});
-  if(String(url).includes("/users/me")) return new Response(JSON.stringify({data:{gid:"amy-1",name:"Amy"}}),{status:200});
-  if(String(url).includes("/tasks/search")) return new Response(JSON.stringify({data:[{gid:"task-1",name:"Recipe review",permalink_url:"https://app.asana.com/task-1",memberships:[{project:{gid:"proj-1",name:"Campaign"}}]}]}),{status:200});
-  if(String(url).endsWith("/batch")) return new Response(JSON.stringify({data:[{status_code:200,body:{data:[{gid:"story-1",type:"comment",resource_subtype:"comment_added",created_at:new Date().toISOString(),created_by:{gid:"jess-1",name:"Jess"},html_text:mentionHtml,text:"Hello @Amy Gray, please review."}]}}]}),{status:200});
+  const href=String(url); fetched.push({url:href,opts});
+  if(href.includes("/users/me")) return new Response(JSON.stringify({data:{gid:"amy-1",name:"Amy"}}),{status:200});
+  if(href.includes("/tasks/search")){
+    const u=new URL(href);
+    const isSub=u.searchParams.get("is_subtask")==="true";
+    const isProject=!!u.searchParams.get("projects.any");
+    if(isSub) return new Response(JSON.stringify({data:[{gid:"sub-1",name:"Recipe subtask",permalink_url:"https://app.asana.com/sub-1",modified_at:new Date().toISOString(),parent:{gid:"task-1",name:"Recipe review"},memberships:[]}]}),{status:200});
+    return new Response(JSON.stringify({data:[{gid:"task-1",name:"Recipe review",permalink_url:"https://app.asana.com/task-1",modified_at:new Date().toISOString(),memberships:[{project:{gid:"12345",name:isProject?"Campaign":"Campaign"}}]}]}),{status:200});
+  }
+  if(href.endsWith("/batch")){
+    return new Response(JSON.stringify({data:[{status_code:200,body:{data:[{gid:"sub-1",name:"Recipe subtask",permalink_url:"https://app.asana.com/sub-1",modified_at:new Date().toISOString(),parent:{gid:"task-1",name:"Recipe review"},memberships:[]}]}}]}),{status:200});
+  }
+  if(href.includes("/tasks/task-1/stories")) return new Response(JSON.stringify({data:[]}),{status:200});
+  if(href.includes("/tasks/sub-1/stories")) return new Response(JSON.stringify({data:[{gid:"story-1",type:"comment",resource_subtype:"comment_added",created_at:new Date().toISOString(),created_by:{gid:"jess-1",name:"Jess"},html_text:mentionHtml,text:"Hello @Amy Gray, please review."}]}),{status:200});
   throw new Error("Unexpected mocked Asana request: "+url);
 };
 let mentionResponse=null,statusCode=200;
-const req={method:"POST",body:{tool:"get_mentions",args:{days:180,task_limit:20}},headers:{cookie:"ob_session="+encodeURIComponent(packSession({access_token:"token",expires_at:Date.now()+60000,user:{gid:"amy-1",name:"Amy"}}))}};
+const req={method:"POST",body:{tool:"get_mentions",args:{days:180,task_limit:20,project_ids:["12345"],tasks:[{gid:"task-1",name:"Recipe review",projectGid:"12345",projectName:"Campaign"}]}},headers:{cookie:"ob_session="+encodeURIComponent(packSession({access_token:"token",expires_at:Date.now()+60000,user:{gid:"amy-1",name:"Amy"}}))}};
 const res={setHeader(){},status(code){statusCode=code;return this;},json(value){mentionResponse=value;return value;}};
 try{ await asanaHandler(req,res); }finally{ globalThis.fetch=realFetch; }
 assert.equal(statusCode,200,"Mention endpoint returned a failure");
-assert.equal(mentionResponse.data.length,1,"Mention endpoint did not return the parsed Asana mention");
-assert.ok(fetched.some(x=>x.url.includes("followers.any=me")),"Mention endpoint did not search collaborator tasks");
-assert.ok(fetched.some(x=>x.url.endsWith("/batch")),"Mention endpoint did not batch story reads");
+assert.equal(mentionResponse.data.length,1,"Mention endpoint did not return the parsed subtask mention");
+assert.equal(mentionResponse.data[0].isSubtask,true,"Subtask context was lost");
+assert.equal(mentionResponse.data[0].parentName,"Recipe review","Subtask parent context was lost");
+assert.ok(fetched.some(x=>x.url.includes("followers.any=me")&&x.url.includes("is_subtask=false")),"Mention endpoint did not search followed top-level tasks");
+assert.ok(fetched.some(x=>x.url.includes("followers.any=me")&&x.url.includes("is_subtask=true")),"Mention endpoint did not search followed subtasks");
+assert.ok(fetched.some(x=>x.url.includes("projects.any=12345")),"Mention endpoint did not scan loaded Academy projects");
+assert.ok(fetched.some(x=>x.url.endsWith("/batch")),"Mention endpoint did not discover ordinary subtasks");
+assert.ok(fetched.some(x=>x.url.includes("/tasks/sub-1/stories")),"Mention endpoint did not read subtask comments");
+assert.ok(mentionResponse.scanned_subtasks>=1,"Mention diagnostics did not report subtasks");
 
 console.log(`Verified ${files.length} code files, preferred assignee suggestions, shared UI safeguards, real Asana mentions, Communities scheduling, and launch-anchored Smart Campaign workflows.`);

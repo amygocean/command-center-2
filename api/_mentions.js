@@ -1,6 +1,6 @@
 // Pure helpers for reconstructing real Asana @mentions from task stories.
 // Asana's public API does not expose the user's Inbox directly, so the app
-// searches recent tasks the user follows and inspects rich-text comment links.
+// searches accessible tasks and inspects rich-text comment links.
 
 function escapeRegExp(value){
   return String(value||"").replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
@@ -11,7 +11,10 @@ export function htmlMentionsUser(html,userGid){
   const gid=escapeRegExp(userGid);
   const anchors=String(html).match(/<a\b[^>]*>/gi)||[];
   const gidRe=new RegExp(`data-asana-gid=["']${gid}["']`,`i`);
-  return anchors.some(tag=>/data-asana-type=["']user["']/i.test(tag)&&gidRe.test(tag));
+  // Asana currently returns data-asana-type="user" for user mentions, but
+  // GIDs are globally unique. Matching the user's exact GID is a safe fallback
+  // for older comments or workspaces where the type attribute is omitted.
+  return anchors.some(tag=>gidRe.test(tag));
 }
 
 function decodeEntities(value){
@@ -30,7 +33,7 @@ export function plainTextFromAsanaHtml(html,fallback=""){
   const source=String(html||"")
     .replace(/<br\s*\/?\s*>/gi,"\n")
     .replace(/<\/(p|div|li|blockquote|h[1-6])>/gi,"\n")
-    .replace(/<a\b[^>]*data-asana-type=["']user["'][^>]*>(.*?)<\/a>/gi,"$1")
+    .replace(/<a\b[^>]*>(.*?)<\/a>/gi,"$1")
     .replace(/<[^>]+>/g,"");
   return decodeEntities(source||fallback).replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim();
 }
@@ -46,11 +49,28 @@ export function mentionsFromTaskStories(task,stories,userGid,afterIso){
     gid:String(story.gid),storyGid:String(story.gid),source:"asana",
     taskGid:String(task.gid),taskName:task.name||"Untitled task",
     taskUrl:task.permalink_url||null,
+    isSubtask:!!task.parent,
+    parentGid:task.parent&&String(task.parent.gid)||null,
+    parentName:task.parent&&task.parent.name||null,
     projectGid:membership&&membership.project&&String(membership.project.gid)||null,
-    projectName:membership&&membership.project&&membership.project.name||null,
+    projectName:membership&&membership.project&&membership.project.name||task.projectName||null,
     fromGid:story.created_by&&String(story.created_by.gid)||null,
     from:story.created_by&&story.created_by.name||"Someone",
     text:plainTextFromAsanaHtml(story.html_text,story.text||""),
     at:story.created_at
   }));
+}
+
+export function dedupeTasks(tasks){
+  const map=new Map();
+  for(const task of tasks||[]){
+    if(!task||!task.gid) continue;
+    const gid=String(task.gid);
+    const prior=map.get(gid)||{};
+    map.set(gid,{...prior,...task,
+      memberships:(task.memberships&&task.memberships.length)?task.memberships:(prior.memberships||[]),
+      parent:task.parent||prior.parent||null
+    });
+  }
+  return [...map.values()];
 }
