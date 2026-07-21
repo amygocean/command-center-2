@@ -717,6 +717,8 @@ function renderMentionsModal(){
   const groups=mentionGroupsForPanel(),counts=mentionCounts();
   document.querySelectorAll("#modal [data-mention-filter]").forEach(btn=>{
     const key=btn.dataset.mentionFilter; btn.classList.toggle("on",key===mentionPanel.filter);
+    btn.setAttribute("aria-selected",key===mentionPanel.filter?"true":"false");
+    btn.setAttribute("tabindex",key===mentionPanel.filter?"0":"-1");
     const count=btn.querySelector("b"); if(count)count.textContent=counts[key]||0;
   });
   const newCount=document.getElementById("mentionNewCount");
@@ -790,7 +792,7 @@ function openMentions(){
   mentionPanel.filter=mentionPanel.filter==="hidden"?"hidden":"all";
   showModal('<div class="mention-shell"><div class="mention-sticky"><div class="mention-head"><div><h2>@ Mentions</h2><p class="hint">Notice it, deal with it, or show the original task in your to-do list.</p></div>'+ 
     '<a class="btn ghost sm" href="https://app.asana.com/0/inbox" target="_blank" rel="noopener">Asana Inbox ↗</a></div>'+ 
-    '<div class="mention-tabs"><button class="mention-tab on" data-mention-filter="all">All <b>0</b><span class="mention-tab-new" id="mentionNewCount"></span></button><button class="mention-tab" data-mention-filter="hidden">Hidden <b>0</b></button></div>'+ 
+    '<div class="mention-tabs" role="tablist" aria-label="Mention views"><button class="mention-tab on" role="tab" aria-selected="true" data-mention-filter="all"><span>All</span> <b>0</b><span class="mention-tab-new" id="mentionNewCount"></span></button><button class="mention-tab" role="tab" aria-selected="false" data-mention-filter="hidden"><span>Hidden</span> <b>0</b></button></div>'+ 
     '<div class="mention-search-row"><input id="mentionSearch" placeholder="Search people, tasks or comments…"><button class="btn ghost sm" id="mentionMarkSeen">Mark all seen</button></div>'+ 
     '<div class="mention-toolbar"><span id="mentionMeta"></span><div><button class="btn ghost sm" id="mentionRefresh">↻ Check now</button><button class="btn ghost sm" id="mentionDeepRefresh" title="Reread the last six months">Deep scan</button></div></div></div>'+ 
     '<div id="mentionList" class="mention-list"></div><div class="mention-foot"><span>Hidden mentions stay recoverable. Showing a task in My To-Do never moves or reassigns it.</span><button class="btn ghost sm" data-close>Close</button></div></div>',"mention");
