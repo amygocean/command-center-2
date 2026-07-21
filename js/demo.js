@@ -23,13 +23,14 @@ function _mk(proj, name, opts){
   if(opts.restaurant)   cf.push({name:"Restaurant Name",display_value:opts.restaurant});
   if(opts.region)       cf.push({name:"Restaurant Region",display_value:opts.region});
   if(opts.trainSection) cf.push({name:"Section",display_value:opts.trainSection});
+  const primarySection=opts.section||{gid:"s-none",name:opts.sectionName||""};
   return { gid:"demo-"+(_dgid++), name,
     notes:opts.notes||"", assignee:opts.assignee?DEMO_USERS.find(u=>u.gid===opts.assignee):null,
     due_on:opts.dueAt?null:(opts.due||null), due_at:opts.dueAt||null, start_on:null,
     completed:!!opts.done, completed_at:opts.done?_d(-1)+"T10:00:00Z":null,
-    memberships:[{section:opts.section||{gid:"s-none",name:opts.sectionName||""}}],
+    memberships:[{project:{gid:proj},section:primarySection}],
     custom_fields:cf,
-    permalink_url:"https://app.asana.com/demo", _proj:proj };
+    permalink_url:"https://app.asana.com/demo", _proj:proj, _projects:[proj] };
 }
 const SEC = {
   shoot:{gid:SEC_SHOOT,name:"Shoot Days"}, occ:{gid:SEC_OCC,name:"Occasions"},
@@ -163,6 +164,12 @@ async function demoCall(tool,args){
   await new Promise(r=>setTimeout(r,120)); // let the spinners breathe
   switch(tool){
     case "save_dashboard_state": return {data:{gid:args.task_id||"demo-keeper"}};
+    case "save_campaign_state": {
+      let t=DEMO_TASKS.find(x=>x.gid===args.task_id);
+      if(!t){t=_mk(args.project_id,args.name||"⚙️ campaign-smart-plan (managed by app)",{section:{gid:args.section_id||"demo-hq",name:"Campaign HQ"},notes:args.notes||"{}"});DEMO_TASKS.push(t);}
+      else t.notes=args.notes||"{}";
+      return {data:{gid:t.gid}};
+    }
     case "find_project_by_name": return {data:{gid:"demo-pr",name:"PR & Positioning",permalink_url:"https://app.asana.com/demo/pr"}};
     case "ensure_shared_project_access": return {data:{gid:"demo-membership",member:{gid:args.team_id}}};
     case "ensure_shared_sections": {
@@ -173,7 +180,7 @@ async function demoCall(tool,args){
     case "get_users": return {data:DEMO_USERS};
     case "get_tasks":
       if(args.project===CURRICULUM_PROJECT) return {data:DEMO_CURRICULUM};
-      return {data:DEMO_TASKS.filter(t=>t._proj===args.project).map(t=>({...t}))};
+      return {data:DEMO_TASKS.filter(t=>(t._projects||[t._proj]).includes(args.project)).map(t=>({...t,memberships:(t.memberships||[]).map(m=>({...m,project:m.project&&{...m.project},section:m.section&&{...m.section}}))}))};
     case "get_project": {
       if(args.project_id==="demo-pr") return {data:{name:"PR & Positioning",sections:[["pr-0","Idea"],["pr-1","Pitched"],["pr-2","In progress"],["pr-3","Delivered"]].map(([g,n])=>({gid:g,name:n}))}};
       if(DEMO_PROJECTS[args.project_id]) return {data:{...DEMO_PROJECTS[args.project_id],sections:DEMO_PROJECTS[args.project_id].sections.map(x=>({...x}))}};
@@ -199,6 +206,17 @@ async function demoCall(tool,args){
         if("notes" in u) t.notes=u.notes;
         if("name" in u) t.name=u.name;
         if("assignee" in u) t.assignee=u.assignee?DEMO_USERS.find(x=>x.gid===u.assignee)||null:null;
+        for(const rp of (u.remove_projects||[])){
+          t._projects=(t._projects||[t._proj]).filter(g=>g!==rp);
+          t.memberships=(t.memberships||[]).filter(m=>!m.project||m.project.gid!==rp);
+        }
+        for(const ap of (u.add_projects||[])){
+          t._projects=t._projects||[t._proj];
+          if(!t._projects.includes(ap.project_id))t._projects.push(ap.project_id);
+          const allSections=[...Object.values(SEC),...Object.values(DEMO_PROJECTS).flatMap(p=>p.sections||[])],section=allSections.find(s=>s.gid===ap.section_id)||null;
+          const existing=(t.memberships||[]).find(m=>m.project&&m.project.gid===ap.project_id);
+          if(existing)existing.section=section||existing.section;else(t.memberships=t.memberships||[]).push({project:{gid:ap.project_id},section});
+        }
       });
       return {data:(args.tasks||[]).map(t=>({gid:t.task}))};
     }
@@ -218,12 +236,14 @@ async function demoCall(tool,args){
     }
     // ---- attachments (kept in-memory as data URLs so the preview shows the
     //      real image the user picked, without any network) ----
-    case "get_attachments": return {data:(DEMO_ATTACH[args.task_id]||[]).map(a=>({...a}))};
+    case "get_attachments": { const parent=args.parent_id||args.task_id; return {data:(DEMO_ATTACH[parent]||[]).map(a=>({...a}))}; }
     case "upload_attachment": {
-      const list=DEMO_ATTACH[args.task_id]||(DEMO_ATTACH[args.task_id]=[]);
+      const parent=args.parent_id||args.task_id;
+      const list=DEMO_ATTACH[parent]||(DEMO_ATTACH[parent]=[]);
       const att={gid:"att-"+(_dgid++),name:args.filename||"image.jpg",
         resource_subtype:"asana",created_at:new Date().toISOString(),
-        download_url:"data:"+(args.mime||"image/jpeg")+";base64,"+args.data_base64};
+        view_url:"data:"+(args.mime||"application/octet-stream")+";base64,"+args.data_base64,
+        download_url:"data:"+(args.mime||"application/octet-stream")+";base64,"+args.data_base64};
       list.push(att); return {data:{...att}};
     }
     case "delete_attachment": {
@@ -250,6 +270,7 @@ async function demoCall(tool,args){
       return {data:proj||{}};
     }
     case "get_subtasks": return {data:(DEMO_SUBTASKS[args.parent]||[]).map(x=>({...x}))};
+    case "set_task_parent": return {data:{gid:args.task_id,parent:{gid:args.parent_id}}};
     case "create_subtask": {
       const st={gid:"demo-sub-"+(_dgid++),name:(args.data&&args.data.name)||"Subtask",completed:false,due_on:(args.data&&args.data.due_on)||null,assignee:null};
       (DEMO_SUBTASKS[args.parent]=DEMO_SUBTASKS[args.parent]||[]).push(st); return {data:st};

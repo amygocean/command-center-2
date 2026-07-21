@@ -83,6 +83,25 @@ export default async function handler(req, res){
         break;
       }
 
+      // One hidden task per campaign stores the shared source index, AI plan
+      // and review statuses. It is deliberately saved through the shared
+      // identity so Amy, Caitlin and Jess see the same intelligence.
+      case "save_campaign_state": {
+        const data={ name:args.name||"⚙️ campaign-smart-plan (managed by app)", notes:args.notes||"{}" };
+        let task;
+        if(args.task_id){
+          const r=await serviceFetch(req,res,`/tasks/${args.task_id}`,{method:"PUT",body:{data}});
+          task=r.data;
+        }else{
+          if(!args.project_id){ res.status(400).json({error:"project_id required"}); return; }
+          const r=await serviceFetch(req,res,"/tasks",{method:"POST",body:{data:{...data,projects:[args.project_id]}}});
+          task=r.data;
+          if(args.section_id) await serviceFetch(req,res,`/sections/${args.section_id}/addTask`,{method:"POST",body:{data:{task:task.gid}}});
+        }
+        out={data:task};
+        break;
+      }
+
       case "find_project_by_name": {
         const wanted=String(args.name||"").trim().toLowerCase();
         if(!wanted){ res.status(400).json({error:"name required"}); return; }
@@ -263,15 +282,20 @@ export default async function handler(req, res){
         break;
 
       case "add_to_portfolio":
-        out = await asanaFetch(req,res,`/portfolios/${args.portfolio_gid}/addItem`, { method:"POST", body:{ data:{ item: args.item } } });
+        out = await serviceFetch(req,res,`/portfolios/${args.portfolio_gid}/addItem`, { method:"POST", body:{ data:{ item: args.item } } });
         break;
 
       case "update_project":
-        out = await asanaFetch(req,res,`/projects/${args.project_id}`, { method:"PUT", body:{ data: args.fields||{} } });
+        out = await serviceFetch(req,res,`/projects/${args.project_id}`, { method:"PUT", body:{ data: args.fields||{} } });
         break;
 
       case "create_subtask":
         out = await asanaFetch(req,res,`/tasks/${args.parent}/subtasks`, { method:"POST", body:{ data: args.data||{} } });
+        break;
+
+      case "set_task_parent":
+        if(!args.task_id){ res.status(400).json({error:"task_id required"}); return; }
+        out = await serviceFetch(req,res,`/tasks/${args.task_id}/setParent`, { method:"POST", body:{ data:{ parent:args.parent_id||null } } });
         break;
 
       case "get_subtasks":
@@ -279,7 +303,7 @@ export default async function handler(req, res){
         break;
 
       case "create_section":
-        out = await asanaFetch(req,res,`/projects/${args.project_id}/sections`, { method:"POST", body:{ data:{ name: args.name } } });
+        out = await serviceFetch(req,res,`/projects/${args.project_id}/sections`, { method:"POST", body:{ data:{ name: args.name } } });
         break;
 
       case "add_comment": {
@@ -319,38 +343,41 @@ export default async function handler(req, res){
         break;
       }
 
-      // ---- attachments (image push to Asana) ----
-      // List a task's attachments so the WhatsApp preview can show the image.
-      case "get_attachments":
-        if(!args.task_id){ res.status(400).json({error:"task_id required"}); return; }
+      // ---- attachments / campaign resources ----
+      // A parent can be a task or a project. Project attachments appear in
+      // Asana's Key resources area; task attachments continue to power the
+      // Communities WhatsApp preview.
+      case "get_attachments": {
+        const parent=args.parent_id||args.task_id;
+        if(!parent){ res.status(400).json({error:"parent_id required"}); return; }
         out = await sharedFetch(req,res,`/attachments?${qs({
-          parent:args.task_id,
+          parent,
           opt_fields:"name,download_url,view_url,permanent_url,resource_subtype,host,created_at",
           limit:100
         })}`);
         break;
+      }
 
-      // Upload a real file to Asana. The tool proxy only speaks JSON, so the
-      // browser sends the image base64-encoded; here we decode it and forward
-      // it to Asana's /attachments endpoint as proper multipart form-data,
-      // using the shared board identity so every teammate sees it.
+      // The browser sends files base64-encoded because this proxy otherwise
+      // speaks JSON. Keep a strict server-side size guard for Vercel.
       case "upload_attachment": {
         if(!readSession(req)){ res.status(401).json({error:"not authenticated"}); return; }
-        if(!args.task_id || !args.data_base64){ res.status(400).json({error:"task_id and data_base64 required"}); return; }
-        if(!/^image\/[a-z0-9.+-]+$/i.test(args.mime||"")){ res.status(400).json({error:"Only image uploads are supported"}); return; }
+        const parent=args.parent_id||args.task_id;
+        if(!parent || !args.data_base64){ res.status(400).json({error:"parent_id and data_base64 required"}); return; }
+        const mime=String(args.mime||"application/octet-stream").toLowerCase();
+        if(/application\/(x-msdownload|x-dosexec)|application\/x-sh|application\/x-bat|application\/java-archive/.test(mime)){
+          res.status(400).json({error:"This file type is not allowed"}); return;
+        }
         let buf;
         try{ buf = Buffer.from(String(args.data_base64), "base64"); }
-        catch{ res.status(400).json({error:"Invalid image data"}); return; }
-        // The frontend downsizes images before sending them. Keep a server-side
-        // guard too so a malformed request cannot exceed the serverless body
-        // and memory budget.
-        if(!buf.length || buf.length>3*1024*1024){ res.status(413).json({error:"Image is too large after processing"}); return; }
+        catch{ res.status(400).json({error:"Invalid file data"}); return; }
+        if(!buf.length || buf.length>8*1024*1024){ res.status(413).json({error:"Files must be smaller than 8 MB"}); return; }
         const token = SHARED_PAT || await getAsanaAccessToken(req,res);
-        const safeName=String(args.filename||"community-image.jpg")
+        const safeName=String(args.filename||"campaign-resource")
           .replace(/[^\x20-\x7E]/g,"_").replace(/[\\/]/g,"-").slice(0,180);
         const form = new FormData();
-        form.append("parent", String(args.task_id));
-        form.append("file", new Blob([buf], { type: args.mime }), safeName||"community-image.jpg");
+        form.append("parent", String(parent));
+        form.append("file", new Blob([buf], { type: mime }), safeName||"campaign-resource");
         const r = await fetch("https://app.asana.com/api/1.0/attachments", {
           method:"POST", headers:{ Authorization:"Bearer "+token, Accept:"application/json" }, body: form
         });

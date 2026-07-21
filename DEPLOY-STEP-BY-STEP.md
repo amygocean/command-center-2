@@ -9,7 +9,7 @@ You'll collect a few values along the way — keep a blank note open and paste t
 - Asana **Client ID**
 - Asana **Client Secret**
 - Your **web address** (you get this in Step 3)
-- An **Anthropic key** (optional)
+- An **OpenAI or Anthropic key** (optional)
 - A **random secret** (just mash your keyboard, e.g. `k39fjs82hslq0alabel99xzz`)
 
 ---
@@ -71,12 +71,15 @@ These tell the app its keys and address. This is the most important step — typ
    | `ASANA_CLIENT_SECRET` | the Client Secret from Step 1 |
    | `APP_URL` | your web address from Step 3 — **no slash at the end** |
    | `ASANA_WORKSPACE` | `14491666778313` |
-   | `ANTHROPIC_API_KEY` | your Anthropic key (or leave this one out entirely to run without AI) |
+   | `OPENAI_API_KEY` | your OpenAI key (optional; use this or Anthropic) |
+   | `ANTHROPIC_API_KEY` | your Anthropic key (optional; use this or OpenAI) |
    | `SESSION_SECRET` | your random keyboard-mash string |
+   | `ASANA_SHARED_PAT` | shared Academy PAT used for team campaign projects, resources and shared app state |
 
    Double-check `APP_URL` has **no trailing slash** — `https://academy-command-center.vercel.app` ✅, not `…app/` ❌.
 
-3. *(Optional — the Anthropic key.)* If you want the AI suggestions: go to **https://console.anthropic.com**, sign in, open **API Keys → Create Key**, copy it, and paste it as the `ANTHROPIC_API_KEY` value. You can always add this later.
+3. *(Optional — the AI key.)* Add either `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` if you want Smart Campaign source analysis and other AI suggestions. You can add this later. Do not add both unless you deliberately want OpenAI to be preferred for Smart Campaigns.
+4. Add `ASANA_SHARED_PAT` using an Asana personal access token from an Academy account that can edit the shared boards and campaign projects. This prevents shared resources and Smart Plans from depending on the permissions of whichever teammate happens to be signed in.
 
 ---
 
@@ -120,7 +123,7 @@ Now Asana needs to know where to send people after they sign in.
 - **"Sign in failed (state mismatch)."** Your `APP_URL` (Step 4) and the Asana redirect URL (Step 6) don't match exactly. Check both — same address, `/api/auth/callback` on the redirect, no trailing slash on `APP_URL`. Fix, then redeploy (Step 5).
 - **A page error / 500.** In Vercel, open your project → **Logs** (or **Deployments → the deployment → Functions/Logs**). It shows the exact error. Send me the message and I'll fix it.
 - **Signs in but no tasks show.** Make sure the Asana account you signed in with is a member of the boards. Confirm `ASANA_WORKSPACE` is `14491666778313`.
-- **The ✨ AI buttons say AI is off.** `ANTHROPIC_API_KEY` isn't set, or you added it but haven't redeployed (Step 5).
+- **The ✨ AI buttons say AI is off.** Neither `OPENAI_API_KEY` nor `ANTHROPIC_API_KEY` is set, or you added one but have not redeployed (Step 5).
 - **You changed a setting and nothing changed.** Almost always: you need to **redeploy** (Step 5) for env-var changes to apply.
 
 ---

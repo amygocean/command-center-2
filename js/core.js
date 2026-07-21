@@ -99,7 +99,13 @@ const state = {
   campaignSectionLoading: {},
   campaignSubtasks: {},
   campaignExpanded: {},
-  campaignCursor: {}
+  campaignCursor: {},
+  campaignView: {},
+  campaignResources: {},
+  campaignResourceLoading: {},
+  campaignSmart: {},
+  campaignSmartSaving: {},
+  campaignSmartUpdating: {}
 };
 
 const DEMO = new URLSearchParams(location.search).has("demo");
@@ -127,7 +133,7 @@ async function askAI(prompt, data){
 }
 
 /* ---- loading ---- */
-const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,due_at,start_on,completed,completed_at,memberships.section.name,memberships.section.gid,permalink_url,notes,custom_fields.name,custom_fields.display_value";
+const TASK_FIELDS = "name,assignee.name,assignee.gid,due_on,due_at,start_on,completed,completed_at,memberships.project.gid,memberships.project.name,memberships.section.name,memberships.section.gid,permalink_url,notes,custom_fields.name,custom_fields.display_value";
 function johannesburgDateTime(value){
   if(!value) return {date:null,time:null};
   const date=new Date(value);
@@ -150,7 +156,10 @@ async function fetchProject(p){
     if(offset) args.offset = offset;
     const res = await call("get_tasks", args);
     (res.data||[]).forEach(t=>{
-      const sec = (t.memberships&&t.memberships[0]&&t.memberships[0].section)||null;
+      const memberships=t.memberships||[];
+      const ownMembership=memberships.find(m=>m.project&&String(m.project.gid)===String(p.gid))||memberships[0]||null;
+      const sec=(ownMembership&&ownMembership.section)||null;
+      const projectGids=[...new Set([p.gid,...memberships.map(m=>m.project&&m.project.gid).filter(Boolean)])];
       // ---- custom fields (Trainer, Trainer Support, RAG, etc.) ----------
       // display_value is a plain string for every field type, incl. dates
       // (ISO) and multi-select (comma-joined), so one map handles them all.
@@ -175,7 +184,7 @@ async function fetchProject(p){
         region: cf["Restaurant Region"] || null,
         trainSection: cf["Section"] || null,             // FOH / BOH / Sushi / Mgmt
         trainDate: trainDateRaw ? trainDateRaw.slice(0,10) : null,
-        projectGid:p.gid, projectName:p.name, projectColor:p.color,
+        projectGid:p.gid, projectGids, projectName:p.name, projectColor:p.color,
         isShoot: (sec&&sec.gid===SEC_SHOOT) || /^shoot day/i.test(t.name||""),
         isOccasion: (sec&&sec.gid===SEC_OCC),
         isNote: (sec&&sec.gid===PB.notes),
@@ -190,7 +199,8 @@ async function fetchProject(p){
         isPrep: /^「prep」/.test(t.name||""),
         isShot: /^「shot」/.test(t.name||""),
         isBrief: /^「brief」/.test(t.name||""),
-        isKeeper: /^⚙️ dashboard-state/.test(t.name||""),
+        isCampaignSmart: /^⚙️ campaign-smart-plan/.test(t.name||""),
+        isKeeper: /^⚙️ (?:dashboard-state|campaign-smart-plan)/.test(t.name||""),
         isPlaceholder: (p.gid===REVAMP_PROJECT && !t.assignee && !!t.due_on)
       });
     });
@@ -224,6 +234,10 @@ async function loadAll(){
     const map = new Map();
     results.flat().forEach(t=>{ if(!map.has(t.gid)) map.set(t.gid,t); });
     state.tasks = [...map.values()];
+    // Campaign intelligence is shared through managed Asana tasks. Clear the
+    // parsed cache after every fresh load so changes made by another teammate
+    // are reflected rather than leaving this browser on an older plan.
+    state.campaignSmart = {};
     readOrderKeeper();
     if(state._demoSeed) state._demoSeed();
     loadMyTasks(); // async — re-renders The Girls when each list lands

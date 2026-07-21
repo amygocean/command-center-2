@@ -216,127 +216,98 @@ function openSettings(){
   };
 }
 
-/* ---- campaign playbook generator ----
-   A campaign = a real Asana project with phase sections and dated
-   workstream tasks per channel. The plan is drafted client-side from
-   the house playbook, editable, then created on approval. */
-
-const CAMPAIGN_PHASES = ["Pre-launch","Launch week","In market","Wrap-up"];
-const CAMPAIGN_CHANNELS = [
-  {key:"courses", label:"Courses"},
-  {key:"videos",  label:"Videos / shoot"},
-  {key:"training",label:"In-person training"},
-  {key:"comms",   label:"Comms"}
-];
-
-function buildCampaignPlan(name, start, end, channels, roles){
-  const S=pd(start), E=pd(end);
-  const mid=new Date((S.valueOf()+E.valueOf())/2);
-  const d=(base,off)=>{ const x=new Date(base); x.setDate(x.getDate()+off); return iso(x); };
-  const roleTxt = roles.length ? " ("+roles.join(", ")+")" : "";
-  const rows=[]; const add=(phase,ch,due,task)=>{ if(ch==="all"||channels.includes(ch)) rows.push({phase,ch,due,name:task,on:true}); };
-
-  add("Pre-launch","courses",d(S,-28),"Write & build courses"+roleTxt);
-  add("Pre-launch","courses",d(S,-10),"QA + configure courses");
-  add("Pre-launch","courses",d(S,-7), "Manager launch pack (why, who, deadline, coaching)");
-  add("Pre-launch","videos", d(S,-21),"Brief to Content Go — "+name+" videos");
-  add("Pre-launch","videos", d(S,-14),"Shoot Day — "+name);
-  add("Pre-launch","videos", d(S,-5), "Final videos delivered & loaded");
-  add("Pre-launch","training",d(S,-21),"Book venues & trainers");
-  add("Pre-launch","training",d(S,-14),"Regional session schedule locked");
-  add("Pre-launch","comms",  d(S,-3), "Teaser message (queue in Communities)");
-  add("Pre-launch","comms",  start,   "Launch announcement");
-  add("Launch week","courses",start,  "Courses live + assigned");
-  add("Launch week","courses",d(S,5), "First-week participation check");
-  add("Launch week","training",d(S,3),"Run in-person sessions");
-  add("Launch week","comms",  d(S,1), "Manager huddle reminder");
-  add("In market","comms",   iso(mid),"Mid-campaign boost message");
-  add("In market","courses", iso(mid),"Wrong-answer check — Skills Booster if needed");
-  add("In market","training",iso(mid),"Trainer field check-ins");
-  add("Wrap-up","all",       d(E,2),  "Completion & results snapshot");
-  add("Wrap-up","all",       d(E,5),  "What we'd do differently (15 min huddle)");
-  add("Wrap-up","all",       d(E,7),  "Archive assets & source of truth");
-  return rows;
-}
+/* ================================================================
+   CAMPAIGNS — launch-anchored creation wizard
+   Sources are analysed before approval; the runway works backwards.
+   ================================================================ */
 
 function openCampaign(){
-  const chBoxes=CAMPAIGN_CHANNELS.map(c=>
-    '<label class="ctgt" style="--cc:var(--teal)"><input type="checkbox" value="'+c.key+'" checked><span>'+c.label+'</span></label>').join("");
-  const roleBoxes=["FOH","BOH","Sushi","Bar/Deli","Managers"].map(r=>
-    '<label class="ctgt" style="--cc:var(--deep)"><input type="checkbox" value="'+r+'"><span>'+r+'</span></label>').join("");
-  showModal(
-    '<h2>New campaign</h2>'+
-    '<p class="hint">Answer four things and the playbook drafts the whole runway — a real Asana project with Pre-launch, Launch week, In market and Wrap-up phases, dated back from your launch. You edit before anything is created.</p>'+
+  const queued=[];
+  const chBoxes=CAMPAIGN_CHANNELS.map(c=>'<label class="ctgt" style="--cc:var(--teal)"><input type="checkbox" value="'+c.key+'" checked><span>'+c.label+'</span></label>').join("");
+  const roleBoxes=["FOH","BOH","Sushi","Bar / Deli","Managers"].map(r=>'<label class="ctgt" style="--cc:var(--deep)"><input type="checkbox" value="'+r+'"><span>'+r+'</span></label>').join("");
+  showModal('<h2>New campaign</h2><p class="hint">Choose the launch date first. The runway works backwards so learning is ready before launch, not built after it.</p>'+
     '<div class="fld"><label>Campaign name</label><input id="cName" placeholder="e.g. Summer Menu 2027"></div>'+
-    '<div class="row"><div class="fld"><label>Launch (start)</label><input type="date" id="cStart"></div>'+
-    '<div class="fld"><label>Ends</label><input type="date" id="cEnd"></div></div>'+
+    '<div class="row"><div class="fld"><label>Launch date</label><input type="date" id="cStart"></div><div class="fld"><label>Campaign ends</label><input type="date" id="cEnd"></div></div>'+
     '<div class="fld"><label>Channels</label><div style="display:flex;gap:4px;flex-wrap:wrap">'+chBoxes+'</div></div>'+
     '<div class="fld"><label>Roles affected</label><div style="display:flex;gap:4px;flex-wrap:wrap">'+roleBoxes+'</div></div>'+
     '<div class="fld"><label>Campaign notes</label><textarea id="cNotes" placeholder="Goal, audience, important decisions, source links, what cannot change…"></textarea></div>'+
-    '<div class="fld"><label>Band colour</label><select id="cColor">'+
-      ["#D9822B","#0A3D62","#00A8A8","#F7C325","#7A5FB0","#C0392B","#3A7D44"].map(c=>'<option value="'+c+'">'+c+'</option>').join("")+'</select></div>'+
-    '<div class="drawer-actions"><button class="btn primary" id="cPlan">Draft the plan</button>'+
-    '<button class="btn ghost" data-close>Cancel</button></div>'+
-    '<div id="cPlanOut"></div>'
-  );
+    '<div class="fld campaign-create-resources"><label>Initial source material</label><div class="campaign-create-resource-line"><input type="file" id="cFiles" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md,.json,image/*"><select id="cFileType">'+CAMPAIGN_RESOURCE_TYPES.map(x=>'<option>'+x+'</option>').join("")+'</select><button class="btn ghost" id="cAddFiles">Add files</button></div><div id="cFileQueue" class="campaign-create-file-queue"></div><small>Files are attached to the new Asana project and used to propose recipe, shoot and learning work.</small></div>'+
+    '<div class="fld"><label>Band colour</label><select id="cColor">'+["#D9822B","#0A3D62","#00A8A8","#F7C325","#7A5FB0","#C0392B","#3A7D44"].map(c=>'<option value="'+c+'">'+c+'</option>').join("")+'</select></div>'+
+    '<div class="drawer-actions"><button class="btn primary" id="cPlan">✨ Read sources and draft the plan</button><button class="btn ghost" data-close>Cancel</button></div><div id="cPlanOut"></div>');
   wireModalClose();
-  document.getElementById("cPlan").onclick=()=>{
-    const name=document.getElementById("cName").value.trim(); if(!name){toast("Name first");return;}
-    const start=document.getElementById("cStart").value, end=document.getElementById("cEnd").value;
-    if(!start||!end){toast("Pick the dates");return;}
-    const channels=[...document.querySelectorAll('#modal .fld input[type="checkbox"]:checked')]
-      .map(i=>i.value).filter(v=>CAMPAIGN_CHANNELS.some(c=>c.key===v));
-    const roles=[...document.querySelectorAll('#modal .fld input[type="checkbox"]:checked')]
-      .map(i=>i.value).filter(v=>!CAMPAIGN_CHANNELS.some(c=>c.key===v));
-    const plan=buildCampaignPlan(name,start,end,channels,roles);
-    const out=document.getElementById("cPlanOut");
-    let html='<div class="ins-h" style="margin-top:18px">The plan — untick or edit anything</div>';
-    CAMPAIGN_PHASES.forEach(ph=>{
-      const rows=plan.filter(r=>r.phase===ph); if(!rows.length) return;
-      html+='<div class="plan-ph">'+ph+'</div>';
-      rows.forEach((r)=>{ const ix=plan.indexOf(r);
-        html+='<div class="plan-row"><input type="checkbox" data-pi="'+ix+'" checked>'+
-          '<input type="text" data-pn="'+ix+'" value="'+esc(r.name)+'">'+
-          '<input type="date" data-pd="'+ix+'" value="'+r.due+'"></div>';
+  const renderQueue=()=>{
+    const box=document.getElementById("cFileQueue");
+    box.innerHTML=queued.length?queued.map((q,i)=>'<div><span>'+esc(q.file.name)+'</span><select data-cqcat="'+i+'">'+CAMPAIGN_RESOURCE_TYPES.map(x=>'<option'+(x===q.category?' selected':'')+'>'+x+'</option>').join("")+'</select><button data-cqdel="'+i+'">×</button></div>').join(""):'<span class="hint">No files added yet.</span>';
+    box.querySelectorAll("[data-cqcat]").forEach(el=>el.onchange=()=>{queued[+el.dataset.cqcat].category=el.value;queued[+el.dataset.cqcat].analysis=null;});
+    box.querySelectorAll("[data-cqdel]").forEach(el=>el.onclick=()=>{queued.splice(+el.dataset.cqdel,1);renderQueue();});
+  };
+  renderQueue();
+  document.getElementById("cAddFiles").onclick=()=>{
+    const files=[...document.getElementById("cFiles").files],category=document.getElementById("cFileType").value;
+    files.forEach(file=>{if(file.size>3*1024*1024)toast(file.name+" is larger than the 3 MB browser-upload limit");else queued.push({file,category,analysis:null,data_base64:null});});
+    document.getElementById("cFiles").value="";renderQueue();
+  };
+  document.getElementById("cPlan").onclick=async()=>{
+    const name=document.getElementById("cName").value.trim(),launch=document.getElementById("cStart").value,endDate=document.getElementById("cEnd").value;
+    if(!name){toast("Name the campaign first");return;}if(!launch){toast("Choose the launch date");return;}if(endDate&&pd(endDate)<pd(launch)){toast("The campaign end must be after launch");return;}
+    const channels=[...document.querySelectorAll('#modal .fld input[type="checkbox"]:checked')].map(i=>i.value).filter(v=>CAMPAIGN_CHANNELS.some(c=>c.key===v));
+    const roles=[...document.querySelectorAll('#modal .fld input[type="checkbox"]:checked')].map(i=>i.value).filter(v=>!CAMPAIGN_CHANNELS.some(c=>c.key===v));
+    const btn=document.getElementById("cPlan");btn.disabled=true;btn.innerHTML='<span class="spin"></span> reading sources…';
+    try{
+      for(const q of queued){
+        if(q.analysis)continue;
+        try{const r=await analyseCampaignFile(q.file,q.category,{name,start:launch,due:endDate});q.analysis=r.analysis;q.data_base64=r.data_base64;}
+        catch(e){q.error=e.message;q.data_base64=await fileToBase64(q.file);}
+      }
+      const sourceMap={};queued.forEach((q,i)=>sourceMap["queued-"+i]={name:q.file.name,category:q.category,analysis:q.analysis,error:q.error});
+      const plan=[...buildCampaignPlan(name,launch,endDate,channels,roles),...campaignSourceRecommendations(sourceMap,launch)];
+      const seen=new Set(),deduped=plan.filter(r=>{const k=smartSlug(r.name);if(seen.has(k))return false;seen.add(k);return true;});
+      const out=document.getElementById("cPlanOut");let html='<div class="campaign-create-plan-head"><b>The backwards plan</b><span>Launch '+campFmt(pd(launch))+' · untick or edit anything</span></div>';
+      CAMPAIGN_PHASES.forEach(ph=>{
+        const rows=deduped.filter(r=>r.phase===ph);if(!rows.length)return;html+='<div class="plan-ph">'+ph+'</div>';
+        rows.forEach(r=>{const ix=deduped.indexOf(r);html+='<div class="plan-row smart"><input type="checkbox" data-pi="'+ix+'" checked><input type="text" data-pn="'+ix+'" value="'+esc(r.name)+'"><input type="date" data-pd="'+ix+'" value="'+r.due+'"><span>'+(r.sourceNames&&r.sourceNames[0]!=="Academy campaign playbook"?'SOURCE':'PLAYBOOK')+'</span></div>';});
       });
-    });
-    html+='<div class="drawer-actions"><button class="btn primary" id="cCreate">Create it all in Asana</button></div>';
-    out.innerHTML=html;
-    document.getElementById("cCreate").onclick=async()=>{
-      const btn=document.getElementById("cCreate"); btn.disabled=true; btn.innerHTML='<span class="spin"></span> building…';
-      const color=document.getElementById("cColor").value;
-      const notes=document.getElementById("cNotes").value.trim();
-      try{
-        const res=await call("create_project",{name,team:ACADEMY_TEAM,color:HEX_TO_ASANA[color]||"dark-orange",default_view:"calendar",
-          privacy_setting:"private_to_team",start_on:start,due_on:end,notes,
-          sections:CAMPAIGN_PHASES.map(p=>({sectionName:p}))});
-        const gid=res.data&&res.data.gid; if(!gid) throw new Error("no project id returned");
-        const secs=(res.data.sections_created&&res.data.sections_created.succeeded)||[];
-        const secMap={}; secs.forEach(s=>{ secMap[s.name]=s.gid; });
-        const tasks=[];
-        plan.forEach((r,ix)=>{
-          const cb=document.querySelector('[data-pi="'+ix+'"]'); if(cb&&!cb.checked) return;
-          const nm=document.querySelector('[data-pn="'+ix+'"]'), dt=document.querySelector('[data-pd="'+ix+'"]');
-          const t={name:(nm?nm.value.trim():r.name)||r.name, project_id:gid, due_on:(dt&&dt.value)||r.due};
-          if(secMap[r.phase]) t.section_id=secMap[r.phase];
-          tasks.push(t);
-        });
-        if(tasks.length) await call("create_tasks",{tasks});
-        let portfolioLinked=true;
-        try{ await call("add_to_portfolio",{portfolio_gid:CAMPAIGN_PORTFOLIO,item:gid}); }
-        catch(portfolioErr){ portfolioLinked=false; }
-        const campaign={gid,name,start,due:end,color,notes,url:"https://app.asana.com/0/"+gid,source:"portfolio"};
-        cfg.campaigns=(cfg.campaigns||[]).filter(c=>c.gid!==gid); cfg.campaigns.push(campaign);
-        cfg.projects=(cfg.projects||[]).filter(p=>p.gid!==gid); cfg.projects.push({gid,name,color,on:true,campaign:true});
-        state.campaignSelected=gid; state.campaignsLoaded=false;
-        saveCfg(); closeModal(); confetti(); switchTab("campaigns");
-        toast(portfolioLinked?"Campaign live — "+tasks.length+" tasks on the runway":"Campaign created, but it still needs adding to the portfolio");
-        loadAll();
-      }catch(e){ btn.disabled=false; btn.textContent="Create it all in Asana"; toast("Failed: "+e.message); }
-    };
+      html+='<div class="drawer-actions"><button class="btn primary" id="cCreate">Create campaign, resources and tasks</button></div>';out.innerHTML=html;
+      document.getElementById("cCreate").onclick=()=>createCampaignFromPlan({name,launch,endDate,channels,roles,plan:deduped,queued});
+    }catch(e){toast("Could not draft campaign: "+e.message);}finally{btn.disabled=false;btn.textContent="✨ Read sources and draft the plan";}
   };
 }
 
+async function createCampaignFromPlan(ctx){
+  const {name,launch,endDate,plan,queued}=ctx,btn=document.getElementById("cCreate");btn.disabled=true;btn.innerHTML='<span class="spin"></span> building…';
+  const color=document.getElementById("cColor").value,notes=document.getElementById("cNotes").value.trim();
+  try{
+    const res=await call("create_shared_project",{name,team:ACADEMY_TEAM,color:HEX_TO_ASANA[color]||"dark-orange",default_view:"calendar",privacy_setting:"private_to_team",start_on:launch,due_on:endDate||null,notes,sections:CAMPAIGN_SECTIONS.map(sectionName=>({sectionName}))});
+    const gid=res.data&&res.data.gid;if(!gid)throw new Error("No project id returned");
+    const secs=(res.data.sections_created&&res.data.sections_created.succeeded)||[],secMap={};secs.forEach(s=>secMap[s.name]=s.gid);
+    const reviewed=plan.map((r,ix)=>{
+      const cb=document.querySelector('[data-pi="'+ix+'"]'),nm=document.querySelector('[data-pn="'+ix+'"]'),dt=document.querySelector('[data-pd="'+ix+'"]');
+      r.name=(nm&&nm.value.trim())||r.name;r.due=(dt&&dt.value)||r.due;r.selected=!!(cb&&cb.checked);r.dismissed=!r.selected;r.action=r.selected?"create":"dismissed";return r;
+    }),selected=reviewed.filter(r=>r.selected);
+    let shoot=null;
+    const shootRec=selected.find(r=>r.type==="shoot_day");
+    if(shootRec){
+      const sr=await call("create_shared_tasks",{tasks:[{name:shootRec.name,project_id:CC_PROJECT,section_id:SEC_SHOOT,due_on:shootRec.due,notes:smartTaskNotes(shootRec,"")}]}),st=sr.data&&sr.data[0];
+      if(st){shoot={gid:st.gid,name:shootRec.name,due:shootRec.due};shootRec.existingGid=st.gid;await call("update_shared_tasks",{tasks:[{task:st.gid,add_projects:[{project_id:gid,section_id:secMap[shootRec.phase]}]}]});}
+    }
+    for(const r of selected.filter(x=>x!==shootRec)){
+      const display=shoot&&r.requiresShoot?'「shot」 '+r.name.replace(/^Film:\s*/i,"")+" — "+shoot.name:r.name,due=shoot&&r.requiresShoot?shoot.due:r.due;
+      const cr=await call("create_shared_tasks",{tasks:[{name:display,project_id:gid,section_id:secMap[r.phase],due_on:due,notes:smartTaskNotes(r,"")}]}),t=cr.data&&cr.data[0];
+      if(t&&shoot&&r.requiresShoot){await call("update_shared_tasks",{tasks:[{task:t.gid,add_projects:[{project_id:CC_PROJECT,section_id:SEC_PLAN}]}]});await call("set_task_parent",{task_id:t.gid,parent_id:shoot.gid});}
+      if(t)r.existingGid=t.gid;r.action="covered";r.selected=false;
+    }
+    const sources={},uploadErrors=[];
+    for(const q of queued){
+      try{const data=q.data_base64||await fileToBase64(q.file),ur=await call("upload_attachment",{parent_id:gid,filename:q.file.name,mime:q.file.type||"application/octet-stream",data_base64:data}),a=ur.data||{};sources[a.gid]={gid:a.gid,name:a.name||q.file.name,category:q.category,analysis:q.analysis,error:q.error||null,addedAt:new Date().toISOString()};}
+      catch(e){uploadErrors.push(q.file.name+": "+e.message);}
+    }
+    const sourceValues=Object.values(sources),smart={version:1,taskGid:null,launchDate:launch,dirty:uploadErrors.length>0,dirtyReason:uploadErrors.length?"Some initial source files did not upload. Add them again, then run Smart Update.":"",sources,summary:sourceValues.map(s=>s.analysis&&s.analysis.summary).filter(Boolean).join(" ").slice(0,1600),gaps:sourceValues.flatMap(s=>s.analysis&&s.analysis.gaps||[]),recommendations:reviewed.map(r=>r.dismissed?({...r,action:"dismissed",selected:false,dismissed:true}):({...r,action:"covered",selected:false,dismissed:false})),lastUpdate:new Date().toISOString()};
+    const stateSave=await call("save_campaign_state",{project_id:gid,section_id:secMap["Campaign HQ"],name:"⚙️ campaign-smart-plan (managed by app)",notes:JSON.stringify(smart)});smart.taskGid=stateSave.data&&stateSave.data.gid||null;
+    let portfolioLinked=true;try{await call("add_to_portfolio",{portfolio_gid:CAMPAIGN_PORTFOLIO,item:gid});}catch{portfolioLinked=false;}
+    const campaign={gid,name,start:launch,due:endDate,color,notes,url:"https://app.asana.com/0/"+gid,source:"portfolio"};
+    cfg.campaigns=(cfg.campaigns||[]).filter(c=>c.gid!==gid);cfg.campaigns.push(campaign);cfg.projects=(cfg.projects||[]).filter(p=>p.gid!==gid);cfg.projects.push({gid,name,color,on:true,campaign:true});state.campaignSmart[gid]=smart;state.campaignSelected=gid;state.campaignView[gid]="smart";state.campaignsLoaded=false;saveCfg();closeModal();confetti();switchTab("campaigns");toast((portfolioLinked?"Campaign created":"Campaign created; portfolio link needs attention")+(uploadErrors.length?" · some files failed":""));loadAll();
+  }catch(e){btn.disabled=false;btn.textContent="Create campaign, resources and tasks";toast("Failed: "+e.message);}
+}
 
 /* ================================================================
    @MENTIONS — real Asana mentions from the comment box.

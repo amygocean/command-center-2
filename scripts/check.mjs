@@ -41,6 +41,9 @@ assert.match(core,/t\.isComms\?"update_shared_tasks":"update_tasks"[\s\S]*comple
 assert.match(core,/t\.isComms\?"update_shared_tasks":"update_tasks"/,"Communities rescheduling does not use the shared Asana identity");
 
 const drawer=fs.readFileSync(path.join(root,"js/drawer.js"),"utf8");
+assert.match(drawer,/create_shared_project/,"Campaign projects are not created through the shared Academy identity");
+assert.match(drawer,/create_shared_tasks/,"Campaign runway tasks are not created through the shared Academy identity");
+assert.match(drawer,/r\.dismissed=!r\.selected/,"Unticked creation-plan ideas are not preserved as dismissed");
 assert.match(drawer,/id="dTime"[\s\S]*t\.sendTime/,"Communities task drawer cannot edit the send time");
 assert.match(drawer,/upd\.due_at=communityDueAt\(due,sendTime\); upd\.due_on=null/,"Timed drawer edits do not clear due_on");
 assert.match(drawer,/upd\.due_on=due; upd\.due_at=null/,"Date-only drawer edits do not clear due_at");
@@ -73,11 +76,51 @@ assert.match(styles,/\.wc-grid\{grid-auto-rows:minmax\(88px,auto\)/,"Communities
 assert.match(styles,/#commCal \.wc-dow,#commCal \.wc-grid\{width:max\(100%,760px\)/,"Communities calendar is not responsive on narrow screens");
 
 const asana=fs.readFileSync(path.join(root,"api/asana.js"),"utf8");
-assert.match(asana,/`\/attachments\?\$\{qs\(\{[\s\S]*parent:args\.task_id/,"Attachment listing does not use Asana's parent query");
+assert.match(asana,/const parent=args\.parent_id\|\|args\.task_id[\s\S]*`\/attachments\?\$\{qs\(\{[\s\S]*parent,/,"Attachment listing does not use Asana's parent query");
 assert.doesNotMatch(asana,/\/tasks\/\$\{args\.task_id\}\/attachments/,"Obsolete task attachment-list route returned");
 assert.match(asana,/new FormData\(\)/,"Attachment upload is not multipart form data");
 assert.match(asana,/method:"POST"[\s\S]*body: form/,"Attachment upload is not posted to Asana");
 assert.match(asana,/projects\.gid,projects\.name/,"My Tasks loading does not request the current board ID");
+
+
+const campaigns=fs.readFileSync(path.join(root,"js/campaigns.js"),"utf8");
+assert.match(campaigns,/offset:-14,name:"Course material sent out and available to teams"/,"Course delivery is not anchored 14 days before launch");
+assert.match(campaigns,/offset:-28,name:"Shoot Day — \{\{name\}\}"/,"Shoot day is not anchored 28 days before launch");
+assert.match(campaigns,/Smart update whole plan/i,"Campaign Smart Update control is missing");
+assert.match(campaigns,/parent_id:c\.gid[\s\S]*upload_attachment/,"Campaign resources are not uploaded to the Asana project");
+assert.match(campaigns,/save_campaign_state/,"Campaign intelligence is not persisted in shared Asana state");
+assert.match(campaigns,/set_task_parent/,"Campaign shoot deliverables are not linked to shoot days");
+assert.match(campaigns,/Only checked changes will be written to Asana/,"Smart Plan does not require approval before writes");
+const resourceApi=fs.readFileSync(path.join(root,"api/campaign-resource.js"),"utf8");
+assert.match(resourceApi,/getDocument\(/,"PDF campaign sources are not supported");
+assert.match(resourceApi,/mammoth\.extractRawText/,"Word campaign sources are not supported");
+assert.match(resourceApi,/readExcelFile\(buf\)/,"Spreadsheet campaign sources are not supported");
+assert.match(resourceApi,/Do not invent operational facts/,"Source analysis is not guarded against invented operational facts");
+assert.match(core,/state\.campaignSmart = \{\}/,"Fresh Asana loads do not invalidate the shared Smart Plan cache");
+assert.match(campaigns,/inputChanged=launchChanged\|\|name!==c\.name\|\|due!==c\.due\|\|notes!==c\.notes/,"Campaign detail changes do not mark the Smart Plan for refresh");
+assert.match(campaigns,/old&&old\.dismissed/,"Smart Update does not preserve deliberately dismissed recommendations");
+assert.match(campaigns,/if\(t\.completed\)return\{[\s\S]*action:"covered"/,"Smart Update can still move completed campaign work");
+
+// Exercise the launch arithmetic and safe-refresh decisions dynamically.
+const campaignContext=vm.createContext({
+  console,Date,Map,Set,Promise,
+  pd:value=>{const [y,m,d]=String(value).split("-").map(Number);return new Date(y,m-1,d);},
+  iso:d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`
+});
+vm.runInContext(campaigns,campaignContext,{filename:"js/campaigns.js"});
+const backwards=JSON.parse(vm.runInContext('JSON.stringify(buildCampaignPlan("Summer Menu","2026-10-01","2026-10-31",["courses","videos"],["FOH"]))',campaignContext));
+assert.equal(backwards.find(x=>x.id==="base:course-material-live").due,"2026-09-17","Course material is not scheduled two weeks before launch");
+assert.equal(backwards.find(x=>x.id==="base:shoot-day").due,"2026-09-03","Shoot day is not scheduled two weeks before course release");
+const sourceRows=JSON.parse(vm.runInContext('JSON.stringify(campaignSourceRecommendations({a:{name:"Mussels recipe.pdf",analysis:{recipes:[{name:"Whole-shell mussels",suggested_shots:["Boil","Discard closed shells"]}]}}},"2026-10-01"))',campaignContext));
+assert.equal(sourceRows[0].due,"2026-09-03","Recipe filming is not attached to the campaign shoot window");
+const safeRefresh=JSON.parse(vm.runInContext(`JSON.stringify(compareRecommendations(
+  [{id:"one",name:"Existing output",due:"2026-09-10"},{id:"two",name:"Rejected idea",due:"2026-09-12"},{id:"three",name:"Finished output",due:"2026-09-15"}],
+  [{gid:"t1",name:"Existing output",due:"2026-09-01",completed:false,notes:"#campaign-smart-id:one"},{gid:"t3",name:"Finished output",due:"2026-09-01",completed:true,notes:"#campaign-smart-id:three"}],
+  [{id:"one",dismissed:true},{id:"two",dismissed:true}]
+))`,campaignContext));
+assert.equal(safeRefresh.find(x=>x.id==="one").action,"dismissed","A dismissed date move is not preserved");
+assert.equal(safeRefresh.find(x=>x.id==="two").action,"dismissed","A dismissed new idea is not preserved");
+assert.equal(safeRefresh.find(x=>x.id==="three").action,"covered","Completed work is not protected during refresh");
 
 // Exercise the composer logic without a browser. This catches the important
 // integration contract: description -> task notes, then image -> attachment.
@@ -158,4 +201,4 @@ for(const gid of ["m18","m10","m15","m12","m09"]) assert.match(calendarHtml,new 
 assert.ok(calendarHtml.indexOf("09:00")<calendarHtml.indexOf("10:00") && calendarHtml.indexOf("10:00")<calendarHtml.indexOf("18:00"),"Calendar messages are not sorted by send time");
 assert.doesNotMatch(calendarHtml,/\+2 more|\+\d+ more/,"Calendar still collapses messages behind a more counter");
 
-console.log(`Verified ${files.length} code files, shared UI safeguards, and the Communities role/time/responsive-calendar workflow.`);
+console.log(`Verified ${files.length} code files, shared UI safeguards, Communities scheduling, and launch-anchored Smart Campaign workflows.`);
