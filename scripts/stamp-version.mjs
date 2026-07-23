@@ -1,10 +1,10 @@
-// Rewrites the ?v=… cache-busting token on every asset in index.html to a
-// build-unique value, so a deploy can never serve a stale core.js/styles.css
-// against a changed API. Runs automatically on Vercel via the "vercel-build"
-// npm script; safe to run locally too.
+// Optional helper: rewrites the ?v=… cache-busting token on every asset in
+// index.html so a deploy can't serve a stale core.js/styles.css. Run manually
+// with `npm run stamp` before committing a release if you'd rather not bump the
+// version by hand. It is deliberately NOT wired into the Vercel build, so the
+// site keeps deploying as a plain static project with no build step.
 //
-// The version is the git commit SHA when Vercel provides it, otherwise a
-// timestamp — either way it changes on every deploy.
+// The version is the git commit SHA when available, otherwise a timestamp.
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
