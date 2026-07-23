@@ -26,7 +26,7 @@ function renderStudio(){
   const past=allShoots.filter(t=>pd(t.due)<today).sort((a,b)=>a.due<b.due?1:-1); // most recent past first
   if(!allShoots.length){
     box.innerHTML='<div class="empty">No shoot days on the radar. Hit <b>+ Add shoot</b> and let\'s roll 🎬</div>';
-    renderShootTodos(); renderEvents(); renderBriefs(); wireStudioAdd(); return;
+    renderShootTodos(); renderBriefs(); wireStudioAdd(); return;
   }
   const collapsedCount=upcoming.length?1:0;
   const shown=studioAll?[...upcoming,...past]:upcoming.slice(0,1);
@@ -70,7 +70,7 @@ function renderStudio(){
   box.querySelectorAll(".sc-run").forEach(b=>b.onclick=()=>openRunSheet(b.dataset.gid));
   const more=document.getElementById("studioMore"); if(more) more.onclick=()=>{ studioAll=true; renderStudio(); };
   const less=document.getElementById("studioLess"); if(less) less.onclick=()=>{ studioAll=false; renderStudio(); };
-  renderShootTodos(); renderEvents(); renderBriefs(); wireStudioAdd();
+  renderShootTodos(); renderBriefs(); wireStudioAdd();
 }
 
 /* ---- the "Shoot to-dos" side slot: every task tied to a shoot ---- */
@@ -362,38 +362,8 @@ function queuePromoFor(gid){
   toast("Promo drafted — pick the communities and queue it");
   if(nm) nm.focus();
 }
-function renderEvents(){
-  const box=document.getElementById("eventList"); if(!box) return;
-  const today=todayD();
-  const events=state.tasks.filter(t=>t.isEvent&&!t.isComms&&t.due).sort((a,b)=>a.due<b.due?-1:1);
-  const upcoming=events.filter(t=>!t.completed&&pd(t.due)>=today);
-  if(!upcoming.length){ box.innerHTML='<div class="empty">Nothing scheduled. Add a masterclass or workshop below — it lands on the calendar with a star.</div>'; }
-  else box.innerHTML=upcoming.map(ev=>{
-    const d=pd(ev.due);
-    const link=(ev.notes||"").match(/https?:\/\/\S+/);
-    const promo=eventHasPromo(ev);
-    return '<div class="ev-row" data-gid="'+ev.gid+'">'+
-      '<span class="ev-date"><b>'+d.getDate()+'</b> '+MO[d.getMonth()].slice(0,3)+'</span>'+
-      '<span class="news-main"><span class="news-t">'+esc(ev.name)+'</span>'+
-      '<span class="news-meta">'+esc(ev.projectName)+' · '+humanWhen(daysTo(ev.due))+
-      (link?' · <a href="'+esc(link[0])+'" target="_blank" style="color:var(--teal)">recording ↗</a>':'')+'</span></span>'+
-      (promo?'<span class="ev-ok">promo queued</span>':'<button class="btn ghost sm ev-promo" data-gid="'+ev.gid+'">Queue promo</button>')+
-      '</div>';
-  }).join("");
-  box.querySelectorAll(".ev-row").forEach(r=>r.onclick=e=>{ if(!e.target.closest(".ev-promo")&&!e.target.closest("a")) openDrawer(r.dataset.gid); });
-  box.querySelectorAll(".ev-promo").forEach(b=>b.onclick=e=>{ e.stopPropagation(); queuePromoFor(b.dataset.gid); });
-  const add=document.getElementById("evAdd");
-  if(add && !add.dataset.wired){ add.dataset.wired="1";
-    add.onclick=async()=>{
-      const nm=document.getElementById("evName"), dt=document.getElementById("evDate");
-      const name=nm.value.trim(); if(!name){toast("Name the event (include masterclass / workshop / webinar)");return;}
-      if(!/masterclass|workshop|webinar|forum/i.test(name)){ toast("Include masterclass, workshop, webinar or forum in the name so it's recognised"); return; }
-      try{ await call("create_tasks",{tasks:[{name, project_id:CC_PROJECT, section_id:SEC_PLAN, due_on:dt.value||null}]});
-        nm.value=""; toast("Event on the calendar"); loadAll();
-      }catch(e){ toast("Failed: "+e.message); }
-    };
-  }
-}
+/* The Events tab (js/events.js) owns masterclasses & webinars now.
+   eventHasPromo() and queuePromoFor() above are still used there. */
 
 /* ================================================================
    BRIEF LIBRARY — every brief, with a status you can advance

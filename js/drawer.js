@@ -371,7 +371,9 @@ function buildMentionHtml(txt){
   let hasMentions=false;
   const html=esc(txt).replace(/@\[([^\]]+)\]\((\d+)\)/g,(_,name,gid)=>{
     hasMentions=true; mentioned.push({gid,name});
-    return '<a data-asana-gid="'+gid+'"/>';
+    // data-asana-type="user" matches what Asana emits for its own mentions and
+    // is what our reader (api/_mentions.js) parses back out.
+    return '<a data-asana-gid="'+gid+'" data-asana-type="user"/>';
   });
   return {html,hasMentions,mentioned};
 }
@@ -392,7 +394,7 @@ const MENTION_CACHE_MS=5*60*1000;
 const MENTION_INCREMENTAL_OVERLAP_MS=15*60*1000;
 const MENTION_REF_PREFIX="mention-ref:";
 const asanaMentions={items:[],loadedAt:0,loading:null,error:null,meta:null,hydrated:false};
-const mentionPanel={filter:"all",query:"",expanded:{}};
+const mentionPanel={filter:"all",query:"",person:"",expanded:{}};
 let mentionPrefs=null,mentionWatcherStarted=false,mentionWatcherTimer=null;
 
 function mentionUserKey(){ return String((state.me&&state.me.gid)||"guest"); }
@@ -405,9 +407,12 @@ function loadMentionPrefs(){
   if(mentionPrefs) return mentionPrefs;
   try{ mentionPrefs=JSON.parse(localStorage.getItem(mentionPrefsKey())||"null"); }
   catch(_){ mentionPrefs=null; }
-  if(!mentionPrefs||typeof mentionPrefs!=="object") mentionPrefs={seen:{},hidden:{}};
+  if(!mentionPrefs||typeof mentionPrefs!=="object") mentionPrefs={seen:{},hidden:{},handled:{}};
   if(!mentionPrefs.seen||typeof mentionPrefs.seen!=="object") mentionPrefs.seen={};
   if(!mentionPrefs.hidden||typeof mentionPrefs.hidden!=="object") mentionPrefs.hidden={};
+  // "handled" = you've dealt with it. Handled mentions leave the All inbox and
+  // live in History, where they can be reopened.
+  if(!mentionPrefs.handled||typeof mentionPrefs.handled!=="object") mentionPrefs.handled={};
   if(!mentionPrefs.legacySeenAt){
     const old=localStorage.getItem("ob_at_seen:"+mentionUserKey())||localStorage.getItem("ob_at_seen")||"";
     if(old&&!Number.isNaN(new Date(old).getTime()))mentionPrefs.legacySeenAt=old;
@@ -423,6 +428,7 @@ function mentionIsSeen(m){
   return !!prefs.seen[mentionId(m)] || !!(prefs.legacySeenAt&&m&&m.at&&new Date(m.at)<=new Date(prefs.legacySeenAt));
 }
 function mentionIsHidden(m){ return !!loadMentionPrefs().hidden[mentionId(m)]; }
+function mentionIsHandled(m){ return !!loadMentionPrefs().handled[mentionId(m)]; }
 function markMentionsSeen(items){
   const prefs=loadMentionPrefs(),now=Date.now();
   (items||[]).forEach(m=>{ const id=mentionId(m); if(id)prefs.seen[id]=now; });
@@ -431,6 +437,11 @@ function markMentionsSeen(items){
 function setMentionsHidden(items,hidden){
   const prefs=loadMentionPrefs(),now=Date.now();
   (items||[]).forEach(m=>{ const id=mentionId(m); if(!id)return; if(hidden)prefs.hidden[id]=now; else delete prefs.hidden[id]; });
+  saveMentionPrefs(); renderMentionBadge();
+}
+function setMentionsHandled(items,handled){
+  const prefs=loadMentionPrefs(),now=Date.now();
+  (items||[]).forEach(m=>{ const id=mentionId(m); if(!id)return; if(handled){prefs.handled[id]=now;prefs.seen[id]=prefs.seen[id]||now;} else delete prefs.handled[id]; });
   saveMentionPrefs(); renderMentionBadge();
 }
 function hydrateMentionCache(){
@@ -479,7 +490,7 @@ function mergeMentionResults(previous,incoming){
     .sort((a,b)=>new Date(b.at||0)-new Date(a.at||0)).slice(0,300);
 }
 function announceNewMentions(items){
-  const visible=(items||[]).filter(m=>!mentionIsHidden(m)); if(!visible.length)return;
+  const visible=(items||[]).filter(m=>!mentionIsHidden(m)&&!mentionIsHandled(m)); if(!visible.length)return;
   const btn=document.getElementById("btnAt");
   if(btn){ btn.classList.remove("mention-pop"); void btn.offsetWidth; btn.classList.add("mention-pop"); setTimeout(()=>btn.classList.remove("mention-pop"),1300); }
   const first=visible[0];
@@ -539,8 +550,15 @@ async function refreshAsanaMentions(force=false,deep=false){
 function startMentionWatcher(){
   if(mentionWatcherStarted)return;
   mentionWatcherStarted=true;
+  let ticks=0;
   mentionWatcherTimer=setInterval(()=>{
-    if(document.visibilityState==="visible")refreshAsanaMentions(false,false);
+    if(document.visibilityState!=="visible")return;
+    ticks++;
+    // When the Mentions panel is open, keep it live every cycle. When it's
+    // closed we only need the badge, so poll less often (every 3rd cycle,
+    // ~15 min) to spare Asana the background scans.
+    const panelOpen=!!document.getElementById("mentionList");
+    if(panelOpen||ticks%3===0)refreshAsanaMentions(false,false);
   },MENTION_CACHE_MS);
   document.addEventListener("visibilitychange",()=>{
     if(document.visibilityState==="visible"&&Date.now()-asanaMentions.loadedAt>2*60*1000)refreshAsanaMentions(true,false);
@@ -548,7 +566,7 @@ function startMentionWatcher(){
 }
 function renderMentionBadge(){
   const b=document.getElementById("atBadge"); if(!b) return;
-  const unseen=mergedMentions().filter(m=>!mentionIsHidden(m)&&!mentionIsSeen(m)).length;
+  const unseen=mergedMentions().filter(m=>!mentionIsHidden(m)&&!mentionIsHandled(m)&&!mentionIsSeen(m)).length;
   b.textContent=unseen>99?"99+":unseen;
   b.style.display=unseen?"flex":"none";
   const btn=document.getElementById("btnAt");
@@ -575,24 +593,35 @@ function allMentionGroups(){
   return [...groups.values()].map(group=>{
     group.items.sort((a,b)=>new Date(b.at||0)-new Date(a.at||0));
     group.latest=group.items[0];
-    group.unseen=group.items.filter(m=>!mentionIsHidden(m)&&!mentionIsSeen(m)).length;
-    group.visibleItems=group.items.filter(m=>!mentionIsHidden(m));
+    // Three buckets: active (the All inbox), handled (History) and hidden.
+    // Hidden wins over handled so a mention only appears in one place.
     group.hiddenItems=group.items.filter(mentionIsHidden);
+    group.handledItems=group.items.filter(m=>!mentionIsHidden(m)&&mentionIsHandled(m));
+    group.activeItems=group.items.filter(m=>!mentionIsHidden(m)&&!mentionIsHandled(m));
+    group.visibleItems=group.activeItems; // back-compat for callers that predate History
+    group.unseen=group.activeItems.filter(m=>!mentionIsSeen(m)).length;
     return group;
   }).sort((a,b)=>new Date(b.latest&&b.latest.at||0)-new Date(a.latest&&a.latest.at||0));
 }
+function mentionItemsForFilter(group,filter){
+  if(filter==="hidden")return group.hiddenItems;
+  if(filter==="history")return group.handledItems;
+  return group.activeItems;
+}
 function mentionGroupsForPanel(){
   const q=mentionPanel.query.trim().toLowerCase();
+  const person=mentionPanel.person||"";
   return allMentionGroups().filter(group=>{
-    const items=mentionPanel.filter==="hidden"?group.hiddenItems:group.visibleItems;
+    const items=mentionItemsForFilter(group,mentionPanel.filter);
     if(!items.length)return false;
+    if(person&&!items.some(m=>(m.from||"Someone")===person))return false;
     if(!q)return true;
     return [group.taskName,group.projectName,group.parentName,...items.flatMap(m=>[m.from,m.text])]
       .filter(Boolean).join(" ").toLowerCase().includes(q);
   }).sort((a,b)=>{
-    const aItems=mentionPanel.filter==="hidden"?a.hiddenItems:a.visibleItems;
-    const bItems=mentionPanel.filter==="hidden"?b.hiddenItems:b.visibleItems;
-    if(mentionPanel.filter!=="hidden"){
+    const aItems=mentionItemsForFilter(a,mentionPanel.filter);
+    const bItems=mentionItemsForFilter(b,mentionPanel.filter);
+    if(mentionPanel.filter==="all"){
       const aNew=aItems.some(m=>!mentionIsSeen(m));
       const bNew=bItems.some(m=>!mentionIsSeen(m));
       if(aNew!==bNew)return bNew-aNew;
@@ -600,11 +629,18 @@ function mentionGroupsForPanel(){
     return new Date(bItems[0]&&bItems[0].at||0)-new Date(aItems[0]&&aItems[0].at||0);
   });
 }
+// Distinct people who have mentioned you, for the panel's person filter.
+function mentionPeopleOptions(){
+  const names=new Set();
+  mergedMentions().forEach(m=>{ if(!mentionIsHidden(m)&&!mentionIsHandled(m))names.add(m.from||"Someone"); });
+  return [...names].sort((a,b)=>a.localeCompare(b));
+}
 function mentionCounts(){
   const all=mergedMentions();
   return {
-    new:all.filter(m=>!mentionIsHidden(m)&&!mentionIsSeen(m)).length,
-    all:all.filter(m=>!mentionIsHidden(m)).length,
+    new:all.filter(m=>!mentionIsHidden(m)&&!mentionIsHandled(m)&&!mentionIsSeen(m)).length,
+    all:all.filter(m=>!mentionIsHidden(m)&&!mentionIsHandled(m)).length,
+    history:all.filter(m=>!mentionIsHidden(m)&&mentionIsHandled(m)).length,
     hidden:all.filter(mentionIsHidden).length
   };
 }
@@ -708,8 +744,37 @@ async function openMentionTask(groupOrTask){
 }
 function markAllVisibleMentionsSeen(){
   const groups=mentionGroupsForPanel();
-  markMentionsSeen(groups.flatMap(group=>mentionPanel.filter==="hidden"?group.hiddenItems:group.visibleItems));
+  markMentionsSeen(groups.flatMap(group=>mentionItemsForFilter(group,mentionPanel.filter)));
   renderMentionsModal();
+}
+function markAllActiveMentionsHandled(){
+  const groups=allMentionGroups();
+  const items=groups.flatMap(g=>g.activeItems);
+  if(!items.length){ toast("Nothing to clear — the inbox is empty"); return; }
+  setMentionsHandled(items,true);
+  toast(items.length+" mention"+(items.length===1?"":"s")+" moved to History");
+  renderMentionsModal();
+}
+// Post a reply comment to the source task, @-mentioning whoever mentioned you,
+// then mark the thread handled. Reuses the same comment plumbing as the drawer.
+async function replyToMention(group,text,btn){
+  const body=String(text||"").trim(); if(!body)return;
+  const latest=group.latest||group.items[0]||{};
+  const author=(latest.from&&state.users.find(u=>u.name===latest.from))||null;
+  const prefix=author?"@["+author.name+"]("+author.gid+") ":"";
+  if(btn){ btn.disabled=true; btn.textContent="Sending…"; }
+  try{
+    const {html,hasMentions}=buildMentionHtml(prefix+body);
+    if(hasMentions) await call("add_comment",{task_id:group.taskGid,text:html,html:true});
+    else await call("add_comment",{task_id:group.taskGid,text:prefix+body});
+    setMentionsHandled(group.items,true);
+    toast("Reply posted · moved to History");
+    delete mentionPanel.expanded[group.key];
+    renderMentionsModal();
+  }catch(e){
+    toast("Couldn't post reply: "+e.message);
+    if(btn){ btn.disabled=false; btn.textContent="Reply & handle"; }
+  }
 }
 function renderMentionsModal(){
   const listBox=document.getElementById("mentionList"),metaBox=document.getElementById("mentionMeta"),refresh=document.getElementById("mentionRefresh");
@@ -733,22 +798,28 @@ function renderMentionsModal(){
       metaBox.textContent=mode+" · "+asanaMentions.meta.scannedTasks+" tasks · "+asanaMentions.meta.scannedSubtasks+" subtasks · "+asanaMentions.meta.scannedComments+" comments";
     }else metaBox.textContent="Saved mentions appear immediately while Asana checks in the background";
   }
+  const filter=mentionPanel.filter;
+  // "Clear all" only makes sense on the active inbox and when it has something.
+  const clearAll=document.getElementById("mentionClearAll");
+  if(clearAll){ const show=filter==="all"&&counts.all>0; clearAll.style.display=show?"inline-flex":"none"; }
   const warning=asanaMentions.error||asanaMentions.meta&&asanaMentions.meta.warning;
   const warningHtml=warning?'<div class="mention-warning">'+esc(warning)+(mergedMentions().length?' Showing the mentions already saved in this browser.':'')+'</div>':'';
   if(!groups.length){
-    const empty=mentionPanel.filter==="hidden"?"No hidden mentions.":"No accessible mentions match this view.";
+    const empty=filter==="hidden"?"No hidden mentions."
+      :filter==="history"?"Nothing handled yet. Mentions you deal with land here."
+      :"You're all caught up — no open mentions. 🎉";
     listBox.innerHTML=warningHtml+'<div class="empty">'+(asanaMentions.loading?'<span class="spin"></span> ':'')+empty+'</div>';
   }else{
-    const hasNew=mentionPanel.filter==="all"&&groups.some(group=>group.visibleItems.some(m=>!mentionIsSeen(m)));
+    const hasNew=filter==="all"&&groups.some(group=>group.activeItems.some(m=>!mentionIsSeen(m)));
     let lastSection="";
     listBox.innerHTML=warningHtml+groups.map(group=>{
-      const items=mentionPanel.filter==="hidden"?group.hiddenItems:group.visibleItems;
+      const items=mentionItemsForFilter(group,filter);
       const latest=items[0]||group.latest,expanded=!!mentionPanel.expanded[group.key],pinned=isMentionTaskPinned(group.taskGid);
       const initial=esc(String(latest&&latest.from||"?").trim().charAt(0).toUpperCase());
       const location=group.isSubtask&&group.parentName?"Subtask of "+group.parentName:group.projectName;
       const unseen=items.filter(m=>!mentionIsSeen(m)).length;
       let section="";
-      if(mentionPanel.filter==="all"&&hasNew){
+      if(filter==="all"&&hasNew){
         const sectionKey=unseen?"new":"earlier";
         if(sectionKey!==lastSection){
           lastSection=sectionKey;
@@ -757,21 +828,33 @@ function renderMentionsModal(){
       }
       const comments=expanded?'<div class="mention-thread-comments">'+items.map(m=>
         '<div class="mention-comment'+(!mentionIsSeen(m)?' is-new':'')+'"><div><b>'+esc(m.from||"Someone")+'</b><span>'+esc(mentionDate(m.at))+'</span></div><p>'+esc(m.text||"Mentioned you")+'</p></div>'
-      ).join("")+'</div>':'';
-      return section+'<article class="mention-thread'+(unseen?' has-new':'')+'" data-thread="'+esc(group.key)+'">'+
+      ).join("")+
+        // Inline reply — post straight back without opening the drawer.
+        (filter!=="hidden"?'<div class="mention-reply"><input class="mention-reply-input" data-thread="'+esc(group.key)+'" placeholder="Reply to '+esc(latest&&latest.from||"the thread")+'…">'+
+          '<button class="btn primary sm" data-mention-action="reply" data-thread="'+esc(group.key)+'">Reply &amp; handle</button></div>':'')+
+        '</div>':'';
+      // Per-tab action buttons.
+      let actions='<button class="btn '+(pinned?'teal':'primary')+' sm" data-mention-action="pin" data-thread="'+esc(group.key)+'">'+(pinned?'✓ In My To-Do':'Show in My To-Do')+'</button>'+
+        '<button class="btn ghost sm" data-mention-action="open" data-thread="'+esc(group.key)+'">Open task</button>';
+      if(filter==="all"){
+        actions+='<button class="btn teal sm" data-mention-action="handle" data-thread="'+esc(group.key)+'">✓ Handled</button>'+
+          '<button class="btn ghost sm" data-mention-action="hide" data-thread="'+esc(group.key)+'">Hide</button>';
+      }else if(filter==="history"){
+        actions+='<button class="btn ghost sm" data-mention-action="reopen" data-thread="'+esc(group.key)+'">↩ Reopen</button>'+
+          '<button class="btn ghost sm" data-mention-action="hide" data-thread="'+esc(group.key)+'">Hide</button>';
+      }else{ // hidden
+        actions+='<button class="btn ghost sm" data-mention-action="restore" data-thread="'+esc(group.key)+'">Restore</button>';
+      }
+      return section+'<article class="mention-thread'+(unseen?' has-new':'')+(filter==="history"?' is-handled':'')+'" data-thread="'+esc(group.key)+'">'+
         '<div class="mention-thread-main" role="button" tabindex="0" data-mention-action="toggle" data-thread="'+esc(group.key)+'">'+
           '<div class="mention-avatar">'+initial+'</div><div class="mention-copy">'+
-            '<div class="mention-who"><b>'+esc(mentionPeopleLabel(items))+'</b> mentioned you'+(items.length>1?' '+items.length+' times':'')+'</div>'+ 
-            '<div class="mention-task">'+esc(group.taskName||"Untitled task")+'</div>'+ 
-            '<div class="mention-excerpt">'+esc(latest&&latest.text||"Mentioned you in this task")+'</div>'+ 
-            '<div class="mention-where">'+esc([location,mentionDate(latest&&latest.at)].filter(Boolean).join(" · "))+'</div>'+ 
-          '</div><div class="mention-thread-state">'+(unseen?'<span class="mention-new-dot" title="New"></span>':'')+'<span>'+(expanded?'⌃':'⌄')+'</span></div></div>'+ 
+            '<div class="mention-who"><b>'+esc(mentionPeopleLabel(items))+'</b> mentioned you'+(items.length>1?' '+items.length+' times':'')+(filter==="history"?' <span class="mention-handled-tag">Handled</span>':'')+'</div>'+
+            '<div class="mention-task">'+esc(group.taskName||"Untitled task")+'</div>'+
+            '<div class="mention-excerpt">'+esc(latest&&latest.text||"Mentioned you in this task")+'</div>'+
+            '<div class="mention-where">'+esc([location,mentionDate(latest&&latest.at)].filter(Boolean).join(" · "))+'</div>'+
+          '</div><div class="mention-thread-state">'+(unseen?'<span class="mention-new-dot" title="New"></span>':'')+'<span>'+(expanded?'⌃':'⌄')+'</span></div></div>'+
         comments+
-        '<div class="mention-actions">'+
-          '<button class="btn '+(pinned?'teal':'primary')+' sm" data-mention-action="pin" data-thread="'+esc(group.key)+'">'+(pinned?'✓ In My To-Do':'Show in My To-Do')+'</button>'+ 
-          '<button class="btn ghost sm" data-mention-action="open" data-thread="'+esc(group.key)+'">Open task</button>'+ 
-          '<button class="btn ghost sm" data-mention-action="'+(mentionPanel.filter==="hidden"?'restore':'hide')+'" data-thread="'+esc(group.key)+'">'+(mentionPanel.filter==="hidden"?'Restore':'Hide')+'</button>'+ 
-        '</div></article>';
+        '<div class="mention-actions">'+actions+'</div></article>';
     }).join("");
   }
   listBox.onclick=async event=>{
@@ -780,28 +863,71 @@ function renderMentionsModal(){
     const group=allMentionGroups().find(g=>g.key===actionEl.dataset.thread); if(!group)return;
     const action=actionEl.dataset.mentionAction;
     if(action==="toggle"){
-      mentionPanel.expanded[group.key]=!mentionPanel.expanded[group.key]; markMentionsSeen(group.visibleItems); renderMentionsModal();
+      mentionPanel.expanded[group.key]=!mentionPanel.expanded[group.key]; markMentionsSeen(group.activeItems); renderMentionsModal();
     }else if(action==="pin")toggleMentionReference(group);
     else if(action==="open")await openMentionTask(group);
-    else if(action==="hide"){setMentionsHidden(group.visibleItems,true);delete mentionPanel.expanded[group.key];renderMentionsModal();}
+    else if(action==="handle"){setMentionsHandled(group.activeItems,true);delete mentionPanel.expanded[group.key];toast("Moved to History");renderMentionsModal();}
+    else if(action==="reopen"){setMentionsHandled(group.handledItems,false);toast("Back in your inbox");renderMentionsModal();}
+    else if(action==="reply"){
+      const input=listBox.querySelector('.mention-reply-input[data-thread="'+cssAttr(group.key)+'"]');
+      await replyToMention(group,input&&input.value,actionEl);
+    }
+    else if(action==="hide"){setMentionsHidden(mentionItemsForFilter(group,filter),true);delete mentionPanel.expanded[group.key];renderMentionsModal();}
     else if(action==="restore"){setMentionsHidden(group.hiddenItems,false);renderMentionsModal();}
   };
+  // Enter in a reply box sends it.
+  listBox.querySelectorAll(".mention-reply-input").forEach(input=>{
+    input.onkeydown=async e=>{
+      if(e.key!=="Enter")return;
+      e.preventDefault();
+      const group=allMentionGroups().find(g=>g.key===input.dataset.thread); if(!group)return;
+      await replyToMention(group,input.value,input.parentElement.querySelector('[data-mention-action="reply"]'));
+    };
+  });
+  wireMentionKeyboardNav(listBox);
 }
+// Simple keyboard navigation over the thread list: ↑/↓ move, Enter expands.
+function wireMentionKeyboardNav(listBox){
+  listBox.querySelectorAll(".mention-thread-main").forEach(main=>{
+    main.onkeydown=e=>{
+      const cards=[...listBox.querySelectorAll(".mention-thread-main")];
+      const i=cards.indexOf(main);
+      if(e.key==="ArrowDown"){ e.preventDefault(); (cards[i+1]||cards[0]).focus(); }
+      else if(e.key==="ArrowUp"){ e.preventDefault(); (cards[i-1]||cards[cards.length-1]).focus(); }
+      else if(e.key==="Enter"||e.key===" "){ e.preventDefault(); main.click(); }
+    };
+  });
+}
+// Escape a value for use inside a [data-thread="…"] attribute selector.
+function cssAttr(v){ return String(v).replace(/["\\]/g,"\\$&"); }
 function openMentions(){
   hydrateMentionCache(); loadMentionPrefs();
-  mentionPanel.filter=mentionPanel.filter==="hidden"?"hidden":"all";
-  showModal('<div class="mention-shell"><div class="mention-sticky"><div class="mention-head"><div><h2>@ Mentions</h2><p class="hint">Notice it, deal with it, or show the original task in your to-do list.</p></div>'+ 
-    '<a class="btn ghost sm" href="https://app.asana.com/0/inbox" target="_blank" rel="noopener">Asana Inbox ↗</a></div>'+ 
-    '<div class="mention-tabs" role="tablist" aria-label="Mention views"><button class="mention-tab on" role="tab" aria-selected="true" data-mention-filter="all"><span>All</span> <b>0</b><span class="mention-tab-new" id="mentionNewCount"></span></button><button class="mention-tab" role="tab" aria-selected="false" data-mention-filter="hidden"><span>Hidden</span> <b>0</b></button></div>'+ 
-    '<div class="mention-search-row"><input id="mentionSearch" placeholder="Search people, tasks or comments…"><button class="btn ghost sm" id="mentionMarkSeen">Mark all seen</button></div>'+ 
-    '<div class="mention-toolbar"><span id="mentionMeta"></span><div><button class="btn ghost sm" id="mentionRefresh">↻ Check now</button><button class="btn ghost sm" id="mentionDeepRefresh" title="Reread the last six months">Deep scan</button></div></div></div>'+ 
-    '<div id="mentionList" class="mention-list"></div><div class="mention-foot"><span>Hidden mentions stay recoverable. Showing a task in My To-Do never moves or reassigns it.</span><button class="btn ghost sm" data-close>Close</button></div></div>',"mention");
+  if(!["all","history","hidden"].includes(mentionPanel.filter)) mentionPanel.filter="all";
+  showModal('<div class="mention-shell"><div class="mention-sticky"><div class="mention-head"><div><h2>@ Mentions</h2><p class="hint">Notice it, deal with it, then mark it handled to clear your inbox — handled mentions move to History.</p></div>'+
+    '<a class="btn ghost sm" href="https://app.asana.com/0/inbox" target="_blank" rel="noopener">Asana Inbox ↗</a></div>'+
+    '<div class="mention-tabs" role="tablist" aria-label="Mention views">'+
+      '<button class="mention-tab on" role="tab" aria-selected="true" data-mention-filter="all"><span>All</span> <b>0</b><span class="mention-tab-new" id="mentionNewCount"></span></button>'+
+      '<button class="mention-tab" role="tab" aria-selected="false" data-mention-filter="history"><span>History</span> <b>0</b></button>'+
+      '<button class="mention-tab" role="tab" aria-selected="false" data-mention-filter="hidden"><span>Hidden</span> <b>0</b></button></div>'+
+    '<div class="mention-search-row"><input id="mentionSearch" placeholder="Search people, tasks or comments…"><select id="mentionPerson" class="mention-person" aria-label="Filter by person"></select><button class="btn ghost sm" id="mentionMarkSeen">Mark all seen</button></div>'+
+    '<div class="mention-toolbar"><span id="mentionMeta"></span><div><button class="btn ghost sm" id="mentionClearAll" title="Mark every open mention handled" style="display:none">✓ Clear inbox</button><button class="btn ghost sm" id="mentionRefresh">↻ Check now</button><button class="btn ghost sm" id="mentionDeepRefresh" title="Reread the last six months">Deep scan</button></div></div></div>'+
+    '<div id="mentionList" class="mention-list"></div><div class="mention-foot"><span>Handled mentions move to History and can be reopened. Hidden mentions stay recoverable. Showing a task in My To-Do never moves or reassigns it.</span><button class="btn ghost sm" data-close>Close</button></div></div>',"mention");
   wireModalClose();
-  document.querySelectorAll("#modal [data-mention-filter]").forEach(btn=>btn.onclick=()=>{mentionPanel.filter=btn.dataset.mentionFilter;renderMentionsModal();});
+  document.querySelectorAll("#modal [data-mention-filter]").forEach(btn=>btn.onclick=()=>{mentionPanel.filter=btn.dataset.mentionFilter;refreshMentionPersonOptions();renderMentionsModal();});
   document.getElementById("mentionSearch").oninput=e=>{mentionPanel.query=e.target.value;renderMentionsModal();};
+  document.getElementById("mentionPerson").onchange=e=>{mentionPanel.person=e.target.value;renderMentionsModal();};
   document.getElementById("mentionMarkSeen").onclick=markAllVisibleMentionsSeen;
+  document.getElementById("mentionClearAll").onclick=markAllActiveMentionsHandled;
   document.getElementById("mentionRefresh").onclick=()=>refreshAsanaMentions(true,false);
   document.getElementById("mentionDeepRefresh").onclick=()=>refreshAsanaMentions(true,true);
+  refreshMentionPersonOptions();
   renderMentionsModal();
   refreshAsanaMentions(false,false);
+}
+function refreshMentionPersonOptions(){
+  const sel=document.getElementById("mentionPerson"); if(!sel)return;
+  const people=mentionPeopleOptions();
+  if(mentionPanel.person&&!people.includes(mentionPanel.person))mentionPanel.person="";
+  sel.innerHTML='<option value="">Everyone</option>'+people.map(n=>'<option value="'+esc(n)+'"'+(n===mentionPanel.person?' selected':'')+'>'+esc(n)+'</option>').join("");
+  sel.style.display=people.length>1?"":"none";
 }

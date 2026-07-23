@@ -26,6 +26,30 @@ function saveGirlLaneSizes(){
   catch(_){ /* localStorage can be unavailable in strict/private browsers */ }
 }
 
+/* "Up for grabs" clutter control is a PERSONAL preference — hiding a card or
+   collapsing the column only affects your own browser, never the shared board
+   or anyone else's view.  Stored per signed-in user. */
+function poolPrefsKey(){ return "ob-pool-prefs-v1:"+((state.me&&state.me.gid)||"guest"); }
+let poolPrefs=null;
+function loadPoolPrefs(){
+  if(poolPrefs) return poolPrefs;
+  try{ poolPrefs=JSON.parse(localStorage.getItem(poolPrefsKey())||"null"); }catch(_){ poolPrefs=null; }
+  if(!poolPrefs||typeof poolPrefs!=="object") poolPrefs={hidden:{},collapsed:false};
+  if(!poolPrefs.hidden||typeof poolPrefs.hidden!=="object") poolPrefs.hidden={};
+  return poolPrefs;
+}
+function savePoolPrefs(){
+  try{ localStorage.setItem(poolPrefsKey(),JSON.stringify(loadPoolPrefs())); }catch(_){ /* keep in-memory */ }
+}
+function poolIsHidden(gid){ return !!loadPoolPrefs().hidden[String(gid)]; }
+function setPoolHidden(gid,hidden){
+  const p=loadPoolPrefs();
+  if(hidden) p.hidden[String(gid)]=Date.now(); else delete p.hidden[String(gid)];
+  savePoolPrefs();
+}
+function restoreAllPool(){ const p=loadPoolPrefs(); p.hidden={}; savePoolPrefs(); renderGirls(); }
+function setPoolCollapsed(collapsed){ loadPoolPrefs().collapsed=!!collapsed; savePoolPrefs(); renderGirls(); }
+
 function visibleGirlTasks(key){
   const gc=girlCfg(key);
   const girl=GIRLS.find(g=>g.key===key);
@@ -131,22 +155,54 @@ function renderGirls(){
   });
 
   // unassigned pool from the boards — only in "Everyone" view
-  const pool=girlsFocus?[]:state.tasks.filter(t=>!t.assignee && !t.completed &&
-    !t.isOccasion&&!t.isNote&&!t.isPassion&&!t.isKeeper&&!t.isShot&&!t.isBrief&&
+  const poolAll=girlsFocus?[]:state.tasks.filter(t=>!t.assignee && !t.completed &&
+    !t.isOccasion&&!t.isNote&&!t.isPassion&&!t.isKeeper&&!t.isShot&&!t.isBrief&&!t.isEvent&&
     !t.isComms&&!t.isVisit&&!t.isSchedule&&!t.isOpening&&!t.isBug&&!t.isPlaceholder);
-  if(!girlsFocus) html+='<div class="lane glane pool" data-resize-key="pool" style="--lane-weight:'+girlLaneWeight("pool")+'"><div class="lane-h"><span class="nm">Up for grabs</span><span class="ct">'+pool.length+'</span></div>'+
-    '<div class="lane-body"><p class="hint" style="margin:4px 0 8px">Unassigned on the boards — drag onto a girl to hand it out.</p>'+
-    (pool.length?pool.slice(0,15).map(t=>
-      '<div class="card gcard" draggable="true" data-gid="'+t.gid+'" data-pool="1">'+
-      '<div class="c-in"><div class="cn">'+esc(t.name)+'</div>'+
-      '<div class="cmeta"><span class="dot" style="background:'+t.projectColor+'"></span>'+esc(t.projectName)+
-      (t.due?'<span>'+pd(t.due).toDateString().slice(4,10)+'</span>':'')+'</div></div></div>').join("")
-    :'<div class="empty">'+pick(EMPTY_LINES)+'</div>')+
-    '</div><button class="lane-resizer" type="button" aria-label="Resize the up for grabs column" title="Drag to resize · double-click to reset"></button></div>';
+  const poolHiddenCount=poolAll.filter(t=>poolIsHidden(t.gid)).length;
+  const pool=poolAll.filter(t=>!poolIsHidden(t.gid));
+  const poolCollapsed=loadPoolPrefs().collapsed;
+  if(!girlsFocus){
+    if(poolCollapsed){
+      // Collapsed to a slim strip; personal, so it never hides the pool for others.
+      html+='<div class="lane glane pool is-collapsed" data-resize-key="pool"><div class="lane-h"><span class="nm">Up for grabs</span><span class="ct">'+pool.length+'</span>'+
+        '<button class="pool-mini" data-pool-collapse="0" title="Show the up-for-grabs column">Show</button></div></div>';
+    }else{
+      html+='<div class="lane glane pool" data-resize-key="pool" style="--lane-weight:'+girlLaneWeight("pool")+'"><div class="lane-h"><span class="nm">Up for grabs</span><span class="ct">'+pool.length+'</span>'+
+        '<button class="pool-mini" data-pool-collapse="1" title="Hide this column (just for you)">Hide column</button></div>'+
+        '<div class="lane-body"><p class="hint" style="margin:4px 0 8px">Unassigned on the boards — drag onto a girl to hand it out. Hiding here is just for you.</p>'+
+        (pool.length?pool.slice(0,15).map(t=>
+          '<div class="card gcard" draggable="true" data-gid="'+t.gid+'" data-pool="1">'+
+          '<div class="c-in"><div class="cn">'+esc(t.name)+'</div>'+
+          '<div class="cmeta"><span class="dot" style="background:'+t.projectColor+'"></span>'+esc(t.projectName)+
+          (t.due?'<span>'+pd(t.due).toDateString().slice(4,10)+'</span>':'')+'</div></div>'+
+          '<span class="c-acts"><button class="cmini" data-pool-hide="'+t.gid+'" title="Hide from my view">✕</button></span></div>').join("")
+        :'<div class="empty">'+(poolHiddenCount?"Everything here is hidden from your view.":pick(EMPTY_LINES))+'</div>')+
+        (poolHiddenCount?'<button class="pool-restore" data-pool-restore="1">'+poolHiddenCount+' hidden · restore</button>':'')+
+        '</div><button class="lane-resizer" type="button" aria-label="Resize the up for grabs column" title="Drag to resize · double-click to reset"></button></div>';
+    }
+  }
 
   board.innerHTML=html;
   wireGirls(board);
+  wirePoolControls(board);
   renderCorkboard();
+}
+
+/* Personal "Up for grabs" controls: hide a card, hide/show the whole column,
+   and restore. All local to this browser. */
+function wirePoolControls(board){
+  board.querySelectorAll("[data-pool-hide]").forEach(btn=>btn.onclick=e=>{
+    e.preventDefault(); e.stopPropagation();
+    setPoolHidden(btn.dataset.poolHide,true); renderGirls();
+  });
+  board.querySelectorAll("[data-pool-collapse]").forEach(btn=>btn.onclick=e=>{
+    e.preventDefault(); e.stopPropagation();
+    setPoolCollapsed(btn.dataset.poolCollapse==="1");
+  });
+  board.querySelectorAll("[data-pool-restore]").forEach(btn=>btn.onclick=e=>{
+    e.preventDefault(); e.stopPropagation();
+    restoreAllPool();
+  });
 }
 
 /* Capture the exact DOM order after every drop.  This is deliberately

@@ -13,16 +13,37 @@ async function readBody(req){
   try { return JSON.parse(Buffer.concat(chunks).toString()||"{}"); } catch { return {}; }
 }
 
+// Guard the shared, paid AI key: cap how much text one request can forward and
+// throttle each signed-in user so a huge paste or a runaway loop cannot burn
+// the token budget. In-memory and best-effort — it resets on cold starts, but
+// still blunts the common abuse and accident cases.
+const MAX_CONTENT_CHARS = 60000;   // ~15k tokens; comfortably covers a chat export
+const RATE_WINDOW_MS = 60000;
+const RATE_MAX = 20;               // requests per user per minute
+const rateHits = new Map();
+function rateLimited(key){
+  const now = Date.now();
+  const hits = (rateHits.get(key)||[]).filter(t=>now-t<RATE_WINDOW_MS);
+  hits.push(now);
+  rateHits.set(key, hits);
+  return hits.length > RATE_MAX;
+}
+
 export default async function handler(req,res){
   if(req.method!=="POST"){ res.status(405).json({error:"POST only"}); return; }
-  if(!readSession(req)){ res.status(401).json({error:"not authenticated"}); return; }
+  const session = readSession(req);
+  if(!session){ res.status(401).json({error:"not authenticated"}); return; }
 
   const openaiKey = process.env.OPENAI_API_KEY;
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if(!openaiKey && !anthropicKey){ res.status(200).json({ text:"(AI is turned off — set OPENAI_API_KEY or ANTHROPIC_API_KEY.)" }); return; }
 
+  const rateKey = String((session.user&&session.user.gid)||"anon");
+  if(rateLimited(rateKey)){ res.status(429).json({ error:"Too many AI requests — give it a minute and try again." }); return; }
+
   const { prompt, data } = await readBody(req);
-  const content = prompt + "\n\nDATA:\n" + JSON.stringify(data||[]);
+  let content = String(prompt||"") + "\n\nDATA:\n" + JSON.stringify(data||[]);
+  if(content.length > MAX_CONTENT_CHARS) content = content.slice(0, MAX_CONTENT_CHARS) + "\n…(truncated)";
 
   try {
     let text = "";

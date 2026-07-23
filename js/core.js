@@ -66,10 +66,19 @@ function loadCfg(){
         s._m12=true;
       }
       if(s.completionCelebrations===undefined) s.completionCelebrations=true;
+      // Keep a copy of the last successfully-parsed config. If a future load
+      // ever throws (corrupt storage, a bad migration), we can fall back to
+      // this instead of silently resetting everyone to defaults.
+      try{ localStorage.setItem(LS_KEY+"_backup", JSON.stringify(s)); }catch(_){}
       localStorage.setItem(LS_KEY, JSON.stringify(s));
       return s;
     }
-  }catch(e){}
+  }catch(e){
+    try{
+      const backup=JSON.parse(localStorage.getItem(LS_KEY+"_backup")||"null");
+      if(backup&&backup.projects) return backup;
+    }catch(_){}
+  }
   return JSON.parse(JSON.stringify(DEFAULT_CFG));
 }
 function saveCfg(){ localStorage.setItem(LS_KEY, JSON.stringify(cfg)); }
@@ -111,7 +120,14 @@ const state = {
   campaignResourceLoading: {},
   campaignSmart: {},
   campaignSmartSaving: {},
-  campaignSmartUpdating: {}
+  campaignSmartUpdating: {},
+  // Events (masterclasses & webinars) — logistics live in one managed Asana
+  // task; the checklist is real Asana subtasks loaded per selected event.
+  eventsData: {},          // { [eventGid]: logistics }
+  eventsDataTask: null,    // gid of the ⚙️ events-data managed task
+  eventSelected: null,
+  eventSubtasks: {},       // { [eventGid]: [subtasks] | "loading" }
+  eventSmartRunning: {}    // { [eventGid]: bool }
 };
 
 const DEMO = new URLSearchParams(location.search).has("demo");
@@ -207,7 +223,8 @@ async function fetchProject(p){
         isShot: /^「shot」/.test(t.name||""),
         isBrief: /^「brief」/.test(t.name||""),
         isCampaignSmart: /^⚙️ campaign-smart-plan/.test(t.name||""),
-        isKeeper: /^⚙️ (?:dashboard-state|campaign-smart-plan)/.test(t.name||""),
+        isEventsData: /^⚙️ events-data/.test(t.name||""),
+        isKeeper: /^⚙️ (?:dashboard-state|campaign-smart-plan|events-data)/.test(t.name||""),
         isPlaceholder: (p.gid===REVAMP_PROJECT && !t.assignee && !!t.due_on)
       });
     });
@@ -246,6 +263,7 @@ async function loadAll(){
     // are reflected rather than leaving this browser on an older plan.
     state.campaignSmart = {};
     readOrderKeeper();
+    if(typeof readEventsData==="function") readEventsData();
     if(state._demoSeed) state._demoSeed();
     loadMyTasks(); // async — re-renders The Girls when each list lands
     state.loading = false;
@@ -421,7 +439,12 @@ async function flushKeeper(){
       project_id:PB.proj,
       section_id:PB.notes,
       name:KEEPER_NAME,
-      notes
+      notes,
+      // Let the server merge this into the latest shared copy so a teammate
+      // editing at the same time is never silently overwritten.
+      merge:true,
+      owner_key:myKey(),
+      owner_gid:(state.me&&state.me.gid)||null
     });
     if(r&&r.data&&r.data.gid) state.orderKeeper=r.data.gid;
     keeperWarned=false;
@@ -451,7 +474,8 @@ function persistKeeperOnExit(){
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({tool:"save_dashboard_state",args:{
         task_id:state.orderKeeper,project_id:PB.proj,section_id:PB.notes,
-        name:KEEPER_NAME,notes:JSON.stringify(state.keeper)
+        name:KEEPER_NAME,notes:JSON.stringify(state.keeper),
+        merge:true,owner_key:myKey(),owner_gid:(state.me&&state.me.gid)||null
       }})
     });
   }catch(_){ /* the local cache is already safe */ }
@@ -844,7 +868,29 @@ function renderAll(){
   renderSub(); renderGreeting(); renderChips(); renderPersonToggles(); renderTrainerToggles();
   renderCalendar(); renderGirls(); renderCampaigns(); renderStudio(); renderCurriculum(); renderCommunities();
   renderStores(); renderPlatform(); prTabVisibility(); renderMentionBadge();
+  if(typeof renderEventsTab==="function") renderEventsTab();
   computeSuggestions();
+}
+
+/* ---- long intro hints collapse to one line with a "more" toggle ----
+   The tab intros are great for onboarding but noisy day-to-day. Any hint
+   longer than a threshold is clamped and gets a show more/less control.  */
+function enhanceLongHints(){
+  document.querySelectorAll(".tabpane > .hint, .girls-top > .hint").forEach(hint=>{
+    if(hint.dataset.collapsible) return;
+    if((hint.textContent||"").trim().length < 150) return;
+    hint.dataset.collapsible="1";
+    hint.classList.add("hint-collapsible","clamped");
+    const toggle=document.createElement("button");
+    toggle.type="button"; toggle.className="hint-toggle"; toggle.textContent="more";
+    toggle.setAttribute("aria-expanded","false");
+    toggle.onclick=()=>{
+      const open=hint.classList.toggle("clamped")===false;
+      toggle.textContent=open?"less":"more";
+      toggle.setAttribute("aria-expanded",open?"true":"false");
+    };
+    hint.after(toggle);
+  });
 }
 
 /* ---- boot ---- */
@@ -868,6 +914,7 @@ async function init(){
   document.addEventListener("click",e=>{ const t=document.getElementById("tray");
     if(t.classList.contains("open") && !t.contains(e.target) && e.target.id!=="btnTray" && !document.getElementById("btnTray").contains(e.target)) toggleTray(false); });
   wireCalendarControls(); wireCommunityControls();
+  enhanceLongHints();
   // it's Friday? make the huddle button wink
   if(new Date().getDay()===5) document.getElementById("btnFriday").classList.add("its-friday");
 

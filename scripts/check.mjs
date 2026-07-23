@@ -81,7 +81,7 @@ assert.doesNotMatch(drawer,/p\.gid===t\.projectGid\?" selected"/,"Current board 
 assert.match(drawer,/id="sCelebrate"/,"Settings are missing the task-celebration preference");
 assert.match(drawer,/cfg\.completionCelebrations=document\.getElementById\("sCelebrate"\)\.checked/,"Task-celebration preference is not saved");
 assert.match(drawer,/call\("get_mentions",\{[\s\S]*days:MENTION_SCAN_DAYS[\s\S]*project_ids:projectIds[\s\S]*tasks:loadedTasks/,"Mentions view does not run the deeper Asana scan");
-assert.match(drawer,/Notice it, deal with it, or show the original task in your to-do list\./,"Mentions panel does not explain its triage workflow");
+assert.match(drawer,/mark it handled to clear your inbox — handled mentions move to History\./,"Mentions panel does not explain its triage workflow");
 assert.match(drawer,/async function openMentionTask\([\s\S]*call\("get_task"[\s\S]*openDrawer\(String\(group\.taskGid\)\)/,"Mention references do not open the original task inside the app");
 assert.match(drawer,/ob-asana-mentions-v3:/,"Mentions are not cached per user with the incremental scanner");
 assert.match(drawer,/ob-mention-triage-v1:/,"Mention seen and hidden states are not saved per user");
@@ -89,8 +89,10 @@ assert.match(drawer,/Show in My To-Do/,"Mentions are missing the My To-Do action
 assert.match(drawer,/function addMentionReference\(/,"Mention references cannot be added to The Girls");
 assert.match(drawer,/function setMentionsHidden\(/,"Mentions cannot be hidden and restored");
 assert.match(drawer,/function startMentionWatcher\(/,"Mentions do not refresh in the background");
-assert.match(drawer,/data-mention-filter="all"[\s\S]*data-mention-filter="hidden"/,"Mentions panel is missing All and Hidden views");
+assert.match(drawer,/data-mention-filter="all"[\s\S]*data-mention-filter="history"[\s\S]*data-mention-filter="hidden"/,"Mentions panel is missing the All, History and Hidden views");
 assert.doesNotMatch(drawer,/data-mention-filter="new"/,"Separate New mentions tab returned");
+assert.match(drawer,/function setMentionsHandled\(/,"Mentions cannot be marked handled");
+assert.match(drawer,/data-mention-action="handle"/,"Mentions panel is missing the Handled action");
 assert.match(drawer,/mention-section-label[\s\S]*New[\s\S]*Earlier/,"All mentions view does not group new mentions above earlier mentions");
 assert.match(drawer,/after_iso:afterIso/,"Mention refreshes do not use incremental scan dates");
 assert.match(drawer,/assigneeOptions\(t\.assignee\?t\.assignee\.gid:"unassigned","unassigned"\)/,"Task editing does not use preferred assignee suggestions");
@@ -125,6 +127,13 @@ vm.runInContext("markMentionsSeen([asanaMentions.items[0]])",mentionContext);
 assert.equal(vm.runInContext("mentionCounts().new",mentionContext),1,"Acknowledging one mention marks the entire inbox seen");
 vm.runInContext("setMentionsHidden([asanaMentions.items[1]],true)",mentionContext);
 assert.equal(vm.runInContext("mentionCounts().hidden",mentionContext),1,"Hidden mentions are not retained");
+// Handling a mention clears it from the All inbox and files it under History.
+vm.runInContext("setMentionsHandled([asanaMentions.items[0]],true)",mentionContext);
+assert.equal(vm.runInContext("mentionCounts().all",mentionContext),0,"Handled mentions do not leave the All inbox");
+assert.equal(vm.runInContext("mentionCounts().history",mentionContext),1,"Handled mentions do not appear in History");
+vm.runInContext("setMentionsHandled([asanaMentions.items[0]],false)",mentionContext);
+assert.equal(vm.runInContext("mentionCounts().all",mentionContext),1,"Reopening a handled mention does not return it to the inbox");
+assert.equal(vm.runInContext("mentionCounts().history",mentionContext),0,"Reopened mentions still show in History");
 vm.runInContext("addMentionReference(allMentionGroups()[0])",mentionContext);
 assert.equal(vm.runInContext("mentionRefsForUser().length",mentionContext),1,"Show in My To-Do did not create a reference");
 assert.equal(vm.runInContext("mentionReferenceTask(mentionRefsForUser()[0]).sourceTaskGid",mentionContext),"task-1","The Girls reference lost the original task link");

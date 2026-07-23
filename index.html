@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A3D62">
 <title>Academy Command Center</title>
-<link rel="stylesheet" href="/styles.css?v=20260721n">
+<link rel="stylesheet" href="/styles.css?v=20260723a">
 </head>
 <body>
 <!--
@@ -52,13 +52,13 @@
       </div>
     </div>
     <div class="hdr-actions">
-      <button class="btn ghost" id="btnTray" title="Suggestions">💡<span id="trayBadge"></span></button>
-      <button class="btn ghost" id="btnAt" title="Your mentions">@<span id="atBadge" class="at-badge"></span></button>
+      <button class="btn ghost" id="btnTray" title="Suggestions" aria-label="Suggestions">💡<span id="trayBadge"></span></button>
+      <button class="btn ghost" id="btnAt" title="Your mentions" aria-label="Your mentions">@<span id="atBadge" class="at-badge"></span></button>
       <button class="btn ghost" id="btnFriday" title="The Friday Huddle">Huddle</button>
       <button class="btn ghost" id="btnCampaign" title="Add campaign">+ Campaign</button>
-      <button class="btn ghost" id="btnSettings" title="Settings">⚙︎</button>
+      <button class="btn ghost" id="btnSettings" title="Settings" aria-label="Settings">⚙︎</button>
       <button class="btn primary" id="btnAdd">+ Add task</button>
-      <a class="btn ghost" id="btnSignout" href="/api/auth/logout" title="Sign out" style="text-decoration:none">↪</a>
+      <a class="btn ghost" id="btnSignout" href="/api/auth/logout" title="Sign out" aria-label="Sign out" style="text-decoration:none">↪</a>
     </div>
   </header>
 
@@ -73,7 +73,8 @@
     <button class="tab active" data-tab="calendar">Calendar</button>
     <button class="tab" data-tab="people">The Girls</button>
     <button class="tab" data-tab="campaigns">Campaigns</button>
-    <button class="tab" data-tab="studio">Studio &amp; Events</button>
+    <button class="tab" data-tab="studio">Studio</button>
+    <button class="tab" data-tab="events">Events</button>
     <button class="tab" data-tab="curriculum">Curriculum</button>
     <button class="tab" data-tab="stores">Training &amp; New Stores</button>
     <button class="tab" data-tab="platform">WhatsApp Academy</button>
@@ -151,9 +152,9 @@
     </div>
   </section>
 
-  <!-- ============ STUDIO & EVENTS ============ -->
+  <!-- ============ STUDIO ============ -->
   <section id="tab-studio" class="tabpane">
-    <p class="hint">Every shoot day and event in one place. <b>Shot list</b> holds the deliverables and feeds the brief word-for-word. <b>Ideas</b> pitches content tied to the OB Fit month and live campaigns. <b>Draft brief</b> writes the Content Go brief in our house format — you approve everything before it lands in Asana.</p>
+    <p class="hint">Every shoot day in one place. <b>Shot list</b> holds the deliverables and feeds the brief word-for-word. <b>Ideas</b> pitches content tied to the OB Fit month and live campaigns. <b>Draft brief</b> writes the Content Go brief in our house format — you approve everything before it lands in Asana.</p>
     <div class="stud-h"><span>Shoot days</span>
       <span style="display:flex;gap:8px">
         <button class="btn ghost sm" id="btnAddShoot">+ Add shoot</button>
@@ -181,19 +182,23 @@
       </aside>
     </div>
 
-    <div class="stud-h"><span>Events</span>
-      <span class="qadd" style="margin:0;max-width:420px;flex:1">
-        <input class="qadd-name" id="evName" placeholder="e.g. Masterclass: coaching the new menu">
-        <input type="date" class="qadd-date" id="evDate" style="width:auto">
-        <button class="qadd-btn" id="evAdd">Add</button>
-      </span>
-    </div>
-    <p class="hint">Masterclasses, workshops, webinars and forums. They star themselves on the calendar; each one gets a nudge if nothing's queued in Communities.</p>
-    <div id="eventList"></div>
-
     <div class="stud-h"><span>Brief library</span></div>
     <p class="hint">Every supplier brief, with a status you click to advance: drafted → sent to Content Go → delivered.</p>
     <div id="briefList"></div>
+  </section>
+
+  <!-- ============ EVENTS (masterclasses & webinars) ============ -->
+  <section id="tab-events" class="tabpane">
+    <div class="ev-top">
+      <p class="hint" style="margin:0">Masterclasses and webinars, planned properly. Each event is a real Asana task with its own subtasks; add sessions, locations, roles, contacts and a checklist. Link one to a campaign and Smart plan will suggest what to run. Events star themselves on the calendar.</p>
+      <button class="btn primary sm" id="evNew">+ New event</button>
+    </div>
+    <div class="ev-shell">
+      <aside class="ev-rail">
+        <div id="evList" class="ev-list"></div>
+      </aside>
+      <main id="evDetail" class="ev-detail"></main>
+    </div>
   </section>
 
   <!-- ============ CURRICULUM ============ -->
@@ -335,19 +340,20 @@
 <div id="fridayWrap"></div>
 <div id="runWrap"></div>
 
-<script src="/js/data.js?v=20260721n"></script>
-<script src="/js/core.js?v=20260721n"></script>
-<script src="/js/demo.js?v=20260721n"></script>
-<script src="/js/calendar.js?v=20260721n"></script>
-<script src="/js/campaigns.js?v=20260721n"></script>
-<script src="/js/people.js?v=20260721n"></script>
-<script src="/js/content.js?v=20260721n"></script>
-<script src="/js/communities.js?v=20260721n"></script>
-<script src="/js/drawer.js?v=20260721n"></script>
-<script src="/js/stores.js?v=20260721n"></script>
-<script src="/js/platform.js?v=20260721n"></script>
-<script src="/js/pr.js?v=20260721n"></script>
-<script src="/js/friday.js?v=20260721n"></script>
-<script src="/js/news.js?v=20260721n"></script>
+<script src="/js/data.js?v=20260723a"></script>
+<script src="/js/core.js?v=20260723a"></script>
+<script src="/js/demo.js?v=20260723a"></script>
+<script src="/js/calendar.js?v=20260723a"></script>
+<script src="/js/campaigns.js?v=20260723a"></script>
+<script src="/js/people.js?v=20260723a"></script>
+<script src="/js/content.js?v=20260723a"></script>
+<script src="/js/events.js?v=20260723a"></script>
+<script src="/js/communities.js?v=20260723a"></script>
+<script src="/js/drawer.js?v=20260723a"></script>
+<script src="/js/stores.js?v=20260723a"></script>
+<script src="/js/platform.js?v=20260723a"></script>
+<script src="/js/pr.js?v=20260723a"></script>
+<script src="/js/friday.js?v=20260723a"></script>
+<script src="/js/news.js?v=20260723a"></script>
 </body>
 </html>

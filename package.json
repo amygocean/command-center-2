@@ -8,7 +8,8 @@
     "node": ">=18"
   },
   "scripts": {
-    "check": "node scripts/check.mjs"
+    "check": "node scripts/check.mjs",
+    "vercel-build": "node scripts/stamp-version.mjs"
   },
   "dependencies": {
     "mammoth": "^1.9.1",

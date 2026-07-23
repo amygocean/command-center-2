@@ -46,6 +46,52 @@ function parseBatchResultBody(body){
   return body;
 }
 
+// Shared dashboard state (The Girls layout, corkboard, mention pins) lives in
+// ONE Asana task's notes and is written by every teammate through the service
+// identity. A plain overwrite is last-write-wins: if two people edit at once,
+// the later save wipes the earlier one. This merges the incoming edit into the
+// latest server copy so each person's own lane wins while everyone else's
+// concurrent edits are preserved. Anything unexpected falls back to the
+// incoming notes, so behaviour is never worse than the old overwrite.
+function mergeDashboardNotes(serverNotes, incomingNotes, ownerKey, ownerGid){
+  let incoming; try{ incoming=JSON.parse(incomingNotes||"{}"); }catch{ return incomingNotes; }
+  let server; try{ server=JSON.parse(serverNotes||"{}"); }catch{ return incomingNotes; }
+  if(!incoming||typeof incoming!=="object") return incomingNotes;
+  if(!server||typeof server!=="object"||!server._meta) return incomingNotes;
+  try{
+    const merged=JSON.parse(JSON.stringify(incoming)); // start from the editor's full view
+    // Keep OTHER people's lanes from the server — the editor never touched them,
+    // so a concurrent edit there must not be clobbered by this save.
+    if(server.girls&&typeof server.girls==="object"){
+      merged.girls=merged.girls||{};
+      for(const key of Object.keys(server.girls)) if(key!==ownerKey) merged.girls[key]=server.girls[key];
+    }
+    // Same for other people's "show in My To-Do" mention pins (keyed by user gid).
+    if(server.mentionRefs&&typeof server.mentionRefs==="object"){
+      merged.mentionRefs=merged.mentionRefs||{};
+      for(const gid of Object.keys(server.mentionRefs)) if(String(gid)!==String(ownerGid)) merged.mentionRefs[gid]=server.mentionRefs[gid];
+    }
+    // The local mention log is append-mostly: union both sides so a save never
+    // drops a mention the other browser recorded first.
+    const byKey=new Map();
+    const keyOf=m=>String((m&&(m.storyGid||m.gid))||"")+"|"+String((m&&m.taskGid)||"")+"|"+String((m&&m.at)||"");
+    [...(Array.isArray(server.mentions)?server.mentions:[]),...(Array.isArray(incoming.mentions)?incoming.mentions:[])]
+      .forEach(m=>{ const k=keyOf(m); if(k&&!byKey.has(k)) byKey.set(k,m); });
+    if(byKey.size) merged.mentions=[...byKey.values()].slice(0,50);
+    // Keep the stamp monotonic so readOrderKeeper always treats the merged copy
+    // as the freshest server truth.
+    const stamp=Math.max(Number(server._meta&&server._meta.updatedAt)||0,Number(incoming._meta&&incoming._meta.updatedAt)||0)+1;
+    merged._meta={...(incoming._meta||{}),updatedAt:stamp};
+    return JSON.stringify(merged);
+  }catch{ return incomingNotes; }
+}
+
+// Small in-memory cache so a user's several open tabs (and rapid re-opens of
+// the Mentions panel) share one expensive workspace scan while a warm Lambda
+// lives. Cold starts simply miss and rescan — correctness never depends on it.
+const mentionScanCache=new Map();
+const MENTION_SCAN_TTL_MS=90*1000;
+
 function compactTask(task,extra={}){
   if(!task||!task.gid) return null;
   return {
@@ -94,7 +140,7 @@ async function batchSubtasks(req,res,parents){
   return out;
 }
 
-async function storyPages(req,res,task,fields){
+async function storyPages(req,res,task,fields,maxPages=4){
   const stories=[];
   let offset=null,pages=0,usedShared=false,lastError=null;
   do{
@@ -109,7 +155,7 @@ async function storyPages(req,res,task,fields){
     stories.push(...(page.data||[]));
     offset=page.next_page&&page.next_page.offset||null;
     pages++;
-  }while(offset&&pages<4);
+  }while(offset&&pages<maxPages);
   return {stories,usedShared,error:lastError&&stories.length===0?lastError:null,pages};
 }
 
@@ -157,7 +203,17 @@ export default async function handler(req, res){
       // the service token avoids permission-dependent failures when a teammate
       // can use the app but cannot edit Amy's Day-to-Day project directly.
       case "save_dashboard_state": {
-        const data={ name:args.name||"⚙️ dashboard-state (do not delete)", notes:args.notes||"{}" };
+        let notes=args.notes||"{}";
+        // Concurrency-safe write: re-read the latest shared copy and merge this
+        // teammate's edit into it before saving, so simultaneous editors don't
+        // overwrite each other. Only runs when the caller asks for it.
+        if(args.task_id && args.merge){
+          try{
+            const cur=await serviceFetch(req,res,`/tasks/${args.task_id}?${qs({opt_fields:"notes"})}`);
+            notes=mergeDashboardNotes(cur.data&&cur.data.notes,notes,args.owner_key||null,args.owner_gid||null);
+          }catch(_){ /* if the re-read fails, fall back to a plain overwrite */ }
+        }
+        const data={ name:args.name||"⚙️ dashboard-state (do not delete)", notes };
         let task;
         if(args.task_id){
           const r=await serviceFetch(req,res,`/tasks/${args.task_id}`,{method:"PUT",body:{data}});
@@ -385,7 +441,15 @@ export default async function handler(req, res){
         // window so a bad browser value can never trigger an unbounded scan.
         const afterMs=Number.isFinite(requestedAfter)?Math.max(oldestAllowed,Math.min(requestedAfter,Date.now())):oldestAllowed;
         const afterIso=new Date(afterMs).toISOString();
+        // An incremental scan (the background 5-minute poll) only revisits
+        // recently-changed followed tasks and reads fewer story pages. The
+        // heavier project-wide scan runs on the first load and the manual
+        // "Deep scan", which is where mentions on unfollowed tasks are found.
+        const incremental=Number.isFinite(requestedAfter);
         const me=await asanaFetch(req,res,`/users/me?${qs({opt_fields:"name,email"})}`);
+        const cacheKey=String(me.data.gid)+"|"+(incremental?"inc":"full");
+        const cached=mentionScanCache.get(cacheKey);
+        if(cached&&Date.now()-cached.at<MENTION_SCAN_TTL_MS){ out=cached.payload; break; }
         const diagnostics={followedTop:0,followedSubtasks:0,projectTasks:0,discoveredSubtasks:0,storyTasks:0,comments:0,storyErrors:0,sharedFallbacks:0,pages:0};
         const warnings=[];
         const candidates=[];
@@ -408,7 +472,7 @@ export default async function handler(req, res){
         // This catches comments where an @mention produced a notification but
         // the task was not returned by followers.any=me.
         const projectIds=[...new Set((args.project_ids||[]).map(String).filter(id=>/^\d+$/.test(id)))].slice(0,80);
-        if(projectIds.length){
+        if(projectIds.length&&!incremental){
           for(let i=0;i<projectIds.length;i+=20){
             const ids=projectIds.slice(i,i+20).join(",");
             for(const isSubtask of [false,true]){
@@ -449,7 +513,7 @@ export default async function handler(req, res){
           .slice(0,Math.max(taskLimit*2,120));
         const fields="gid,type,resource_subtype,created_at,created_by.gid,created_by.name,text,html_text";
         const all=[];
-        const storyResults=await mapWithConcurrency(tasks,6,task=>storyPages(req,res,task,fields));
+        const storyResults=await mapWithConcurrency(tasks,6,task=>storyPages(req,res,task,fields,incremental?2:4));
         storyResults.forEach((result,index)=>{
           if(!result)return;
           diagnostics.storyTasks++; diagnostics.pages+=result.pages||0;
@@ -467,6 +531,7 @@ export default async function handler(req, res){
           scanned_comments:diagnostics.comments,window_days:Math.max(1,Math.ceil((Date.now()-afterMs)/86400000)),generated_at:new Date().toISOString(),
           warning:warnings.length?warnings.join(" "):null,diagnostics
         };
+        mentionScanCache.set(cacheKey,{at:Date.now(),payload:out});
         break;
       }
 
