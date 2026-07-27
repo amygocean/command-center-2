@@ -131,17 +131,20 @@ button.gchip:hover{transform:translateY(-1px);background:var(--fill-2)}
 .gchip.comms{background:rgba(122,95,176,.1);color:#5b4390}
 
 /* ================= tabs ================= */
-.tabs{display:flex;gap:2px;margin:26px 0 18px;position:relative;border-bottom:1px solid var(--hair)}
+.tabs{display:flex;flex-direction:column;gap:4px;margin:26px 0 18px;position:relative;border-bottom:1px solid var(--hair)}
+.tab-row{display:flex;gap:2px;align-items:center}
+/* the second layer reads as secondary: a hairline above it and a lighter feel */
+.tab-row-2{border-top:1px solid var(--hair);padding-top:4px}
+.tab-row-2 .tab{font-size:12.5px}
 .tab{
-  border:none;background:none;padding:10px 14px;font-family:var(--font);font-weight:600;font-size:13.5px;
+  position:relative;border:none;background:none;padding:10px 14px;font-family:var(--font);font-weight:600;font-size:13.5px;
   color:var(--faint);cursor:pointer;transition:color .2s;letter-spacing:-.1px;
 }
 .tab:hover{color:var(--ink)}
 .tab.active{color:var(--ink);font-weight:700}
-#tabInk{
-  position:absolute;bottom:-1px;height:2px;border-radius:2px;background:var(--ink);
-  transition:left .3s var(--spring),width .3s var(--spring);
-}
+/* per-tab underline (works across both rows, unlike a single sliding bar) */
+.tab.active::after{content:"";position:absolute;left:14px;right:14px;bottom:0;height:2px;border-radius:2px;background:var(--ink)}
+#tabInk{display:none}
 .tabpane{display:none}
 .tabpane.active{display:block}
 .tabpane.enter{animation:rise .35s var(--ease) both}
@@ -1335,9 +1338,10 @@ body.lane-resize-active .girls-board .glane{transition:none}
   .campaign-add #campTaskName,.campaign-add #campTaskDue,.campaign-add #campTaskPhase,.campaign-add #campTaskAssignee,.campaign-add #campTaskAdd{grid-column:auto}
 }
 
-/* Keep the growing tab bar usable on phones without widening the whole page. */
-.tabs{max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
-.tabs::-webkit-scrollbar{display:none}
+/* Keep the growing tab bar usable on phones without widening the whole page.
+   Each row scrolls sideways on its own so both layers stay reachable. */
+.tab-row{max-width:100%;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.tab-row::-webkit-scrollbar{display:none}
 .tab{flex:0 0 auto}
 
 @media(max-width:760px){
