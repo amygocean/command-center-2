@@ -35,6 +35,7 @@ function openDrawer(gid){
       '<button class="btn primary" id="dSave">Save to Asana</button>'+
       '<button class="btn '+(t.completed?"ghost":"teal")+'" id="dDone">'+(t.completed?"Reopen":(t.isComms?"Sent ✓":"✓ Done"))+'</button>'+
       '<button class="btn ghost" id="dOpen">Asana ↗</button>'+
+      (t.isMentionRef?'':'<button class="btn ghost danger" id="dDelete">Delete</button>')+
     '</div>'+
     '<div class="cmts"><label>Comments — type @ to mention anyone</label><div id="dCmts" class="cmts-list"><span class="spin"></span></div>'+
       '<div class="additem" style="margin-top:8px;position:relative"><input id="dCmtInput" placeholder="Add a comment… use @ to mention" autocomplete="off">'+
@@ -113,6 +114,8 @@ function openDrawer(gid){
   };
   d.querySelector("#dDone").onclick=()=>{ toggleDone(gid,!t.completed); closeDrawer(); };
   d.querySelector("#dOpen").onclick=()=>{ if(t.url) window.open(t.url,"_blank"); };
+  const delBtn=d.querySelector("#dDelete");
+  if(delBtn) delBtn.onclick=()=>confirmDeleteTask(t);
 }
 function closeDrawer(){
   const w=document.getElementById("drawerWrap");
@@ -137,6 +140,27 @@ async function loadTaskDetail(gid){
 function showModal(html,mode=""){ const w=document.getElementById("modalWrap"); document.getElementById("modal").innerHTML=html; w.classList.toggle("mention-mode",mode==="mention"); w.style.display="block"; requestAnimationFrame(()=>w.classList.add("open")); }
 function closeModal(){ const w=document.getElementById("modalWrap"); w.classList.remove("open"); setTimeout(()=>{ w.style.display="none"; w.classList.remove("mention-mode"); },200); }
 function wireModalClose(){ document.querySelectorAll("#modal [data-close]").forEach(x=>x.onclick=()=>{closeDrawer();closeModal();}); }
+
+/* ---- delete a single task ---- */
+function confirmDeleteTask(t){
+  showModal('<div class="confirm-shell"><h2>Delete this task?</h2>'+
+    '<p class="hint"><b>'+esc(t.name)+'</b><br>This permanently deletes the task in Asana and can\'t be undone. If you just want it off your list, use <b>Done</b> instead.</p>'+
+    '<div class="confirm-actions"><button class="btn ghost" data-close>Cancel</button>'+
+    '<button class="btn danger-solid" id="taskDeleteConfirm">Delete permanently</button></div></div>');
+  wireModalClose();
+  document.getElementById("taskDeleteConfirm").onclick=async()=>{
+    const bar=document.querySelector(".confirm-actions"); if(bar)bar.innerHTML='<span class="spin"></span> Deleting…';
+    // Shared boards (Communities, campaigns) are owned by the service identity.
+    const shared=!!t.isComms||(typeof cfg==="object"&&(cfg.campaigns||[]).some(c=>c.gid===t.projectGid));
+    try{
+      await call("delete_task",{task:t.gid,shared});
+      state.tasks=state.tasks.filter(x=>x.gid!==t.gid);
+      closeModal();closeDrawer();
+      renderAll();
+      toast("Task deleted");
+    }catch(e){ toast("Couldn't delete: "+e.message); closeModal(); }
+  };
+}
 
 /* ---- add task ---- */
 function openAdd(){

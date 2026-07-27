@@ -247,6 +247,8 @@ async function demoCall(tool,args){
       const i=DEMO_TASKS.findIndex(x=>x.gid===args.task); if(i>=0) DEMO_TASKS.splice(i,1);
       return {data:{}};
     }
+    case "archive_project": return {data:{gid:args.project_id,archived:true}};
+    case "delete_project": return {data:{}};
     // ---- attachments (kept in-memory as data URLs so the preview shows the
     //      real image the user picked, without any network) ----
     case "get_attachments": { const parent=args.parent_id||args.task_id; return {data:(DEMO_ATTACH[parent]||[]).map(a=>({...a}))}; }

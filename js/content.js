@@ -51,6 +51,7 @@ function renderStudio(){
       (isPast?'':'<button class="btn ghost sm sc-shots" data-gid="'+s.gid+'">Shot list'+(shotsFor(s).length?' ('+shotsFor(s).length+')':'')+'</button>'+
              '<button class="btn ghost sm sc-run" data-gid="'+s.gid+'">Run sheet</button>'+
              '<button class="btn teal sm sc-sugg" data-gid="'+s.gid+'">✨ Ideas</button>'+
+             '<button class="btn ghost sm sc-drop" data-gid="'+s.gid+'" title="Draft a WhatsApp message announcing this content">Queue drop</button>'+
              '<button class="btn primary sm sc-brief" data-gid="'+s.gid+'">'+(briefTaskFor(s)?"Open brief":"Draft brief")+'</button>')+'</div>'+
     '</div>';
   });
@@ -66,6 +67,7 @@ function renderStudio(){
     if(bt) openBriefModal(bt.gid); else draftBrief(b.dataset.gid);
   });
   box.querySelectorAll(".sc-shots").forEach(b=>b.onclick=()=>openShotList(b.dataset.gid));
+  box.querySelectorAll(".sc-drop").forEach(b=>b.onclick=()=>queueShootDrop(b.dataset.gid));
   wireBrainstorm(box);
   box.querySelectorAll(".sc-run").forEach(b=>b.onclick=()=>openRunSheet(b.dataset.gid));
   const more=document.getElementById("studioMore"); if(more) more.onclick=()=>{ studioAll=true; renderStudio(); };
@@ -360,6 +362,20 @@ function queuePromoFor(gid){
   if(dt&&ev.due){ const d=pd(ev.due); d.setDate(d.getDate()-3); dt.value=iso(d); }
   if(pr) pr.value="info";
   toast("Promo drafted — pick the communities and queue it");
+  if(nm) nm.focus();
+}
+// Smart connection: from a shoot, draft the Communities message that announces
+// the content once it lands. Dates it a few days after the shoot.
+function queueShootDrop(gid){
+  const s=state.tasks.find(x=>x.gid===gid); if(!s) return;
+  switchTab("communities");
+  const nm=document.getElementById("waName"), msg=document.getElementById("waMessage"), dt=document.getElementById("waDate"), pr=document.getElementById("waPurpose");
+  const clean=(s.name||"").replace(/^shoot day[^—-]*[—-]\s*/i,"").replace(/^shoot day\s*/i,"").trim()||s.name;
+  if(nm) nm.value="New content: "+clean;
+  if(msg) msg.value="🎬 Fresh content is on the way from our latest shoot — keep an eye out!";
+  if(dt&&s.due){ const d=pd(s.due); d.setDate(d.getDate()+3); dt.value=iso(d); }
+  if(pr) pr.value="info";
+  toast("Content drop drafted — pick the communities and queue it");
   if(nm) nm.focus();
 }
 /* The Events tab (js/events.js) owns masterclasses & webinars now.

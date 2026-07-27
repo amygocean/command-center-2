@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A3D62">
 <title>Academy Command Center</title>
-<link rel="stylesheet" href="/styles.css?v=20260723c">
+<link rel="stylesheet" href="/styles.css?v=20260723d">
 </head>
 <body>
 <!--
@@ -75,12 +75,14 @@
     <button class="tab" data-tab="campaigns">Campaigns</button>
     <button class="tab" data-tab="studio">Studio</button>
     <button class="tab" data-tab="events">Events</button>
+    <button class="tab" data-tab="content">Content</button>
     <button class="tab" data-tab="curriculum">Curriculum</button>
     <button class="tab" data-tab="stores">Training &amp; New Stores</button>
     <button class="tab" data-tab="platform">WhatsApp Academy</button>
     <button class="tab" data-tab="communities">Communities</button>
     <button class="tab" data-tab="news">News</button>
     <button class="tab" data-tab="pr">PR</button>
+    <button class="tab" data-tab="reports">Reports</button>
     <span id="tabInk"></span>
   </nav>
 
@@ -199,6 +201,12 @@
       </aside>
       <main id="evDetail" class="ev-detail"></main>
     </div>
+  </section>
+
+  <!-- ============ CONTENT LIBRARY ============ -->
+  <section id="tab-content" class="tabpane">
+    <p class="hint">Every asset in one place — courses, videos, infographics, banners. Add a Canva / YouTube / Vimeo link or upload a file, tag it, set its status, and link it to a campaign, event or shoot. Search here whenever you're planning a shoot, message or course to reuse what already exists.</p>
+    <div id="contentBody"></div>
   </section>
 
   <!-- ============ CURRICULUM ============ -->
@@ -326,6 +334,23 @@
     </div>
     <div id="newsBody"></div>
   </section>
+
+  <!-- ============ REPORTS ============ -->
+  <section id="tab-reports" class="tabpane">
+    <p class="hint">Our reporting dashboards, live from Asana data. These open in a new tab. Deeper in-app metrics can come later.</p>
+    <div class="reports-grid">
+      <a class="report-card" href="https://oceanbasketacademy.com/leaderboard/" target="_blank" rel="noopener">
+        <span class="report-icon">🏆</span>
+        <span class="report-main"><b>Leaderboard</b><small>Store &amp; learner rankings and progress</small></span>
+        <span class="report-go">Open ↗</span>
+      </a>
+      <a class="report-card" href="https://oceanbasketacademy.com/" target="_blank" rel="noopener">
+        <span class="report-icon">📊</span>
+        <span class="report-main"><b>Academy dashboard</b><small>The main reporting hub</small></span>
+        <span class="report-go">Open ↗</span>
+      </a>
+    </div>
+  </section>
 </div>
 
 <!-- drawer + modal + friday -->
@@ -340,20 +365,21 @@
 <div id="fridayWrap"></div>
 <div id="runWrap"></div>
 
-<script src="/js/data.js?v=20260723c"></script>
-<script src="/js/core.js?v=20260723c"></script>
-<script src="/js/demo.js?v=20260723c"></script>
-<script src="/js/calendar.js?v=20260723c"></script>
-<script src="/js/campaigns.js?v=20260723c"></script>
-<script src="/js/people.js?v=20260723c"></script>
-<script src="/js/content.js?v=20260723c"></script>
-<script src="/js/events.js?v=20260723c"></script>
-<script src="/js/communities.js?v=20260723c"></script>
-<script src="/js/drawer.js?v=20260723c"></script>
-<script src="/js/stores.js?v=20260723c"></script>
-<script src="/js/platform.js?v=20260723c"></script>
-<script src="/js/pr.js?v=20260723c"></script>
-<script src="/js/friday.js?v=20260723c"></script>
-<script src="/js/news.js?v=20260723c"></script>
+<script src="/js/data.js?v=20260723d"></script>
+<script src="/js/core.js?v=20260723d"></script>
+<script src="/js/demo.js?v=20260723d"></script>
+<script src="/js/calendar.js?v=20260723d"></script>
+<script src="/js/campaigns.js?v=20260723d"></script>
+<script src="/js/people.js?v=20260723d"></script>
+<script src="/js/content.js?v=20260723d"></script>
+<script src="/js/events.js?v=20260723d"></script>
+<script src="/js/content-library.js?v=20260723d"></script>
+<script src="/js/communities.js?v=20260723d"></script>
+<script src="/js/drawer.js?v=20260723d"></script>
+<script src="/js/stores.js?v=20260723d"></script>
+<script src="/js/platform.js?v=20260723d"></script>
+<script src="/js/pr.js?v=20260723d"></script>
+<script src="/js/friday.js?v=20260723d"></script>
+<script src="/js/news.js?v=20260723d"></script>
 </body>
 </html>

@@ -167,17 +167,29 @@ function campaignTabs(c,view,smart){return '<div class="campaign-tabs"><button d
 function renderCampaignDetail(c){
   const box=document.getElementById("campaignDetail");if(!box||!c)return;const tasks=campaignTasks(c.gid),done=tasks.filter(t=>t.completed).length,st=campaignStatus(c),smart=getCampaignSmart(c),view=state.campaignView[c.gid]||"overview";
   const sections=state.campaignSections[c.gid];if(!sections&&!state.campaignSectionLoading[c.gid])setTimeout(()=>loadCampaignSections(c.gid),0);
-  box.innerHTML='<div class="campaign-detail-head"><div><div class="campaign-kicker"><span class="campaign-status '+st.key+'">'+st.label+'</span><span>'+tasks.length+' tasks · '+done+' done</span></div><h2>'+esc(c.name)+'</h2><p>'+esc(campaignDateLabel(c))+'</p></div><a class="btn ghost sm" href="'+esc(c.url||("https://app.asana.com/0/"+c.gid))+'" target="_blank">Open project ↗</a></div>'+campaignTabs(c,view,smart)+'<div id="campaignViewBody">'+(view==="resources"?renderCampaignResourceView(c,smart):view==="smart"?renderCampaignSmartView(c,smart,tasks):renderCampaignOverview(c,tasks,sections))+'</div>';
+  box.innerHTML='<div class="campaign-detail-head"><div><div class="campaign-kicker"><span class="campaign-status '+st.key+'">'+st.label+'</span><span>'+tasks.length+' tasks · '+done+' done</span></div><h2>'+esc(c.name)+'</h2><p>'+esc(campaignDateLabel(c))+'</p></div><a class="btn ghost sm" href="'+esc(c.url||("https://app.asana.com/0/"+c.gid))+'" target="_blank">Open project ↗</a><button class="btn ghost sm danger" id="campaignDelete">Delete</button></div>'+campaignTabs(c,view,smart)+'<div id="campaignViewBody">'+(view==="resources"?renderCampaignResourceView(c,smart):view==="smart"?renderCampaignSmartView(c,smart,tasks):renderCampaignOverview(c,tasks,sections))+'</div>';
   wireCampaignDetail(c,view,smart);
 }
 function renderCampaignOverview(c,tasks,sections){
   const people=assigneeOptions("",""),phaseOpts=(sections||[]).filter(s=>!/^campaign hq$/i.test(s.name)).map(s=>'<option value="'+s.gid+'">'+esc(s.name)+'</option>').join("");
-  return '<div class="campaign-detail-grid"><div class="campaign-main"><section class="campaign-section"><div class="campaign-section-h"><h3>Campaign details</h3><span>The launch date anchors the whole runway</span></div>'+campaignDetailsForm(c)+'</section><section class="campaign-section"><div class="campaign-section-h"><h3>Tasks</h3><span>Tasks also appear in Calendar and The Girls</span></div>'+campaignTaskComposer(people,phaseOpts,!!sections)+campaignTaskList(tasks,sections)+'</section></div><aside class="campaign-aside"><section class="campaign-section campaign-calendar-section"><div class="campaign-section-h"><h3>Campaign calendar</h3></div>'+campaignCalendar(c,tasks)+'</section>'+campaignNextUp(tasks)+'</aside></div>';
+  return '<div class="campaign-detail-grid"><div class="campaign-main"><section class="campaign-section"><div class="campaign-section-h"><h3>Campaign details</h3><span>The launch date anchors the whole runway</span></div>'+campaignDetailsForm(c)+'</section><section class="campaign-section"><div class="campaign-section-h"><h3>Tasks</h3><span>Tasks also appear in Calendar and The Girls</span></div>'+campaignTaskComposer(people,phaseOpts,!!sections)+campaignTaskList(tasks,sections)+'</section></div><aside class="campaign-aside"><section class="campaign-section campaign-calendar-section"><div class="campaign-section-h"><h3>Campaign calendar</h3></div>'+campaignCalendar(c,tasks)+'</section>'+campaignEventsSection(c)+campaignNextUp(tasks)+'</aside></div>';
 }
 function campaignDetailsForm(c){return '<div class="campaign-fields"><label><span>Name</span><input id="campEditName" value="'+esc(c.name)+'"></label><label><span>Launch date</span><input type="date" id="campEditStart" value="'+(c.start||"")+'"></label><label><span>Ends</span><input type="date" id="campEditDue" value="'+(c.due||"")+'"></label></div><label class="campaign-note"><span>Working notes</span><textarea id="campEditNotes" placeholder="Objectives, audience, decisions, links, what cannot change…">'+esc(c.notes||"")+'</textarea></label><div class="campaign-save-line"><span id="campaignSaveState">Changing launch marks the Smart Plan for review.</span><button class="btn primary sm" id="campaignSave">Save campaign</button></div>';}
 function campaignTaskComposer(people,phaseOpts,ready){return '<div class="campaign-add"><input id="campTaskName" placeholder="Add a campaign task…"><input type="date" id="campTaskDue"><select id="campTaskPhase" '+(ready?'':'disabled')+'><option value="">'+(ready?'No phase':'Loading phases…')+'</option>'+phaseOpts+'</select><select id="campTaskAssignee">'+people+'</select><button class="btn primary sm" id="campTaskAdd">Add</button></div>';}
 function campaignTaskList(tasks,sections){if(!tasks.length)return'<div class="empty campaign-task-empty">No tasks yet. Build the Smart Plan or add one above.</div>';const order=(sections||[]).map(s=>s.name),groups={};tasks.forEach(t=>{const k=t.sectionName||"Other";(groups[k]=groups[k]||[]).push(t);});const keys=[...order.filter(k=>groups[k]&&!/^campaign hq$/i.test(k)),...Object.keys(groups).filter(k=>!order.includes(k))];return'<div class="campaign-task-groups">'+keys.map(k=>{const rows=groups[k].sort((a,b)=>(a.completed-b.completed)||((a.due||"9999").localeCompare(b.due||"9999")));return'<div class="campaign-task-group"><div class="campaign-phase"><span>'+esc(k)+'</span><b>'+rows.filter(x=>!x.completed).length+'</b></div>'+rows.map(campaignTaskRow).join("")+'</div>';}).join("")+'</div>';}
 function campaignTaskRow(t){const open=!!state.campaignExpanded[t.gid],subs=state.campaignSubtasks[t.gid];let sub="";if(open){if(subs==="loading")sub='<div class="campaign-subtasks"><span class="spin"></span></div>';else{const arr=Array.isArray(subs)?subs:[];sub='<div class="campaign-subtasks">'+arr.map(s=>'<div class="campaign-subtask'+(s.completed?' done':'')+'"><button class="camp-sub-check" data-subdone="'+s.gid+'" data-parent="'+t.gid+'">'+(s.completed?'✓':'')+'</button><span>'+esc(s.name)+'</span><small>'+(s.due_on?campFmt(pd(s.due_on)):"")+'</small></div>').join("")+'<div class="campaign-sub-add"><input data-subname="'+t.gid+'" placeholder="Add a subtask…"><input type="date" data-subdue="'+t.gid+'"><button class="btn ghost sm" data-subadd="'+t.gid+'">Add</button></div></div>';}}return'<div class="campaign-task-wrap"><div class="campaign-task'+(t.completed?' done':'')+'"><button class="camp-check" data-campdone="'+t.gid+'">'+(t.completed?'✓':'')+'</button><button class="campaign-task-name" data-campopen="'+t.gid+'">'+esc(t.name)+'</button><span class="campaign-task-meta">'+(t.assignee?esc(firstName(t.assignee.name)):"Unassigned")+(t.due?' · '+campFmt(pd(t.due)):"")+'</span><button class="btn ghost sm campaign-sub-btn" data-subtoggle="'+t.gid+'">'+(open?'Hide':'Subtasks')+'</button></div>'+sub+'</div>';}
+// Masterclasses / webinars linked to this campaign, with a one-click way to
+// schedule a new one already tied to it (the Events tab owns the detail).
+function campaignEventsSection(c){
+  const evs=typeof eventsForCampaign==="function"?eventsForCampaign(c.gid):[];
+  const rows=evs.length?evs.map(ev=>{
+    const l=(state.eventsData&&state.eventsData[ev.gid])||{};
+    const kind=typeof eventKindLabel==="function"?eventKindLabel(l):"Event";
+    return '<button data-campevent="'+esc(String(ev.gid))+'"><span>'+esc(kind)+'</span><b>'+esc(ev.name||"Untitled event")+'</b></button>';
+  }).join(""):'<div class="empty" style="padding:10px 0">No masterclasses or webinars linked yet.</div>';
+  return '<section class="campaign-section campaign-events"><div class="campaign-section-h"><h3>Masterclasses & webinars</h3></div>'+rows+
+    '<button class="btn ghost sm" id="campScheduleEvent" style="margin-top:8px">+ Schedule a masterclass</button></section>';
+}
 function campaignNextUp(tasks){const next=tasks.filter(t=>!t.completed&&t.due&&pd(t.due)>=todayD()).sort((a,b)=>a.due.localeCompare(b.due)).slice(0,5);return'<section class="campaign-section campaign-next"><div class="campaign-section-h"><h3>Next up</h3></div>'+(!next.length?'<div class="empty" style="padding:12px 0">Nothing dated ahead.</div>':next.map(t=>'<button data-campopen="'+t.gid+'"><span>'+campFmt(pd(t.due))+'</span><b>'+esc(t.name)+'</b></button>').join(""))+'</section>';}
 function campaignCalendar(c,tasks){let dates=tasks.filter(t=>t.due).map(t=>pd(t.due)),anchor=dates.length?new Date(Math.min(...dates)):c.start?pd(c.start):todayD();let cursor=state.campaignCursor[c.gid]?pd(state.campaignCursor[c.gid]):anchor;cursor=new Date(cursor.getFullYear(),cursor.getMonth(),1);const y=cursor.getFullYear(),m=cursor.getMonth(),first=new Date(y,m,1),offset=(first.getDay()+6)%7,start=new Date(first);start.setDate(1-offset);let html='<div class="campaign-cal-nav"><button class="btn ghost sm" data-campcal="-1">‹</button><b>'+MO[m]+' '+y+'</b><button class="btn ghost sm" data-campcal="1">›</button></div><div class="campaign-cal-dow">'+DOW.map(d=>'<span>'+d.slice(0,1)+'</span>').join("")+'</div><div class="campaign-cal-grid">';for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const dayTasks=tasks.filter(t=>t.due&&sameDay(pd(t.due),d)),dim=d.getMonth()!==m;html+='<button class="campaign-cal-day'+(dim?' dim':'')+(sameDay(d,todayD())?' today':'')+'" data-campdate="'+iso(d)+'"><span>'+d.getDate()+'</span>'+dayTasks.slice(0,2).map(t=>'<i style="background:'+c.color+'" title="'+esc(t.name)+'"></i>').join("")+(dayTasks.length>2?'<em>+'+(dayTasks.length-2)+'</em>':'')+'</button>';}return html+'</div>';}
 
@@ -222,10 +234,52 @@ function renderCampaignSmartView(c,smart,tasks){
 
 function wireCampaignDetail(c,view,smart){
   document.querySelectorAll("[data-campview]").forEach(b=>b.onclick=()=>{state.campaignView[c.gid]=b.dataset.campview;renderCampaigns();});
+  const del=document.getElementById("campaignDelete");if(del)del.onclick=()=>confirmDeleteCampaign(c);
   if(view==="overview")wireCampaignOverview(c,smart);else if(view==="resources")wireCampaignResources(c,smart);else wireCampaignSmart(c,smart);
+}
+// Delete a whole campaign. Archive is reversible; permanent also removes the
+// campaign's tasks. The user chooses per deletion (their preference).
+function confirmDeleteCampaign(c){
+  const tasks=campaignTasks(c.gid),n=tasks.length;
+  showModal('<div class="confirm-shell"><h2>Delete “'+esc(c.name)+'”?</h2>'+
+    '<p class="hint">This campaign has '+n+' task'+(n===1?'':'s')+' in Asana. Choose how to remove it — archiving is reversible in Asana; deleting permanently cannot be undone.</p>'+
+    '<div class="confirm-actions">'+
+      '<button class="btn ghost" data-close>Cancel</button>'+
+      '<button class="btn primary" id="campArchive">Archive (reversible)</button>'+
+      '<button class="btn danger-solid" id="campDeletePerm">Delete permanently'+(n?' + '+n+' task'+(n===1?'':'s'):'')+'</button>'+
+    '</div></div>');
+  wireModalClose();
+  document.getElementById("campArchive").onclick=()=>deleteCampaign(c,false);
+  document.getElementById("campDeletePerm").onclick=()=>deleteCampaign(c,true);
+}
+async function deleteCampaign(c,permanent){
+  const btnBar=document.querySelector(".confirm-actions");
+  if(btnBar)btnBar.innerHTML='<span class="spin"></span> '+(permanent?'Deleting…':'Archiving…');
+  try{
+    if(permanent){
+      const tasks=campaignTasks(c.gid);
+      for(const t of tasks){ try{ await call("delete_task",{task:t.gid,shared:true}); }catch(_){ /* skip tasks we can't delete */ } }
+      await call("delete_project",{project_id:c.gid});
+    }else{
+      await call("archive_project",{project_id:c.gid});
+    }
+    // Drop it from the app everywhere.
+    cfg.campaigns=(cfg.campaigns||[]).filter(x=>x.gid!==c.gid);
+    cfg.projects=(cfg.projects||[]).filter(p=>p.gid!==c.gid);
+    state.campaignPortfolio=(state.campaignPortfolio||[]).filter(x=>x.gid!==c.gid);
+    state.tasks=state.tasks.filter(t=>t.projectGid!==c.gid&&!(t.projectGids||[]).includes(c.gid));
+    if(state.campaignSelected===c.gid)state.campaignSelected=null;
+    saveCfg();closeModal();renderCampaigns();renderCalendar();
+    toast(permanent?"Campaign deleted":"Campaign archived");
+  }catch(e){
+    toast("Couldn't remove the campaign: "+e.message);
+    closeModal();
+  }
 }
 function wireCampaignOverview(c,smart){
   const save=document.getElementById("campaignSave");if(save)save.onclick=()=>saveCampaignDetails(c,smart);const add=document.getElementById("campTaskAdd");if(add)add.onclick=()=>addCampaignTask(c);
+  const sched=document.getElementById("campScheduleEvent");if(sched&&typeof scheduleEventForCampaign==="function")sched.onclick=()=>scheduleEventForCampaign(c.gid);
+  document.querySelectorAll("[data-campevent]").forEach(b=>b.onclick=()=>{state.eventSelected=b.dataset.campevent;switchTab("events");if(typeof renderEventsTab==="function")renderEventsTab();});
   document.querySelectorAll('[data-campopen]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.campopen));document.querySelectorAll('[data-campdone]').forEach(b=>b.onclick=()=>toggleDone(b.dataset.campdone,!findTask(b.dataset.campdone).completed));document.querySelectorAll('[data-subtoggle]').forEach(b=>b.onclick=()=>toggleCampaignSubtasks(b.dataset.subtoggle));document.querySelectorAll('[data-subadd]').forEach(b=>b.onclick=()=>addCampaignSubtask(b.dataset.subadd));document.querySelectorAll('[data-subdone]').forEach(b=>b.onclick=()=>toggleCampaignSubtask(b.dataset.parent,b.dataset.subdone));document.querySelectorAll('[data-campcal]').forEach(b=>b.onclick=()=>{const current=state.campaignCursor[c.gid]?pd(state.campaignCursor[c.gid]):(c.start?pd(c.start):todayD());current.setDate(1);current.setMonth(current.getMonth()+(+b.dataset.campcal));state.campaignCursor[c.gid]=iso(current);renderCampaigns();});document.querySelectorAll('[data-campdate]').forEach(b=>b.onclick=()=>{const due=document.getElementById("campTaskDue");if(due){due.value=b.dataset.campdate;document.getElementById("campTaskName").focus();}});
 }
 function wireCampaignResources(c,smart){

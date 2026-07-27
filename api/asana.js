@@ -397,7 +397,21 @@ export default async function handler(req, res){
       }
 
       case "delete_task":
-        await asanaFetch(req,res,`/tasks/${args.task}`, { method:"DELETE" });
+        // Shared campaign/app tasks are often owned by the service identity, so
+        // allow deletion through it; ordinary tasks delete as the user.
+        if(args.shared) await serviceFetch(req,res,`/tasks/${args.task}`, { method:"DELETE" });
+        else await asanaFetch(req,res,`/tasks/${args.task}`, { method:"DELETE" });
+        out = { data:{} }; break;
+
+      // Archive (reversible) or permanently delete a whole project (campaign).
+      // Archiving is a plain update; deletion removes the project itself —
+      // callers delete the attached tasks first when they want those gone too.
+      case "archive_project":
+        out = await serviceFetch(req,res,`/projects/${args.project_id}`, { method:"PUT", body:{ data:{ archived:true } } });
+        break;
+      case "delete_project":
+        if(!args.project_id){ res.status(400).json({error:"project_id required"}); return; }
+        await serviceFetch(req,res,`/projects/${args.project_id}`, { method:"DELETE" });
         out = { data:{} }; break;
 
       case "create_project": {

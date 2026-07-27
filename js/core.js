@@ -127,7 +127,11 @@ const state = {
   eventsDataTask: null,    // gid of the ⚙️ events-data managed task
   eventSelected: null,
   eventSubtasks: {},       // { [eventGid]: [subtasks] | "loading" }
-  eventSmartRunning: {}    // { [eventGid]: bool }
+  eventSmartRunning: {},   // { [eventGid]: bool }
+  // Content Library (CMS) — assets stored in one managed Asana task.
+  contentLibrary: {},      // { [id]: asset }
+  contentLibraryTask: null,
+  contentFilter: { type: "", status: "", q: "" }
 };
 
 const DEMO = new URLSearchParams(location.search).has("demo");
@@ -224,7 +228,8 @@ async function fetchProject(p){
         isBrief: /^「brief」/.test(t.name||""),
         isCampaignSmart: /^⚙️ campaign-smart-plan/.test(t.name||""),
         isEventsData: /^⚙️ events-data/.test(t.name||""),
-        isKeeper: /^⚙️ (?:dashboard-state|campaign-smart-plan|events-data)/.test(t.name||""),
+        isContentLibrary: /^⚙️ content-library/.test(t.name||""),
+        isKeeper: /^⚙️ (?:dashboard-state|campaign-smart-plan|events-data|content-library)/.test(t.name||""),
         isPlaceholder: (p.gid===REVAMP_PROJECT && !t.assignee && !!t.due_on)
       });
     });
@@ -264,6 +269,7 @@ async function loadAll(){
     state.campaignSmart = {};
     readOrderKeeper();
     if(typeof readEventsData==="function") readEventsData();
+    if(typeof readContentLibrary==="function") readContentLibrary();
     if(state._demoSeed) state._demoSeed();
     loadMyTasks(); // async — re-renders The Girls when each list lands
     state.loading = false;
@@ -869,6 +875,7 @@ function renderAll(){
   renderCalendar(); renderGirls(); renderCampaigns(); renderStudio(); renderCurriculum(); renderCommunities();
   renderStores(); renderPlatform(); prTabVisibility(); renderMentionBadge();
   if(typeof renderEventsTab==="function") renderEventsTab();
+  if(typeof renderContentTab==="function") renderContentTab();
   computeSuggestions();
 }
 

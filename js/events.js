@@ -29,7 +29,7 @@ function defaultEventLogistics(){
   return {
     kind: "masterclass", format: "in_person", host: null,
     sessions: [], food: false, roles: [], goal: "",
-    campaignGid: null, contacts: [], smart: null
+    campaignGid: null, contacts: [], smart: null, shootGid: null
   };
 }
 
@@ -213,6 +213,7 @@ function renderEventDetail(){
       '<input class="ev-title" id="evName" value="' + esc(ev.name || "") + '" placeholder="Event name">' +
       '<div class="ev-head-actions">' +
         (ev.url ? '<a class="btn ghost sm" href="' + esc(ev.url) + '" target="_blank" rel="noopener">Open in Asana ↗</a>' : '') +
+        (l.shootGid && findTask(l.shootGid) ? '<button class="btn ghost sm" id="evShootOpen">🎬 Open shoot</button>' : '<button class="btn ghost sm" id="evPlanShoot">🎬 Plan a shoot</button>') +
         '<button class="btn ghost sm" id="evPromo">Queue promo</button>' +
         '<button class="btn ghost sm danger" id="evDelete">Delete</button>' +
       '</div>' +
@@ -341,6 +342,10 @@ function wireEventDetail(ev, l){
   if(del) del.onclick = () => deleteEvent(gid);
   const promo = document.getElementById("evPromo");
   if(promo) promo.onclick = () => { if(typeof queuePromoFor === "function") queuePromoFor(gid); };
+  const planShoot = document.getElementById("evPlanShoot");
+  if(planShoot) planShoot.onclick = () => planShootForEvent(gid);
+  const openShoot = document.getElementById("evShootOpen");
+  if(openShoot) openShoot.onclick = () => { switchTab("studio"); const sid = eventLogistics(gid).shootGid; if(sid) setTimeout(() => openDrawer(sid), 60); };
 
   // smart plan
   const sb = document.getElementById("evSmartBtn");
@@ -354,15 +359,17 @@ function wireEventDetail(ev, l){
 }
 
 /* ---- create / rename / delete ---- */
-async function newEvent(){
-  const name = "New masterclass";
+async function newEvent(opts){
+  opts = opts || {};
+  const name = opts.name || "New masterclass";
+  const seed = () => { const l = defaultEventLogistics(); if(opts.campaignGid) l.campaignGid = String(opts.campaignGid); if(opts.kind) l.kind = opts.kind; return l; };
   if(DEMO){
     const gid = "ev-" + Date.now();
     state.tasks.push({ gid, name, notes: "", due: null, completed: false, url: null,
       projectGid: CC_PROJECT, projectName: "Content & Comms", projectColor: "#0A3D62", assignee: null, isEvent: true });
-    state.eventsData[gid] = defaultEventLogistics();
+    state.eventsData[gid] = seed();
     state.eventSelected = gid; state.eventSubtasks[gid] = [];
-    renderEventsTab(); toast("Event created — fill in the details"); return;
+    renderEventsTab(); toast("Event created — fill in the details"); return gid;
   }
   try{
     const r = await call("create_tasks", { tasks: [{ name, project_id: CC_PROJECT, section_id: SEC_PLAN }] });
@@ -371,13 +378,24 @@ async function newEvent(){
     state.tasks.push({ gid: String(t.gid), name: t.name || name, notes: "", due: null, completed: false,
       url: t.permalink_url || null, projectGid: CC_PROJECT, projectName: "Content & Comms", projectColor: "#0A3D62",
       assignee: null, isEvent: true });
-    state.eventsData[String(t.gid)] = defaultEventLogistics();
+    state.eventsData[String(t.gid)] = seed();
     state.eventSelected = String(t.gid); state.eventSubtasks[String(t.gid)] = [];
     saveEventsData();
     renderEventsTab(); renderCalendar();
     toast("Event created — fill in the details");
     const nameEl = document.getElementById("evName"); if(nameEl){ nameEl.focus(); nameEl.select(); }
+    return String(t.gid);
   }catch(e){ toast("Couldn't create the event: " + e.message); }
+}
+// Campaign-side entry point: create a masterclass already linked to a campaign,
+// then jump to the Events tab to finish planning it.
+async function scheduleEventForCampaign(campaignGid, kind){
+  switchTab("events");
+  await newEvent({ campaignGid, kind: kind || "masterclass", name: "New " + (kind === "webinar" ? "webinar" : "masterclass") });
+}
+// Events linked to a given campaign.
+function eventsForCampaign(campaignGid){
+  return eventTasks().filter(ev => { const l = state.eventsData[String(ev.gid)]; return l && String(l.campaignGid) === String(campaignGid); });
 }
 async function renameEvent(gid, name){
   if(!name) return;
@@ -440,6 +458,39 @@ async function toggleEventChecklistItem(gid, subGid){
   renderEventDetail();
   try{ await call("update_tasks", { tasks: [{ task: subGid, completed: now }] }); }
   catch(e){ sub.completed = !now; renderEventDetail(); toast("Couldn't update: " + e.message); }
+}
+
+/* ---- smart connection: spin up a linked shoot day for this event ---- */
+async function planShootForEvent(gid){
+  const ev = findTask(gid); if(!ev) return;
+  const l = eventLogistics(gid);
+  // Shoot lands ~7 days before the event so content is ready in time.
+  let shootDue = ev.due || null;
+  if(shootDue){ const d = pd(shootDue); d.setDate(d.getDate() - 7); shootDue = iso(d); }
+  const name = "Shoot Day — " + (ev.name || "event content");
+  const notes = ["Content shoot for the " + eventKindLabel(l).toLowerCase() + ' "' + (ev.name || "") + '".',
+    l.goal ? "Goal: " + l.goal : "", l.roles && l.roles.length ? "Audience: " + eventRolesLabel(l) : "",
+    "🔗 Linked event: " + (ev.url || gid)].filter(Boolean).join("\n");
+  try{
+    if(DEMO){
+      const sgid = "shoot-" + Date.now();
+      state.tasks.push({ gid: sgid, name, notes, due: shootDue, completed: false, url: null,
+        projectGid: CC_PROJECT, projectName: "Content & Comms", projectColor: "#0A3D62", sectionName: "Shoot Days",
+        sectionGid: SEC_SHOOT, isShoot: true, assignee: null });
+      l.shootGid = sgid;
+    }else{
+      const r = await call("create_tasks", { tasks: [{ name, project_id: CC_PROJECT, section_id: SEC_SHOOT, due_on: shootDue, notes }] });
+      const t = (r.data || [])[0];
+      if(!t || !t.gid) throw new Error("Asana did not return the new shoot");
+      state.tasks.push({ gid: String(t.gid), name, notes, due: shootDue, completed: false, url: t.permalink_url || null,
+        projectGid: CC_PROJECT, projectName: "Content & Comms", projectColor: "#0A3D62", sectionName: "Shoot Days",
+        sectionGid: SEC_SHOOT, isShoot: true, assignee: null });
+      l.shootGid = String(t.gid);
+    }
+    saveEventsData();
+    renderEventsTab(); if(typeof renderStudio === "function") renderStudio(); renderCalendar();
+    toast("Shoot day created & linked — open Studio to draft the brief 🎬");
+  }catch(e){ toast("Couldn't create the shoot: " + e.message); }
 }
 
 /* ---- AI smart plan ---- */
