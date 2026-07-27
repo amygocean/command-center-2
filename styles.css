@@ -131,19 +131,22 @@ button.gchip:hover{transform:translateY(-1px);background:var(--fill-2)}
 .gchip.comms{background:rgba(122,95,176,.1);color:#5b4390}
 
 /* ================= tabs ================= */
-.tabs{display:flex;flex-direction:column;gap:4px;margin:26px 0 18px;position:relative;border-bottom:1px solid var(--hair)}
+.tabs{display:flex;flex-direction:column;gap:9px;margin:26px 0 18px;position:relative}
 .tab-row{display:flex;gap:2px;align-items:center}
-/* the second layer reads as secondary: a hairline above it and a lighter feel */
-.tab-row-2{border-top:1px solid var(--hair);padding-top:4px}
-.tab-row-2 .tab{font-size:12.5px}
+/* primary layer — underline tabs sitting on a baseline */
+.tab-row-1{border-bottom:1px solid var(--hair)}
 .tab{
   position:relative;border:none;background:none;padding:10px 14px;font-family:var(--font);font-weight:600;font-size:13.5px;
-  color:var(--faint);cursor:pointer;transition:color .2s;letter-spacing:-.1px;
+  color:var(--faint);cursor:pointer;transition:color .18s,background .18s;letter-spacing:-.1px;border-radius:9px;
 }
 .tab:hover{color:var(--ink)}
 .tab.active{color:var(--ink);font-weight:700}
-/* per-tab underline (works across both rows, unlike a single sliding bar) */
-.tab.active::after{content:"";position:absolute;left:14px;right:14px;bottom:0;height:2px;border-radius:2px;background:var(--ink)}
+.tab-row-1 .tab.active::after{content:"";position:absolute;left:14px;right:14px;bottom:0;height:2.5px;border-radius:3px 3px 0 0;background:var(--ink)}
+/* secondary layer — a lighter pill sub-nav for ops & reference boards */
+.tab-row-2{gap:5px}
+.tab-row-2 .tab{padding:6px 13px;font-size:12px;font-weight:650;border-radius:999px}
+.tab-row-2 .tab:hover{background:var(--fill);color:var(--ink)}
+.tab-row-2 .tab.active{background:var(--grad-soft);color:var(--navy);font-weight:750}
 #tabInk{display:none}
 .tabpane{display:none}
 .tabpane.active{display:block}
