@@ -134,8 +134,11 @@ function renderCalendar(dir){
 function storesOn(dt){
   if(!cfg.showStores) return [];
   const tf=state.trainerFilter;
+  // Store openings always show under this layer; trainer visits (the SCHEDULE
+  // board) can be hidden on their own via the "Trainer visits" toggle.
+  const showVisits=cfg.showTrainerVisits!==false;
   return state.tasks.filter(t=>(t.isSchedule||t.isOpening) && !t.completed && t.due && sameDay(pd(t.due),dt))
-    .filter(t=> t.isOpening || !tf.length || tf.includes(trainerOf(t)));
+    .filter(t=> t.isOpening || (showVisits && (!tf.length || tf.includes(trainerOf(t)))));
 }
 function storePillHTML(t){
   if(t.isOpening){
@@ -153,7 +156,7 @@ function storePillHTML(t){
 /* the row of trainer filter chips under the calendar toolbar */
 function renderTrainerToggles(){
   const box=document.getElementById("trainerBar"); if(!box) return;
-  if(!cfg.showStores){ box.style.display="none"; return; }
+  if(!cfg.showStores||cfg.showTrainerVisits===false){ box.style.display="none"; return; }
   const names=[...new Set(state.tasks.filter(t=>t.isSchedule&&!t.completed&&t.due)
     .map(trainerOf).filter(Boolean))].sort();
   if(!names.length){ box.style.display="none"; return; }
@@ -348,7 +351,7 @@ function miniMonthHTML(y,m){
     const dayTasks=vt.filter(t=>t.due===dstr);
     const shoots=dayTasks.filter(t=>t.isShoot).length;
     const comms=cfg.showComms?state.tasks.filter(t=>t.isComms&&!t.isKeeper&&t.due===dstr).length:0;
-    const stores=cfg.showStores?state.tasks.filter(t=>(t.isSchedule||t.isOpening)&&!t.completed&&t.due===dstr).length:0;
+    const stores=cfg.showStores?state.tasks.filter(t=>(t.isOpening||(t.isSchedule&&cfg.showTrainerVisits!==false))&&!t.completed&&t.due===dstr).length:0;
     const occ=cfg.showOccasions&&(OCCASIONS_APP.some(o=>o.date===dstr)||state.tasks.some(t=>t.isOccasion&&t.due===dstr));
     const camp=campaignsOn(dt).length>0;
     let cls="md"; if(sameDay(dt,today)) cls+=" now"; if(camp) cls+=" camp";

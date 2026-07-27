@@ -66,6 +66,7 @@ function loadCfg(){
         s._m12=true;
       }
       if(s.completionCelebrations===undefined) s.completionCelebrations=true;
+      if(s.showTrainerVisits===undefined) s.showTrainerVisits=true;
       // Keep a copy of the last successfully-parsed config. If a future load
       // ever throws (corrupt storage, a bad migration), we can fall back to
       // this instead of silently resetting everyone to defaults.
@@ -915,6 +916,11 @@ async function init(){
   document.getElementById("btnGenIdeas").onclick=()=>generateAllUpcoming();
   document.getElementById("btnFriday").onclick=openFriday;
   document.getElementById("showDone").onchange=e=>{ state.showDone=e.target.checked; renderAll(); };
+  const tvToggle=document.getElementById("showTrainerVisits");
+  if(tvToggle){
+    tvToggle.checked=cfg.showTrainerVisits!==false;
+    tvToggle.onchange=e=>{ cfg.showTrainerVisits=e.target.checked; saveCfg(); renderChips(); renderCalendar(); };
+  }
   document.querySelectorAll("[data-close]").forEach(x=>x.onclick=()=>{closeDrawer();closeModal();});
   document.getElementById("drawerWrap").addEventListener("click",e=>{ if(e.target.classList.contains("drawer-scrim"))closeDrawer(); });
   document.getElementById("modalWrap").addEventListener("click",e=>{ if(e.target.classList.contains("modal-scrim"))closeModal(); });
