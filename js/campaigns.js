@@ -23,23 +23,43 @@ const CAMPAIGN_CHANNELS = [
 const CAMPAIGN_RESOURCE_TYPES=["Recipe","Operational brief","Existing learning","Supplier brief","Creative reference","Brand guidance","Research / data","Other"];
 
 // Every offset is relative to launch. This is the core backwards-planning model.
+// Modelled on the Academy's real menu/recipe campaigns (e.g. Winter Menu): a
+// recipe-first runway — brief & recipes in, training tools + cheat sheets +
+// printing, region-split internal training, course released internally then to
+// all teams, manager training + masterclasses, launch, then post-launch tips.
 const CAMPAIGN_PLAN_RULES = [
-  {id:"scope-lock",phase:"Pre-launch",ch:"all",offset:-42,name:"Confirm scope, source pack and what cannot change",type:"planning"},
+  // ---- Brief & recipes in ----
+  {id:"scope-lock",phase:"Pre-launch",ch:"all",offset:-49,name:"Confirm scope, recipe pack and what cannot change",type:"planning"},
+  {id:"recipes-in",phase:"Pre-launch",ch:"all",offset:-45,name:"Menu team to send final recipes",type:"planning"},
+  {id:"brief-leaders",phase:"Pre-launch",ch:"training",offset:-42,name:"Brief specialist leaders",type:"training"},
+  {id:"share-business",phase:"Pre-launch",ch:"all",offset:-40,name:"Share the plan with the business",type:"planning"},
+  // ---- Film the recipes ----
   {id:"course-outline",phase:"Pre-launch",ch:"courses",offset:-35,name:"Course outline and learning approach locked",type:"course"},
   {id:"shoot-brief",phase:"Pre-launch",ch:"videos",offset:-35,name:"Send shoot brief and recipe list to Content Go",type:"shoot_brief"},
   {id:"shoot-day",phase:"Pre-launch",ch:"videos",offset:-28,name:"Shoot Day — {{name}}",type:"shoot_day",requiresShoot:true},
   {id:"first-edits",phase:"Pre-launch",ch:"videos",offset:-21,name:"First edits and image selects reviewed",type:"video"},
+  // ---- Build the learning assets ----
+  {id:"training-tools",phase:"Pre-launch",ch:"courses",offset:-21,name:"Training tools built — recipe guide & cheat sheets",type:"cheat_sheet"},
   {id:"course-material-live",phase:"Pre-launch",ch:"courses",offset:-14,name:"Course material sent out and available to teams",type:"course"},
   {id:"manager-pack",phase:"Pre-launch",ch:"courses",offset:-14,name:"Manager coaching pack sent out",type:"manager_support"},
+  {id:"print-guides",phase:"Pre-launch",ch:"training",offset:-12,name:"Send recipe guides & cheat sheets for printing",type:"training"},
+  // ---- Roll out training ----
   {id:"regional-plan",phase:"Pre-launch",ch:"training",offset:-14,name:"Regional training and field-support plan locked",type:"training"},
+  {id:"internal-training",phase:"Pre-launch",ch:"training",offset:-12,name:"Internal training — Support & Ops (JHB & CPT)",type:"training"},
+  {id:"masterclass",phase:"Pre-launch",ch:"training",offset:-10,name:"Menu masterclasses — managers & specialists",type:"masterclass"},
   {id:"qa",phase:"Pre-launch",ch:"courses",offset:-7,name:"Final QA, mobile check and links tested",type:"course"},
+  {id:"course-internal",phase:"Pre-launch",ch:"courses",offset:-7,name:"Release the menu course to internal teams",type:"course"},
   {id:"teaser",phase:"Pre-launch",ch:"comms",offset:-3,name:"Campaign teaser queued in Communities",type:"community_message"},
+  // ---- Launch ----
   {id:"launch",phase:"Launch week",ch:"all",offset:0,name:"{{name}} launches",type:"milestone"},
+  {id:"course-external",phase:"Launch week",ch:"courses",offset:0,name:"Release the menu course to all teams",type:"course"},
   {id:"launch-comms",phase:"Launch week",ch:"comms",offset:0,name:"Launch announcement sent",type:"community_message"},
-  {id:"first-week",phase:"Launch week",ch:"courses",offset:5,name:"First-week participation and issue check",type:"measurement"},
   {id:"manager-reminder",phase:"Launch week",ch:"comms",offset:2,name:"Manager huddle reminder",type:"community_message"},
+  {id:"first-week",phase:"Launch week",ch:"courses",offset:5,name:"First-week participation and issue check",type:"measurement"},
+  // ---- In market ----
   {id:"field-check",phase:"In market",ch:"training",offset:14,name:"Trainer field check-ins and execution feedback",type:"training"},
-  {id:"wrong-answer",phase:"In market",ch:"courses",offset:14,name:"Wrong-answer check — build Skills Booster if needed",type:"skills_booster"}
+  {id:"wrong-answer",phase:"In market",ch:"courses",offset:14,name:"Wrong-answer check — build Skills Booster if needed",type:"skills_booster"},
+  {id:"post-launch-tips",phase:"In market",ch:"comms",offset:10,name:"Plan post-launch training tips",type:"community_message"}
 ];
 
 function retiredCampaign(c){ return RETIRED_CAMPAIGN_GIDS.includes(c.gid)||/^volume drivers$/i.test((c.name||"").trim()); }
@@ -306,7 +326,12 @@ async function smartUpdateCampaign(c){
   if(!c.start){toast("Set the campaign launch date first");return;}const smart=getCampaignSmart(c);state.campaignSmartUpdating[c.gid]=true;renderCampaigns();
   try{
     const base=buildCampaignPlan(c.name,c.start,c.due,CAMPAIGN_CHANNELS.map(x=>x.key),[]),sourceFallback=campaignSourceRecommendations(smart.sources,c.start),analyses=Object.values(smart.sources||{}).filter(s=>s.analysis).map(s=>({name:s.name,category:s.category,analysis:s.analysis}));let ai=[],summary="",gaps=[];
-    if(analyses.length){try{const text=await askAI("You are building an integrated, source-grounded campaign plan for Ocean Basket Academy. Return ONLY JSON: {\"summary\":\"\",\"gaps\":[\"\"],\"recommendations\":[{\"title\":\"\",\"type\":\"course|skills_booster|manager_support|community_message|infographic|cheat_sheet|video|photo|training|other\",\"phase\":\"Pre-launch|Launch week|In market|Wrap-up\",\"offset_days\":-14,\"why\":\"\",\"source_names\":[\"\"],\"audience\":[\"\"],\"requires_shoot\":false,\"shots\":[\"\"]}]}. Work backwards from launch. Course material must be available 14 days before launch; filming needed for it should normally happen 28 days before launch. Do not repeat the standard runway. Do not invent operational facts. Flag conflicts as gaps.",{campaign:{name:c.name,launch:c.start,end:c.due,notes:c.notes},sources:analyses,existing_tasks:campaignTasks(c.gid).map(t=>({name:t.name,due:t.due,completed:t.completed}))});const parsed=smartParse(text);if(parsed){summary=parsed.summary||"";gaps=parsed.gaps||[];ai=(parsed.recommendations||[]).map((r,ix)=>({id:"ai:"+smartSlug(r.title||ix),phase:CAMPAIGN_PHASES.includes(r.phase)?r.phase:"Pre-launch",due:offsetISO(c.start,Number.isFinite(+r.offset_days)?+r.offset_days:-14),name:r.title||"Create campaign output",type:r.type||"other",requiresShoot:!!r.requires_shoot,why:r.why||"Recommended after reading all campaign sources.",sourceNames:r.source_names||[],audience:r.audience||[],shots:r.shots||[],on:true}));}}catch(e){gaps.push("The integrated AI review could not run: "+e.message);}}
+    // Run the AI from analysed sources OR the working notes — smartness is no
+    // longer gated behind uploading files. Most Academy campaigns are new-menu /
+    // recipe campaigns, so the model is told to treat recipes as the spine.
+    const hasNotes=(c.notes||"").trim().length>15;
+    const linkedEvents=typeof eventsForCampaign==="function"?eventsForCampaign(c.gid).map(e=>({name:e.name,due:e.due})):[];
+    if(analyses.length||hasNotes){try{const text=await askAI("You are building an integrated campaign plan for Ocean Basket Academy (learning & development for restaurant crew). MOST campaigns are new-menu / recipe campaigns. If the sources or notes describe recipes or new/changed dishes: propose ONE training video per recipe (type 'video', requires_shoot true, put the recipe name in the title and its key on-screen steps in shots), and include a menu masterclass for managers & specialists (type 'masterclass'). Also think about recipe guides & cheat sheets (type 'cheat_sheet'), the course (type 'course', released to internal teams first then all teams), region-split internal training and manager training (type 'training'), and Communities messages (type 'community_message'). Return ONLY JSON: {\"summary\":\"\",\"gaps\":[\"\"],\"recommendations\":[{\"title\":\"\",\"type\":\"course|skills_booster|manager_support|community_message|infographic|cheat_sheet|video|photo|training|masterclass|other\",\"phase\":\"Pre-launch|Launch week|In market|Wrap-up\",\"offset_days\":-14,\"why\":\"\",\"source_names\":[\"\"],\"audience\":[\"\"],\"requires_shoot\":false,\"shots\":[\"\"]}]}. Work backwards from launch. Course material must be available 14 days before launch; filming for it should normally happen 28 days before launch. Do not repeat items already in existing_tasks or linked_events. Do not invent operational facts. Flag conflicts as gaps.",{campaign:{name:c.name,launch:c.start,end:c.due,notes:c.notes},sources:analyses,linked_events:linkedEvents,existing_tasks:campaignTasks(c.gid).map(t=>({name:t.name,due:t.due,completed:t.completed}))});const parsed=smartParse(text);if(parsed){summary=parsed.summary||"";gaps=parsed.gaps||[];ai=(parsed.recommendations||[]).map((r,ix)=>({id:"ai:"+smartSlug(r.title||ix),phase:CAMPAIGN_PHASES.includes(r.phase)?r.phase:"Pre-launch",due:offsetISO(c.start,Number.isFinite(+r.offset_days)?+r.offset_days:-14),name:r.title||"Create campaign output",type:r.type||"other",requiresShoot:!!r.requires_shoot,why:r.why||"Recommended after reading all campaign sources.",sourceNames:r.source_names||[],audience:r.audience||[],shots:r.shots||[],on:true}));}}catch(e){gaps.push("The integrated AI review could not run: "+e.message);}}
     if(!summary&&analyses.length)summary=analyses.map(x=>x.analysis.summary).filter(Boolean).join(" ").slice(0,1600);
     gaps=[...gaps,...analyses.flatMap(x=>x.analysis.gaps||[])].filter((x,i,a)=>x&&a.indexOf(x)===i).slice(0,20);
     const all=[...base,...sourceFallback,...ai],seen=new Set(),deduped=all.filter(r=>{const k=smartSlug(r.name);if(seen.has(k))return false;seen.add(k);return true;});
@@ -334,6 +359,18 @@ async function applyCampaignSmart(c,smart,btn){
     const sections=state.campaignSections[c.gid]||[],sectionFor=p=>(sections.find(s=>s.name===p)||{}).gid;let campaignShoot=null,created=0,updated=0;
     const shootRec=selected.find(r=>r.type==="shoot_day");if(shootRec){const wasExisting=!!shootRec.existingGid;campaignShoot=await ensureCampaignShoot(c,shootRec,sectionFor(shootRec.phase));shootRec.action="covered";shootRec.selected=false;shootRec.existingGid=campaignShoot.gid;shootRec.shootId=campaignShoot.gid;shootRec.appliedAt=new Date().toISOString();wasExisting?updated++:created++;}
     for(const rec of selected.filter(r=>r!==shootRec)){
+      // A masterclass recommendation becomes a real linked Event (not a plain
+      // campaign task) so it shows up and can be planned in the Events tab.
+      if(rec.type==="masterclass"&&typeof state.eventsData==="object"){
+        const r=await call("create_shared_tasks",{tasks:[{name:rec.name,project_id:CC_PROJECT,section_id:SEC_PLAN,due_on:rec.due,notes:smartTaskNotes(rec,"")}]}),t=r.data&&r.data[0];
+        if(t){
+          const base=typeof defaultEventLogistics==="function"?defaultEventLogistics():{sessions:[],roles:[],contacts:[]};
+          state.eventsData[String(t.gid)]={...base,kind:"masterclass",campaignGid:c.gid,goal:rec.why||""};
+          if(typeof saveEventsData==="function")saveEventsData();
+          created++;rec.action="covered";rec.selected=false;rec.existingGid=String(t.gid);rec.appliedAt=new Date().toISOString();
+        }
+        continue;
+      }
       let shoot=null;if(rec.requiresShoot){if(rec.shootId&&rec.shootId!=="__campaign__")shoot=state.tasks.find(t=>t.gid===rec.shootId);else{if(!campaignShoot){const existing=(smart.recommendations||[]).find(r=>r.type==="shoot_day"&&r.existingGid),t=existing&&state.tasks.find(x=>x.gid===existing.existingGid);campaignShoot=t||await ensureCampaignShoot(c,{id:"base:shoot-day",name:"Shoot Day — "+c.name,due:offsetISO(c.start,-28),why:"Required to create campaign learning assets.",sourceNames:["Smart Plan"],shots:[],phase:"Pre-launch"},sectionFor("Pre-launch"));}shoot=campaignShoot;}}
       const phase=sectionFor(rec.phase),existing=rec.existingGid&&state.tasks.find(t=>t.gid===rec.existingGid),displayName=shoot?'「shot」 '+rec.name.replace(/^Film:\s*/i,"")+" — "+shoot.name:rec.name,due=shoot&&shoot.due||rec.due,notes=smartTaskNotes(rec,existing&&existing.notes);
       let gid=rec.existingGid;if(gid){await call("update_shared_tasks",{tasks:[{task:gid,name:displayName,due_on:due,assignee:rec.assignee||null,notes,add_projects:shoot?[{project_id:CC_PROJECT,section_id:SEC_PLAN}]:[]} ]});updated++;}

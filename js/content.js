@@ -88,12 +88,21 @@ function renderShootTodos(){
       .sort((a,b)=>(a.due||"9999")<(b.due||"9999")?-1:1);
     if(!rel.length) return;
     html+='<div class="std-grp"><div class="std-grp-h">🎬 '+esc(s.name)+'</div>'+
-      rel.map(t=>'<div class="preprow" data-todo="'+t.gid+'"><span class="ptxt" style="font-size:12px;cursor:pointer">'+esc(t.name)+'</span>'+
-        (t.assignee?'<span class="news-meta" style="display:inline;flex-shrink:0">'+esc(firstName(t.assignee.name))+'</span>':'')+'</div>').join("")+
+      rel.map(t=>'<div class="preprow"><span class="ptxt" data-todo="'+t.gid+'" style="font-size:12px;cursor:pointer">'+esc(t.name)+'</span>'+
+        '<select class="std-assign" data-assign="'+t.gid+'" title="Assign someone">'+assigneeOptions(t.assignee?t.assignee.gid:"unassigned","unassigned")+'</select></div>').join("")+
       '</div>';
   });
   box.innerHTML=html||'<div class="gph">nothing tied to an upcoming shoot yet</div>';
   box.querySelectorAll("[data-todo]").forEach(el=>el.onclick=()=>openDrawer(el.dataset.todo));
+  box.querySelectorAll("[data-assign]").forEach(sel=>sel.onchange=async e=>{
+    e.stopPropagation();
+    const gid=sel.dataset.assign,val=sel.value;
+    try{
+      await call("update_tasks",{tasks:[{task:gid,assignee:val==="unassigned"?null:val}]});
+      const t=findTask(gid); if(t)t.assignee=val==="unassigned"?null:{gid:val,name:(state.users.find(u=>u.gid===val)||{}).name||""};
+      toast("Assignee updated");
+    }catch(err){ toast("Couldn't assign — try the task drawer: "+err.message); }
+  });
 }
 
 /* ---- add a shoot day (+ invite reminder + call-store-manager for Jess) ---- */
@@ -196,7 +205,7 @@ function draftBrief(shootGid){
   const s=state.tasks.find(x=>x.gid===shootGid); if(!s) return;
   showModal(
     '<h2>Supplier brief — '+esc(s.name)+'</h2>'+
-    '<p class="hint">Paste anything useful below (recipes from email, script notes, what\'s changing) and the Academy sidekick drafts a full brief in our house format. You approve before anything is saved.</p>'+
+    '<p class="hint">If this shoot is linked to a campaign, its <b>recipes are pulled in automatically</b> — you don\'t need to paste them. Add anything extra below (script notes, presenter times, what\'s changing). The draft is finished and shareable as a PDF; you approve before saving.</p>'+
     '<div class="fld"><label>Source material / notes (optional but makes it way better)</label>'+
     '<textarea id="briefSrc" style="min-height:110px" placeholder="e.g. 8 reworked sushi dishes, cucumber replaces zucchini, pop-up text needed, Nasreen only available at 1pm…"></textarea></div>'+
     '<div class="drawer-actions"><button class="btn primary" id="briefGen">✨ Draft it</button>'+
@@ -205,9 +214,21 @@ function draftBrief(shootGid){
     '<div id="briefOut" style="display:none"><div class="fld" style="margin-top:14px"><label>The draft — edit freely</label>'+
     '<textarea id="briefText" style="min-height:320px;font-family:ui-monospace,Menlo,monospace;font-size:12px"></textarea></div>'+
     '<div class="drawer-actions"><button class="btn primary" id="briefSave">Save to shoot task</button>'+
-    '<button class="btn teal" id="briefCopy">Copy</button>'+
+    '<button class="btn teal" id="briefPdf">⬇︎ Download PDF</button>'+
+    '<button class="btn ghost" id="briefCopy">Copy</button>'+
     '<button class="btn ghost" data-close>Close</button></div></div>');
   wireModalClose();
+  const campForShoot=(cfg.campaigns||[]).find(c=>(s.projectGids||[s.projectGid]).includes(c.gid))||null;
+  // Auto-pull the linked campaign's analysed recipes so the brief is built from
+  // the real recipe detail without anyone pasting anything.
+  const linkedRecipes=(()=>{
+    if(!campForShoot||typeof getCampaignSmart!=="function")return [];
+    try{ const sm=getCampaignSmart(campForShoot);
+      return Object.values(sm.sources||{}).flatMap(src=>((src.analysis||{}).recipes||[]).map(r=>({
+        name:r.name,station:r.prepared_by||r.station||null,ingredients:r.ingredients_or_products||[],
+        steps:r.important_steps||[],pop_ups:r.pop_ups||[],shots:r.suggested_shots||[]})));
+    }catch(_){ return []; }
+  })();
   const showOut=(text)=>{ document.getElementById("briefOut").style.display="block";
     document.getElementById("briefText").value=text;
     document.getElementById("briefText").scrollIntoView({behavior:"smooth",block:"nearest"}); };
@@ -222,9 +243,10 @@ function draftBrief(shootGid){
     try{
       const shots=shotsFor(s).map(sh=>({name:sh.name.replace(/^「shot」\s*/,"").replace(" — "+s.name,""), notes:sh.notes||""}));
       const text=await askAI(
-        "You write video-production briefs for Ocean Basket Academy to send to their external video supplier (Content Go). Fill in the template below as completely as the information allows — keep the exact section structure and headings, keep it practical and specific like a real production brief (call times, exact pop-up/subtitle wording, file naming). If a shot list is provided, use it verbatim as the deliverables list. Where information is genuinely unknown, leave the line with a — and a short prompt of what to decide. Training content goes to Articulate courses and WhatsApp; keep formats sensible for that. Return ONLY the completed brief text.\n\nTEMPLATE:\n"+
+        "You write video-production briefs for Ocean Basket Academy to send to their external video supplier (Content Go). Produce a FINISHED, ready-to-send brief in the template's structure and headings. HARD RULES: (1) Never output placeholder prompts, form hints, parentheticals like '(choose one)' / '(Y/N)', or blank '—' lines — if you don't have real information for a line or subsection, OMIT it entirely. (2) One deliverable video per recipe. For each recipe use its real detail: exact on-screen pop-ups/subtitles from the ingredient names & quantities (e.g. '4pc Rock Shrimp Tempura', '1 Lemon wedge', '200g chips — bottom-left of box'), the plating/method steps as instructional subtitles, and 'who's on camera' = the recipe's station (Grill Line / Sushi team). (3) Keep it practical and specific: call time, running order, MP4/landscape, delivery to Google Drive, file naming OceanBasket_<project>_<name>_final. Training content goes to Articulate courses and WhatsApp. Return ONLY the finished brief text.\n\nTEMPLATE (structure only):\n"+
         BRIEF_TEMPLATE.replace("{{SHOOT_NAME}}",s.name).replace("{{SHOOT_DATE}}",s.due||"TBC").replace("{{PROJECT}}",(s.projectName||"Academy").replace(/\s+/g,"")),
-        [{shoot:{name:s.name,date:s.due,notes:s.notes||""}, shot_list:shots, source_material:src||"(none pasted)",
+        [{shoot:{name:s.name,date:s.due,notes:s.notes||""}, recipes:linkedRecipes, shot_list:shots, source_material:src||"(none pasted)",
+          campaign:campForShoot?{name:campForShoot.name,launch:campForShoot.start}:null,
           curriculum_this_month:cur, nearby_occasions:near, campaigns:camps,
           house_rules:{delivery:"Google Drive unless urgent (then WeTransfer/WhatsApp)", file_naming:"OceanBasket_<project>_<name>_final", brand:"Academy brand elements throughout — titles, colours, logo; steps as subtitles on instructional videos; teleprompter for scripted pieces"}}]);
       showOut(typeof text==="string"?text:JSON.stringify(text));
@@ -249,6 +271,43 @@ function draftBrief(shootGid){
   document.getElementById("briefCopy").onclick=()=>{
     navigator.clipboard.writeText(document.getElementById("briefText").value).then(()=>toast("Copied"));
   };
+  document.getElementById("briefPdf").onclick=()=>printBriefPDF(s.name,document.getElementById("briefText").value);
+}
+/* Branded, print-ready PDF of a brief — opens a clean styled page and triggers
+   the browser's Save-as-PDF. No dependencies. Shareable with Content Go. */
+function printBriefPDF(shootName,text){
+  const safe=str=>String(str||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  // Turn the plain-text brief into tidy HTML: numbered "1. HEADING" lines become
+  // section headings, "• " lines become list items, blank lines break blocks.
+  const lines=String(text||"").split("\n");
+  let html="",inList=false;
+  const closeList=()=>{ if(inList){ html+="</ul>"; inList=false; } };
+  lines.forEach(raw=>{
+    const line=raw.replace(/\s+$/,"");
+    if(/^\s*\d+\.\s+[A-Z0-9 ,&/'-]{3,}$/.test(line)){ closeList(); html+="<h2>"+safe(line.trim())+"</h2>"; return; }
+    const bullet=line.match(/^\s*[•\-]\s+(.*)$/);
+    if(bullet){ if(!inList){ html+="<ul>"; inList=true; } html+="<li>"+safe(bullet[1])+"</li>"; return; }
+    closeList();
+    if(line.trim()==="") html+="<div class='sp'></div>";
+    else html+="<p>"+safe(line)+"</p>";
+  });
+  closeList();
+  const w=window.open("","_blank");
+  if(!w){ toast("Allow pop-ups to download the PDF"); return; }
+  w.document.write('<!doctype html><html><head><meta charset="utf-8"><title>OB Academy Brief — '+safe(shootName)+
+    '</title><style>@page{margin:18mm}body{font:13px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#12222e;max-width:760px;margin:0 auto;padding:8px}'+
+    '.hdr{display:flex;align-items:center;gap:10px;border-bottom:3px solid #0A3D62;padding-bottom:10px;margin-bottom:16px}'+
+    '.logo{width:34px;height:34px;border-radius:8px;background:#0A3D62;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:13px}'+
+    '.hdr b{font-size:16px;color:#0A3D62}.hdr span{color:#5b7386;font-size:11px;display:block}'+
+    'h2{font-size:12px;letter-spacing:.4px;text-transform:uppercase;color:#0A3D62;border-bottom:1px solid #e3e9ee;padding-bottom:4px;margin:20px 0 8px}'+
+    'p{margin:3px 0}ul{margin:4px 0 4px 18px;padding:0}li{margin:2px 0}.sp{height:6px}'+
+    '@media print{.noprint{display:none}}</style></head><body>'+
+    '<div class="hdr"><div class="logo">OB</div><div><b>Ocean Basket Academy — Video Brief</b><span>'+safe(shootName)+' · generated '+new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"})+'</span></div></div>'+
+    html+
+    '<div class="noprint" style="margin-top:24px;text-align:center"><button onclick="window.print()" style="padding:10px 18px;border:0;border-radius:8px;background:#0A3D62;color:#fff;font-weight:700;cursor:pointer">Save as PDF</button></div>'+
+    '</body></html>');
+  w.document.close();
+  setTimeout(()=>{ try{ w.print(); }catch(_){} },350);
 }
 
 /* ================================================================
