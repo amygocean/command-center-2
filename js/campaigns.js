@@ -219,7 +219,7 @@ function renderCampaignResourceView(c,smart){
   let rows;if(state.campaignResourceLoading[c.gid]&&!resources)rows='<div class="empty"><span class="spin"></span> loading resources…</div>';
   else if(!(resources||[]).length)rows='<div class="campaign-resource-empty"><b>No source material yet</b><span>Add recipes, briefs, reference images or existing learning. Originals are stored in Asana Key Resources.</span></div>';
   else rows=(resources||[]).map(a=>{const src=smart.sources&&smart.sources[a.gid],cat=src&&src.category||"Other",analysed=src&&src.analysis;return'<div class="campaign-resource-row"><span class="campaign-resource-icon">'+resourceIcon(a.name)+'</span><span class="campaign-resource-main"><b>'+esc(a.name||"Resource")+'</b><small>'+(analysed?'Analysed · '+esc((analysed.summary||"").slice(0,120)):(src&&src.error?'Needs review · '+esc(src.error):'Not analysed yet'))+'</small></span><select data-resource-cat="'+a.gid+'">'+CAMPAIGN_RESOURCE_TYPES.map(x=>'<option'+(x===cat?' selected':'')+'>'+x+'</option>').join("")+'</select><button class="btn ghost sm" data-resource-analyse="'+a.gid+'">'+(analysed?'Reanalyse':'Analyse')+'</button>'+(a.view_url||a.download_url?'<a class="btn ghost sm" target="_blank" href="'+esc(a.view_url||a.download_url)+'">Open ↗</a>':'')+'<button class="btn ghost sm danger" data-resource-delete="'+a.gid+'">Remove</button></div>';}).join("");
-  return '<div class="campaign-resource-layout"><section class="campaign-section"><div class="campaign-section-h"><h3>Campaign Resource Library</h3><span>Add sources now or at any point during the campaign</span></div><div class="campaign-resource-upload"><input id="campaignResourceFiles" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md,.json,image/*"><select id="campaignResourceType">'+options+'</select><button class="btn primary" id="campaignResourceUpload">Attach and analyse</button></div><p class="hint">PDF, Word, Excel, text and images can be read by the Smart Plan. Files are attached to the Asana project; analysis is stored in the managed Campaign HQ record.</p><div class="campaign-resource-list">'+rows+'</div></section><aside class="campaign-resource-help"><h3>How sources are used</h3><p>The app extracts requirements, recipes, audiences, gaps and shoot ideas. It never creates or moves tasks until you approve the Smart Plan.</p><button class="btn teal" id="resourceSmartUpdate">✨ Smart update whole plan</button>'+(smart.dirty?'<span class="campaign-smart-dirty">Update recommended: '+esc(smart.dirtyReason||"sources changed")+'</span>':'')+'</aside></div>';
+  return '<div class="campaign-resource-layout"><section class="campaign-section"><div class="campaign-section-h"><h3>Campaign Resource Library</h3>'+((resources||[]).length?'<button class="btn ghost sm" id="reanalyseAll" title="Re-run analysis on every source with the latest recipe extraction">↻ Re-analyse all</button>':'<span>Add sources now or at any point during the campaign</span>')+'</div><div class="campaign-resource-upload"><input id="campaignResourceFiles" type="file" multiple accept=".pdf,.docx,.xlsx,.csv,.txt,.md,.json,image/*"><select id="campaignResourceType">'+options+'</select><button class="btn primary" id="campaignResourceUpload">Attach and analyse</button></div><p class="hint">PDF, Word, Excel, text and images can be read by the Smart Plan. Files are attached to the Asana project; analysis is stored in the managed Campaign HQ record.</p><div class="campaign-resource-list">'+rows+'</div></section><aside class="campaign-resource-help"><h3>How sources are used</h3><p>The app extracts requirements, recipes, audiences, gaps and shoot ideas. It never creates or moves tasks until you approve the Smart Plan.</p><button class="btn teal" id="resourceSmartUpdate">✨ Smart update whole plan</button>'+(smart.dirty?'<span class="campaign-smart-dirty">Update recommended: '+esc(smart.dirtyReason||"sources changed")+'</span>':'')+'</aside></div>';
 }
 function resourceIcon(name){const n=String(name||"").toLowerCase();if(n.endsWith(".pdf"))return"PDF";if(/\.docx?$/.test(n))return"DOC";if(/\.xlsx$|\.csv$/.test(n))return"XLS";if(/\.(png|jpe?g|webp|gif)$/.test(n))return"IMG";return"FILE";}
 function campaignMarker(t){const m=String(t.notes||"").match(/#campaign-smart-id:([^\n]+)/);return m?m[1].trim():null;}
@@ -307,6 +307,29 @@ function wireCampaignResources(c,smart){
   document.querySelectorAll("[data-resource-cat]").forEach(el=>el.onchange=async()=>{smart.sources=smart.sources||{};smart.sources[el.dataset.resourceCat]=smart.sources[el.dataset.resourceCat]||{};smart.sources[el.dataset.resourceCat].category=el.value;smart.dirty=true;smart.dirtyReason="A resource category changed.";await saveCampaignSmartState(c,smart);renderCampaigns();});
   document.querySelectorAll("[data-resource-analyse]").forEach(b=>b.onclick=()=>analyseExistingResource(c,smart,b.dataset.resourceAnalyse,b));
   document.querySelectorAll("[data-resource-delete]").forEach(b=>b.onclick=()=>deleteCampaignResource(c,smart,b.dataset.resourceDelete,b));
+  const reAll=document.getElementById("reanalyseAll");if(reAll)reAll.onclick=()=>reanalyseAllResources(c,smart);
+}
+// Re-run analysis on every source in one go — handy after the recipe extraction
+// improved, so old recipes gain the station / quantities / pop-up detail.
+async function reanalyseAllResources(c,smart){
+  const list=state.campaignResources[c.gid]||[];
+  if(!list.length){toast("No sources to analyse");return;}
+  const btn=document.getElementById("reanalyseAll");if(btn)btn.disabled=true;
+  let done=0,failed=0;
+  for(const a of list){
+    if(btn)btn.innerHTML='<span class="spin"></span> '+(done+failed+1)+'/'+list.length;
+    const category=(smart.sources&&smart.sources[a.gid]&&smart.sources[a.gid].category)||(/recipe|sushi|crunch|wave|shore|prawn|box|platter/i.test(a.name||"")?"Recipe":"Other");
+    try{
+      let analysis;
+      if(DEMO){analysis={name:a.name,category,summary:"Demo re-analysis of "+a.name+".",facts:[],recipes:/recipe|sushi|crunch|wave|shore|prawn|box|platter/i.test(a.name||"")?[{name:(a.name||"Recipe").replace(/\.[^.]+$/,""),prepared_by:"Grill Line",ingredients_or_products:["1 Lemon wedge"],important_steps:["Plate neatly"],pop_ups:["1 Lemon wedge"],suggested_shots:["Ingredients","Method","Final plating"]}]:[],dates:[],audiences:["Restaurant teams"],risks:[],gaps:[],shoot_ideas:[],output_ideas:[],analysed_at:new Date().toISOString(),ai_available:true};}
+      else{const r=await fetch("/api/campaign-resource",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"analyse_attachment",attachment_id:a.gid,category,campaign:{name:c.name,launch:c.start,due:c.due}})}),j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||"Analysis failed");analysis=j.analysis;}
+      smart.sources=smart.sources||{};smart.sources[a.gid]={...(smart.sources[a.gid]||{}),gid:a.gid,name:a.name||analysis.name,category,analysis,error:null};done++;
+    }catch(e){failed++;smart.sources=smart.sources||{};smart.sources[a.gid]={...(smart.sources[a.gid]||{}),gid:a.gid,name:a.name,category,error:e.message};}
+  }
+  smart.dirty=true;smart.dirtyReason="All sources were re-analysed.";
+  await saveCampaignSmartState(c,smart);
+  toast("Re-analysed "+done+" source"+(done===1?"":"s")+(failed?" · "+failed+" failed":""));
+  renderCampaigns();
 }
 async function uploadCampaignResources(c,smart){
   const input=document.getElementById("campaignResourceFiles"),files=[...(input&&input.files||[])],category=document.getElementById("campaignResourceType").value,btn=document.getElementById("campaignResourceUpload");if(!files.length){toast("Choose at least one source file");return;}

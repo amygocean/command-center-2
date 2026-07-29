@@ -49,6 +49,7 @@ function renderStudio(){
       '<div class="sc-ideas" id="ideas-'+s.gid+'"></div></div>'+
       '<div class="sc-actions"><button class="btn ghost sm sc-open" data-gid="'+s.gid+'">Open</button>'+
       (isPast?'':'<button class="btn ghost sm sc-shots" data-gid="'+s.gid+'">Shot list'+(shotsFor(s).length?' ('+shotsFor(s).length+')':'')+'</button>'+
+             (recipesForShoot(s).recipes.length?'<button class="btn teal sm sc-recipeshots" data-gid="'+s.gid+'" title="Create one shot per recipe on the linked campaign">✨ Shots from recipes</button>':'')+
              '<button class="btn ghost sm sc-run" data-gid="'+s.gid+'">Run sheet</button>'+
              '<button class="btn teal sm sc-sugg" data-gid="'+s.gid+'">✨ Ideas</button>'+
              '<button class="btn ghost sm sc-drop" data-gid="'+s.gid+'" title="Draft a WhatsApp message announcing this content">Queue drop</button>'+
@@ -67,6 +68,7 @@ function renderStudio(){
     if(bt) openBriefModal(bt.gid); else draftBrief(b.dataset.gid);
   });
   box.querySelectorAll(".sc-shots").forEach(b=>b.onclick=()=>openShotList(b.dataset.gid));
+  box.querySelectorAll(".sc-recipeshots").forEach(b=>b.onclick=()=>buildShotsFromRecipes(b.dataset.gid,b));
   box.querySelectorAll(".sc-drop").forEach(b=>b.onclick=()=>queueShootDrop(b.dataset.gid));
   wireBrainstorm(box);
   box.querySelectorAll(".sc-run").forEach(b=>b.onclick=()=>openRunSheet(b.dataset.gid));
@@ -317,6 +319,42 @@ function shotsFor(s){
   return state.tasks.filter(t=>t.isShot && t.name.includes(s.name));
 }
 function shotLabel(t,s){ return t.name.replace(/^「shot」\s*/,"").replace(" — "+s.name,""); }
+
+// Pull the linked campaign's analysed recipes and turn each into a shot task on
+// this shoot — so the shot list builds itself instead of being hand-typed.
+function recipesForShoot(s){
+  const camp=(cfg.campaigns||[]).find(c=>(s.projectGids||[s.projectGid]).includes(c.gid));
+  if(!camp||typeof getCampaignSmart!=="function") return {camp:null,recipes:[]};
+  let recipes=[];
+  try{ const sm=getCampaignSmart(camp);
+    recipes=Object.values(sm.sources||{}).flatMap(src=>((src.analysis||{}).recipes||[]));
+  }catch(_){ recipes=[]; }
+  return {camp,recipes};
+}
+async function buildShotsFromRecipes(shootGid,btn){
+  const s=state.tasks.find(x=>x.gid===shootGid); if(!s) return;
+  const {camp,recipes}=recipesForShoot(s);
+  if(!camp){ toast("Link this shoot to a campaign first (the Smart Plan does this)"); return; }
+  if(!recipes.length){ toast("No analysed recipes on "+camp.name+" yet — add them in the campaign's Resources tab"); return; }
+  const existing=new Set(shotsFor(s).map(t=>shotLabel(t,s).toLowerCase().trim()));
+  const fresh=recipes.filter(r=>r.name && !existing.has(String(r.name).toLowerCase().trim()));
+  if(!fresh.length){ toast("Every recipe is already on the shot list ✓"); return; }
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin"></span>'; }
+  const tasks=fresh.map(r=>{
+    const noteBits=["type: video"];
+    if(r.prepared_by||r.station) noteBits.push("On camera: "+(r.prepared_by||r.station));
+    (r.pop_ups||[]).slice(0,8).forEach(p=>noteBits.push("pop-up: "+p));
+    if(!(r.pop_ups||[]).length) (r.ingredients_or_products||[]).slice(0,6).forEach(p=>noteBits.push("pop-up: "+p));
+    const t={name:"「shot」 "+r.name+" — "+s.name, project_id:s.projectGid, due_on:s.due, notes:noteBits.join("\n")};
+    if(s.projectGid===CC_PROJECT) t.section_id=SEC_PLAN;
+    return t;
+  });
+  try{
+    await call("create_tasks",{tasks});
+    toast(fresh.length+" shot"+(fresh.length===1?"":"s")+" added from "+camp.name+"'s recipes 🎬");
+    await loadAll();
+  }catch(e){ toast("Couldn't build the shot list: "+e.message); if(btn){ btn.disabled=false; btn.textContent="Shots from recipes"; } }
+}
 
 function openShotList(shootGid){
   const s=state.tasks.find(x=>x.gid===shootGid); if(!s) return;
