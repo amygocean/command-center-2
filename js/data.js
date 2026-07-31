@@ -72,6 +72,13 @@ const FEEDBACK_PROJECT = VISITS_PROJECT;      // Training Team Feedback — the 
 const REVAMP_PROJECT = "1214196027560612"; // store-revamp placeholders
 const CURRICULUM_PROJECT = "1216652752864537";
 const CURRICULUM_URL = "https://app.asana.com/0/1216652752864537";
+// Content Hub — the searchable front door to published content. The app reads
+// every project inside this portfolio PLUS the separate Academy Courses project
+// and shows them as one library.
+const CONTENT_HUB_PORTFOLIO = "1217016448186385";
+const CONTENT_HUB_PORTFOLIO_URL = "https://app.asana.com/0/portfolio/1217016448186385/1217016082817449";
+const ACADEMY_COURSES_PROJECT = "1214196027650698";
+const ACADEMY_COURSES_URL = "https://app.asana.com/0/1214196027650698";
 
 // ---- OB Fit marathon (fallback — live copy is read from the Asana
 //      Curriculum board when tasks are named "January: …" etc.) --------

@@ -119,44 +119,180 @@ function contentForLink(kind, gid){
   return contentItems().filter(i => i.links && String(i.links[kind]) === String(gid));
 }
 
-/* ---- render ---- */
+/* ================================================================
+   CONTENT HUB — the read-only front door to published content.
+   Reads every project in the Content Hub portfolio + the Academy
+   Courses project (via the server), and shows them alongside items
+   added from the app, as one searchable library. Edit/source links
+   are only returned by the server for Amy & Jess.
+   ================================================================ */
+const LIB_TYPES = ["Courses","Videos","Visuals","Recipes & Job aids","Launch","Templates","Other"];
+function ensureHubState(){
+  if(!state.contentHub) state.contentHub = { records:[], editor:false, loadedAt:0, loading:false, error:null };
+  if(!state.contentSel) state.contentSel = null;
+  if(!state.contentFilter) state.contentFilter = { type:"", role:"", programme:"", q:"", view:"all" };
+  return state.contentHub;
+}
+async function loadContentHub(force){
+  const hub = ensureHubState();
+  if(hub.loading) return;
+  if(!force && hub.loadedAt && Date.now()-hub.loadedAt < 5*60*1000) return;
+  hub.loading = true; hub.error = null; renderContentTab();
+  try{
+    const res = await call("get_content_library", { portfolio_gid: CONTENT_HUB_PORTFOLIO, courses_project_gid: ACADEMY_COURSES_PROJECT });
+    hub.records = Array.isArray(res.data) ? res.data : [];
+    hub.editor = !!res.editor;
+    hub.warning = res.warning || null;
+    hub.loadedAt = Date.now();
+  }catch(e){ hub.error = e.message || "Couldn't load the Content Hub"; }
+  finally{ hub.loading = false; renderContentTab(); }
+}
+/* ---- field derivation (custom fields → a usable record) ---- */
+function libIsUrl(v){ return /^https?:\/\//i.test(String(v||"")); }
+function libField(fields, re){ const k = Object.keys(fields||{}).find(n=>re.test(n)); return k ? fields[k] : ""; }
+function libPublished(rec){
+  const f = rec.fields||{};
+  const pref = Object.keys(f).find(n=>/publish|view|^link$|url|articulate|rise|watch|resource|hosted/i.test(n) && libIsUrl(f[n]));
+  if(pref) return f[pref];
+  const any = Object.keys(f).find(n=>libIsUrl(f[n]));
+  if(any) return f[any];
+  const m = String(rec.notes||"").match(/https?:\/\/\S+/); return m ? m[0] : "";
+}
+function libEdit(rec){ const f = rec.fields||{}; const k = Object.keys(f).find(n=>/edit|source|master/i.test(n) && libIsUrl(f[n])); return k ? f[k] : ""; }
+function libTypeFrom(v){
+  v = String(v||"").toLowerCase();
+  if(/course|rise|articulate/.test(v)) return "Courses";
+  if(/video|reel|clip|masterclass recording/.test(v)) return "Videos";
+  if(/recipe|sop|job aid|cheat/.test(v)) return "Recipes & Job aids";
+  if(/template/.test(v)) return "Templates";
+  if(/banner|tile|infographic|visual|image|canva|poster/.test(v)) return "Visuals";
+  if(/launch|lto/.test(v)) return "Launch";
+  return null;
+}
+function libType(rec){
+  if(rec.source==="courses") return "Courses";
+  // The explicit Content-type field wins; only fall back to section/name.
+  return libTypeFrom(libField(rec.fields,/content type|^type$|format|category/i))
+    || libTypeFrom((rec.section||"")+" "+((rec.project||{}).name||"")+" "+rec.name)
+    || "Other";
+}
+function libStatus(rec){ return libField(rec.fields,/status/i) || (rec.completed?"Complete":""); }
+function libArchived(rec){ return /remove|archive|retire/i.test(libStatus(rec)); }
+function libRole(rec){ return libField(rec.fields,/role|audience/i); }
+function libProgramme(rec){ return libField(rec.fields,/programme|program|pathway|content set|campaign/i); }
+function libNeeds(rec){ return !libPublished(rec) || /progress|to ?do|wip/i.test(libStatus(rec)); }
+function libRecords(){
+  const hub = ensureHubState();
+  const asana = (hub.records||[]).map(r=>({
+    id:r.gid, kind:"asana", name:r.name, notes:r.notes, asana:r.url, source:r.source,
+    collection:(r.project||{}).name||null, section:r.section, moduleCount:r.moduleCount||0, owner:r.owner, fields:r.fields||{},
+    updated:r.modifiedAt, type:libType(r), role:libRole(r), programme:libProgramme(r), status:libStatus(r),
+    published:libPublished(r), edit:libEdit(r), archived:libArchived(r), needs:libNeeds(r)
+  }));
+  const local = contentItems().map(i=>({
+    id:i.id, kind:"local", name:i.title, notes:i.notes, asana:null, source:"local",
+    collection:"Added in the app", section:null, moduleCount:0, owner:i.owner, fields:{},
+    updated:i.addedAt, type:contentTypeMeta(i.type).label==="Course"?"Courses":(contentTypeMeta(i.type).label==="Video"?"Videos":(contentTypeMeta(i.type).label==="Banner"||contentTypeMeta(i.type).label==="Infographic"?"Visuals":"Other")),
+    role:(i.roles||[]).join(", "), programme:"", status:contentStatusMeta(i.status).label, published:i.url, edit:"", archived:false, needs:!i.url
+  }));
+  return [...asana, ...local];
+}
+function libFacetValues(recs, key){ return [...new Set(recs.map(r=>r[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b)); }
+
+/* ---- render: the Content Hub ---- */
 function renderContentTab(){
   const box = document.getElementById("contentBody");
   if(!box) return;
-  const f = state.contentFilter || (state.contentFilter = { type: "", status: "", q: "" });
-  let items = contentItems();
-  if(f.type) items = items.filter(i => i.type === f.type);
-  if(f.status) items = items.filter(i => i.status === f.status);
-  if(f.q){ const q = f.q.toLowerCase(); items = items.filter(i => [i.title, i.notes, (i.tags || []).join(" ")].join(" ").toLowerCase().includes(q)); }
+  const hub = ensureHubState(), f = state.contentFilter;
+  if(!hub.loadedAt && !hub.loading && !hub.error) { loadContentHub(); return; } // first paint kicks off the load
+  const all = libRecords();
+  let recs = f.view==="archived" ? all.filter(r=>r.archived) : all.filter(r=>!r.archived);
+  if(f.view==="needs") recs = recs.filter(r=>r.needs);
+  const facetRoles = libFacetValues(recs,"role"), facetProgs = libFacetValues(recs,"programme");
+  if(f.type) recs = recs.filter(r=>r.type===f.type);
+  if(f.role) recs = recs.filter(r=>r.role===f.role);
+  if(f.programme) recs = recs.filter(r=>r.programme===f.programme);
+  if(f.q){ const q=f.q.toLowerCase(); recs = recs.filter(r=>[r.name,r.notes,r.role,r.programme,r.type,r.collection,r.owner].filter(Boolean).join(" ").toLowerCase().includes(q)); }
+  recs.sort((a,b)=>(b.updated||"").localeCompare(a.updated||""));
+  const sel = recs.find(r=>String(r.id)===String(state.contentSel)) || recs[0] || null;
+  state.contentSel = sel ? sel.id : null;
 
-  const typeChips = '<button class="cl-chip' + (!f.type ? ' on' : '') + '" data-cl-type="">All types</button>' +
-    CONTENT_TYPES.map(t => '<button class="cl-chip' + (f.type === t.key ? ' on' : '') + '" data-cl-type="' + t.key + '">' + t.icon + ' ' + t.label + '</button>').join("");
-  const statusChips = '<button class="cl-chip' + (!f.status ? ' on' : '') + '" data-cl-status="">Any status</button>' +
-    CONTENT_STATUSES.map(s => '<button class="cl-chip' + (f.status === s.key ? ' on' : '') + '" data-cl-status="' + s.key + '">' + s.label + '</button>').join("");
-
-  const gallery = items.length ? '<div class="cl-grid">' + items.map(contentCardHTML).join("") + '</div>'
-    : '<div class="empty">' + (contentItems().length ? "No assets match these filters." : "No content yet. Add a Canva / YouTube / Vimeo link or upload a file to start your library.") + '</div>';
+  const typeChips = '<button class="lib-chip'+(!f.type?' on':'')+'" data-lib-type="">All</button>'+
+    LIB_TYPES.filter(t=>all.some(r=>r.type===t)).map(t=>'<button class="lib-chip'+(f.type===t?' on':'')+'" data-lib-type="'+esc(t)+'">'+esc(t)+'</button>').join("");
+  const roleSel = '<select id="libRole"><option value="">All roles</option>'+facetRoles.map(r=>'<option'+(f.role===r?' selected':'')+'>'+esc(r)+'</option>').join("")+'</select>';
+  const progSel = '<select id="libProg"><option value="">All programmes</option>'+facetProgs.map(p=>'<option'+(f.programme===p?' selected':'')+'>'+esc(p)+'</option>').join("")+'</select>';
+  const rows = recs.length ? recs.map(r=>libRowHTML(r,sel)).join("")
+    : '<div class="empty">'+(hub.loading?'<span class="spin"></span> loading the library…':'Nothing matches. Try another search or filter.')+'</div>';
+  const meta = hub.loading ? 'Checking Asana…' : (hub.loadedAt ? recs.length+' of '+all.length+(hub.editor?' · edit links on':'') : '');
 
   box.innerHTML =
-    '<div class="cl-toolbar">' +
-      '<input id="clSearch" class="cl-search" placeholder="Search title, tag or note…" value="' + esc(f.q || "") + '">' +
-      '<button class="btn primary sm" id="clNew">+ Add content</button>' +
-    '</div>' +
-    '<div class="cl-filters">' + typeChips + '</div>' +
-    '<div class="cl-filters">' + statusChips + '</div>' +
-    gallery;
+    '<div class="lib-top">'+
+      '<input id="libSearch" class="lib-search" placeholder="Search courses, recipes, videos, campaigns, roles…" value="'+esc(f.q||"")+'">'+
+      '<div class="lib-top-actions"><button class="btn ghost sm" id="libRefresh" title="Refresh from Asana">↻</button><button class="btn primary sm" id="libAdd">+ Add resource</button></div>'+
+    '</div>'+
+    (hub.error?'<div class="mention-warning">'+esc(hub.error)+' · showing what\'s cached.</div>':'')+
+    (hub.warning?'<div class="mention-warning">'+esc(hub.warning)+'</div>':'')+
+    '<div class="lib-filters"><div class="lib-chips">'+typeChips+'</div><div class="lib-selects">'+roleSel+progSel+'</div></div>'+
+    '<div class="lib-views">'+
+      ['all','needs','archived'].map(v=>'<button class="lib-view'+(f.view===v?' on':'')+'" data-lib-view="'+v+'">'+(v==="all"?"All":v==="needs"?"Needs attention":"Archived")+'</button>').join("")+
+      '<span class="lib-meta">'+esc(meta)+'</span></div>'+
+    '<div class="lib-shell"><div class="lib-list">'+rows+'</div><div class="lib-detail" id="libDetail">'+libDetailHTML(sel)+'</div></div>';
 
-  document.querySelectorAll("[data-cl-type]").forEach(b => b.onclick = () => { f.type = b.dataset.clType; renderContentTab(); });
-  document.querySelectorAll("[data-cl-status]").forEach(b => b.onclick = () => { f.status = b.dataset.clStatus; renderContentTab(); });
-  const search = document.getElementById("clSearch");
-  if(search) search.oninput = e => { f.q = e.target.value; clearTimeout(search._t); search._t = setTimeout(renderContentTab, 180); };
-  const nb = document.getElementById("clNew");
-  if(nb) nb.onclick = () => openContentEditor(null);
-  box.querySelectorAll("[data-cl-open]").forEach(b => b.onclick = () => {
-    const item = state.contentLibrary[b.dataset.clOpen];
-    if(item && item.url) window.open(item.url, "_blank", "noopener");
-  });
-  box.querySelectorAll("[data-cl-edit]").forEach(b => b.onclick = e => { e.stopPropagation(); openContentEditor(b.dataset.clEdit); });
+  const search = document.getElementById("libSearch");
+  if(search) search.oninput = e => { f.q = e.target.value; clearTimeout(search._t); search._t = setTimeout(renderContentTab,180); };
+  document.querySelectorAll("[data-lib-type]").forEach(b=>b.onclick=()=>{ f.type=b.dataset.libType; renderContentTab(); });
+  document.querySelectorAll("[data-lib-view]").forEach(b=>b.onclick=()=>{ f.view=b.dataset.libView; renderContentTab(); });
+  const rs=document.getElementById("libRole"); if(rs) rs.onchange=()=>{ f.role=rs.value; renderContentTab(); };
+  const ps=document.getElementById("libProg"); if(ps) ps.onchange=()=>{ f.programme=ps.value; renderContentTab(); };
+  document.getElementById("libRefresh").onclick=()=>loadContentHub(true);
+  document.getElementById("libAdd").onclick=()=>openContentEditor(null);
+  box.querySelectorAll("[data-lib-row]").forEach(el=>el.onclick=()=>{ state.contentSel=el.dataset.libRow; renderContentTab(); });
+  wireLibDetail();
+}
+function libRowHTML(r,sel){
+  const on = sel && String(sel.id)===String(r.id);
+  const badge = r.source==="courses"?'Course':r.source==="local"?'Added':r.type;
+  const bits = [r.collection, r.role, r.programme].filter(Boolean).join(" · ");
+  return '<button class="lib-row'+(on?' on':'')+(r.needs?' needs':'')+'" data-lib-row="'+esc(String(r.id))+'">'+
+    '<span class="lib-row-type '+esc(r.type.replace(/[^a-z]/gi,'').toLowerCase())+'">'+esc(badge)+'</span>'+
+    '<span class="lib-row-main"><b>'+esc(r.name)+'</b>'+(bits?'<small>'+esc(bits)+'</small>':'')+'</span>'+
+    (r.moduleCount?'<span class="lib-row-mods">'+r.moduleCount+' mod</span>':(r.needs?'<span class="lib-row-flag" title="Needs a link or review">!</span>':''))+
+    '</button>';
+}
+function libDetailHTML(r){
+  if(!r) return '<div class="lib-detail-empty">Select a resource to see its details.</div>';
+  const fieldRows = Object.entries(r.fields||{}).filter(([n,v])=>v&&!libIsUrl(v)&&!/status|role|audience|programme|program|type|format/i.test(n))
+    .slice(0,8).map(([n,v])=>'<div class="lib-f"><span>'+esc(n)+'</span><b>'+esc(String(v))+'</b></div>').join("");
+  const modsOpen = state.contentModules && state.contentModules[r.id];
+  const modsHtml = r.moduleCount ? '<div class="lib-mods"><button class="btn ghost sm" data-lib-mods="'+esc(String(r.id))+'">'+(modsOpen?'Hide':'Show')+' '+r.moduleCount+' modules</button>'+
+    (modsOpen ? '<div class="lib-mod-list">'+(modsOpen==="loading"?'<span class="spin"></span>':(modsOpen||[]).map(m=>'<div class="lib-mod'+(m.completed?' done':'')+'">'+esc(m.name)+'</div>').join(""))+'</div>' : '')+'</div>' : '';
+  return '<div class="lib-detail-head"><h3>'+esc(r.name)+'</h3>'+
+      '<div class="lib-detail-sub">'+esc([r.type,r.programme,r.role].filter(Boolean).join(" · ")||r.collection||"")+'</div>'+
+      (r.status?'<span class="lib-status">'+esc(r.status)+'</span>':'')+'</div>'+
+    (r.notes?'<p class="lib-desc">'+esc(r.notes)+'</p>':'')+
+    (fieldRows?'<div class="lib-fields">'+fieldRows+'</div>':'')+
+    modsHtml+
+    (r.owner?'<div class="lib-owner">Owner: '+esc(r.owner)+(r.updated?' · updated '+new Date(r.updated).toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}):'')+'</div>':'')+
+    '<div class="lib-actions">'+
+      (r.published?'<a class="btn primary sm" href="'+esc(r.published)+'" target="_blank" rel="noopener">Open resource ↗</a>':'<span class="lib-nolink">No published link yet</span>')+
+      (r.published?'<button class="btn ghost sm" data-lib-copy="'+esc(r.published)+'">Copy link</button>':'')+
+      (r.asana?'<a class="btn ghost sm" href="'+esc(r.asana)+'" target="_blank" rel="noopener">Open in Asana ↗</a>':'')+
+      (r.kind==="local"?'<button class="btn ghost sm" data-lib-editlocal="'+esc(String(r.id))+'">Edit</button>':'')+
+      (r.edit?'<a class="btn teal sm" href="'+esc(r.edit)+'" target="_blank" rel="noopener" title="Only you and Jess see this">Edit source ↗</a>':'')+
+    '</div>';
+}
+function wireLibDetail(){
+  document.querySelectorAll("[data-lib-copy]").forEach(b=>b.onclick=()=>navigator.clipboard.writeText(b.dataset.libCopy).then(()=>toast("Link copied")));
+  document.querySelectorAll("[data-lib-editlocal]").forEach(b=>b.onclick=()=>openContentEditor(b.dataset.libEditlocal));
+  document.querySelectorAll("[data-lib-mods]").forEach(b=>b.onclick=()=>toggleContentModules(b.dataset.libMods));
+}
+async function toggleContentModules(id){
+  if(!state.contentModules) state.contentModules={};
+  if(state.contentModules[id]){ delete state.contentModules[id]; renderContentTab(); return; }
+  state.contentModules[id]="loading"; renderContentTab();
+  try{ const r=await call("get_subtasks",{parent:id}); state.contentModules[id]=(r.data||[]).map(s=>({name:s.name,completed:!!s.completed})); }
+  catch(_){ state.contentModules[id]=[]; }
+  renderContentTab();
 }
 function contentCardHTML(item){
   const t = contentTypeMeta(item.type), s = contentStatusMeta(item.status);

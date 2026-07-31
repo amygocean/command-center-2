@@ -50,7 +50,11 @@ const DEMO_CAMPAIGNS = [
   {gid:"demo-camp-peak",name:"Peak Readiness 2026",start_on:_d(55),due_on:_d(118),color:"dark-blue",notes:"Build December readiness through coaching, pace, consistency and zero-error service.",permalink_url:"https://app.asana.com/demo/peak"}
 ];
 const DEMO_PROJECTS = Object.fromEntries(DEMO_CAMPAIGNS.map(c=>[c.gid,{...c,sections:Object.values(DEMO_CAMPAIGN_SECTIONS)}]));
-const DEMO_SUBTASKS = {};
+const DEMO_SUBTASKS = {
+  "c-1":[{gid:"m1",name:"Module 1 — The new Winter dishes",completed:true},{gid:"m2",name:"Module 2 — Upsell & pairings",completed:true},{gid:"m3",name:"Module 3 — Allergens & substitutions",completed:false}],
+  "c-2":[{gid:"m4",name:"Module 1 — Rice & rolling",completed:true},{gid:"m5",name:"Module 2 — Plating standards",completed:false}],
+  "v-1":[{gid:"m6",name:"Upselling the Ocean's Platter",completed:false},{gid:"m7",name:"Suggesting a drink",completed:false}]
+};
 const DEMO_ATTACH = {};   // task gid -> [{gid,name,download_url}] for the WhatsApp preview demo
 
 const DEMO_TASKS = [
@@ -274,6 +278,14 @@ async function demoCall(tool,args){
       return {data:{gid,name:args.name,sections_created:{succeeded:made}}};
     }
     case "get_portfolio_items": return {data:DEMO_CAMPAIGNS.map(c=>({...c}))};
+    case "get_content_library": return {editor:true, projects:[{gid:"hub-vis",name:"Visuals",source:"hub"},{gid:"hub-vid",name:"Videos",source:"hub"},{gid:"courses",name:"Academy Courses",source:"courses"}], data:[
+      {gid:"c-1",name:"Winter Menu — FOH Course",notes:"Full FOH course for the Winter Menu launch: new dishes, upsell, allergens.",url:"https://app.asana.com/demo/c-1",completed:false,project:{gid:"courses",name:"Academy Courses"},source:"courses",section:"OB Fit Program",moduleCount:6,owner:"Amy Gray",modifiedAt:"2026-07-18",fields:{"Content type":"Course","Role":"FOH","Programme":"Winter Menu 2026","Status":"Complete","Published link":"https://rise.articulate.com/share/demo-foh","Country":"South Africa","Edit source":"https://articulate.com/demo/foh/edit"}},
+      {gid:"c-2",name:"Sushi Core — BOH Course",notes:"Sushi station fundamentals.",url:"https://app.asana.com/demo/c-2",completed:false,project:{gid:"courses",name:"Academy Courses"},source:"courses",section:"Short Courses",moduleCount:4,owner:"Jess",modifiedAt:"2026-07-10",fields:{"Content type":"Course","Role":"Sushi","Programme":"Sushi Core","Status":"Complete","Published link":"https://rise.articulate.com/share/demo-sushi"}},
+      {gid:"v-1",name:"Volume Drivers 1 — 10 videos",notes:"Upselling bundle. Individual titles still needed.",url:"https://app.asana.com/demo/v-1",completed:false,project:{gid:"hub-vid",name:"Videos"},source:"hub",section:"Launch material",moduleCount:10,owner:"Caitlin Fourie",modifiedAt:"2026-07-05",fields:{"Content type":"Video","Role":"FOH","Programme":"Volume Drivers","Status":"Complete","Published link":"https://youtube.com/demo-volume"}},
+      {gid:"r-1",name:"Golden Crunch Box — Recipe card",notes:"Job aid for the Golden Crunch Box.",url:"https://app.asana.com/demo/r-1",completed:false,project:{gid:"hub-vis",name:"Visuals"},source:"hub",section:"Recipes/SOPs/Job aids",moduleCount:0,owner:"Amy Gray",modifiedAt:"2026-07-20",fields:{"Content type":"Job aid","Role":"BOH","Programme":"LTOs Sept-Oct","Status":"Complete","Canva view":"https://canva.com/demo/gcb","Canva edit":"https://canva.com/demo/gcb/edit"}},
+      {gid:"t-1",name:"Manager observation card",notes:"Sign-off tool for managers.",url:"https://app.asana.com/demo/t-1",completed:false,project:{gid:"hub-vis",name:"Visuals"},source:"hub",section:"Templates",moduleCount:0,owner:"Jess",modifiedAt:"2026-06-30",fields:{"Content type":"Template","Role":"Mgmt","Status":"In progress"}},
+      {gid:"x-1",name:"Old Spring Menu tile (retired)",notes:"Superseded artwork.",url:"https://app.asana.com/demo/x-1",completed:true,project:{gid:"hub-vis",name:"Visuals"},source:"hub",section:"Launch material",moduleCount:0,owner:"Amy Gray",modifiedAt:"2026-03-01",fields:{"Content type":"Banner","Status":"Remove","Canva view":"https://canva.com/demo/old"}}
+    ]};
     case "add_to_portfolio": {
       const proj=DEMO_PROJECTS[args.item];
       if(proj&&!DEMO_CAMPAIGNS.some(c=>c.gid===proj.gid)) DEMO_CAMPAIGNS.push({...proj});

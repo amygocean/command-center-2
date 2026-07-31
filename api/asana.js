@@ -32,6 +32,11 @@ async function serviceFetch(req, res, path, opts={}){
 }
 const sharedFetch = (req,res,path) => serviceFetch(req,res,path);
 
+// Only these Asana users (Amy, Jess) may receive edit/source links from the
+// Content Hub. Enforced on the server so Caitlin's browser never gets them.
+const CONTENT_EDITORS = (process.env.CONTENT_EDITOR_GIDS||"1213414176761459,1213630128899336").split(",").map(s=>s.trim()).filter(Boolean);
+const EDIT_LINK_FIELD_RE = /edit|source|master|canva\s*edit|working file/i;
+
 async function readBody(req){
   if(req.body && typeof req.body === "object") return req.body;
   const chunks=[]; for await (const c of req) chunks.push(c);
@@ -546,6 +551,51 @@ export default async function handler(req, res){
           warning:warnings.length?warnings.join(" "):null,diagnostics
         };
         mentionScanCache.set(cacheKey,{at:Date.now(),payload:out});
+        break;
+      }
+
+      // ---- Content Hub: read every project in the hub portfolio + the separate
+      // Academy Courses project, and flatten their tasks into one library.
+      // Edit/source-link custom fields are stripped unless the signed-in user
+      // is an approved editor (Amy / Jess). ----
+      case "get_content_library": {
+        const session=readSession(req);
+        const isEditor=!!(session&&session.user&&CONTENT_EDITORS.includes(String(session.user.gid)));
+        const projects=[];
+        if(args.portfolio_gid){
+          try{
+            const p=await sharedFetch(req,res,`/portfolios/${args.portfolio_gid}/items?${qs({opt_fields:"name,resource_type",limit:100})}`);
+            (p.data||[]).forEach(x=>{ if(x&&x.gid&&(x.resource_type==="project"||!x.resource_type)) projects.push({gid:String(x.gid),name:x.name||"Untitled",source:"hub"}); });
+          }catch(_){ /* portfolio unreadable; courses project may still load */ }
+        }
+        if(args.courses_project_gid) projects.push({gid:String(args.courses_project_gid),name:"Academy Courses",source:"courses"});
+        const fields="name,notes,permalink_url,completed,modified_at,created_at,num_subtasks,assignee.name,memberships.section.name,resource_subtype,custom_fields.name,custom_fields.display_value,custom_fields.type";
+        const records=[]; const warnings=[];
+        for(const proj of projects){
+          let offset=null,pages=0;
+          do{
+            let page=null;
+            try{ page=await sharedFetch(req,res,`/tasks?${qs({project:proj.gid,limit:100,offset,opt_fields:fields})}`); }
+            catch(e){ warnings.push("Couldn't read "+proj.name); break; }
+            (page.data||[]).forEach(t=>{
+              const cf={};
+              (t.custom_fields||[]).forEach(f=>{
+                if(!f||!f.name||f.display_value==null||f.display_value==="") return;
+                if(!isEditor&&EDIT_LINK_FIELD_RE.test(f.name)) return; // strip edit links for non-editors
+                cf[f.name]=f.display_value;
+              });
+              records.push({
+                gid:String(t.gid),name:t.name||"Untitled",notes:(t.notes||"").slice(0,800),url:t.permalink_url||null,
+                completed:!!t.completed,project:{gid:proj.gid,name:proj.name},source:proj.source,
+                section:(t.memberships||[]).map(m=>m&&m.section&&m.section.name).find(Boolean)||null,
+                moduleCount:Number(t.num_subtasks)||0,owner:t.assignee&&t.assignee.name||null,
+                fields:cf,modifiedAt:t.modified_at||null,createdAt:t.created_at||null
+              });
+            });
+            offset=page.next_page&&page.next_page.offset||null; pages++;
+          }while(offset&&pages<8);
+        }
+        out={data:records,editor:isEditor,projects:projects.map(p=>({gid:p.gid,name:p.name,source:p.source})),warning:warnings.length?warnings.join(" · "):null,generated_at:new Date().toISOString()};
         break;
       }
 
