@@ -221,14 +221,14 @@ function monthHTML(c){
     html+='<span class="dnum">'+dt.getDate()+'</span>';
     campaignsOn(dt).forEach(c2=>{ const showName=sameDay(dt,pd(c2.start))||i%7===0;
       html+='<div class="cbar" style="background:'+c2.color+'" title="'+esc(c2.name)+'">'+(showName?esc(c2.name):"&nbsp;")+'</div>'; });
-    occ.slice(0,2).forEach(o=>html+='<span class="occ" title="'+esc(o.name)+(o.reg?' · '+o.reg:'')+'">'+esc(o.name)+'</span>');
+    // Show every item for the day — the cell grows to fit rather than hiding
+    // the rest behind a "+N more" jump.
+    occ.forEach(o=>html+='<span class="occ" title="'+esc(o.name)+(o.reg?' · '+o.reg:'')+'">'+esc(o.name)+'</span>');
     const busy = cfg.showComms && commsBusy(dt);
     if(busy) html+='<span class="busyflag" title="More than 3 messages to one community today">🔥 busy comms day</span>';
-    storesOn(dt).slice(0,2).forEach(t=>html+=storePillHTML(t));
-    tks.slice(0,4).forEach(t=>html+=pillHTML(t));
-    comms.slice(0,2).forEach(t=>html+=commsPillHTML(t));
-    const extra=(tks.length-4)+(comms.length>2?comms.length-2:0);
-    if(extra>0) html+='<span class="more" data-more="'+iso(dt)+'">+'+extra+' more</span>';
+    storesOn(dt).forEach(t=>html+=storePillHTML(t));
+    tks.forEach(t=>html+=pillHTML(t));
+    comms.forEach(t=>html+=commsPillHTML(t));
     html+='</div>';
   }
   return html+'</div>';
