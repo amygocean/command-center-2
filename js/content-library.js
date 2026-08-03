@@ -195,7 +195,8 @@ function libRecords(){
     updated:i.addedAt, type:contentTypeMeta(i.type).label==="Course"?"Courses":(contentTypeMeta(i.type).label==="Video"?"Videos":(contentTypeMeta(i.type).label==="Banner"||contentTypeMeta(i.type).label==="Infographic"?"Visuals":"Other")),
     role:(i.roles||[]).join(", "), programme:"", status:contentStatusMeta(i.status).label, published:i.url, edit:"", archived:false, needs:!i.url
   }));
-  return [...asana, ...local];
+  const seed = typeof academyVideoRecords==="function" ? academyVideoRecords() : [];
+  return [...asana, ...seed, ...local];
 }
 function libFacetValues(recs, key){ return [...new Set(recs.map(r=>r[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b)); }
 
