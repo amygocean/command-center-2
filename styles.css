@@ -1199,6 +1199,27 @@ body.lane-resize-active .girls-board .glane{transition:none}
 .lib-owner{font-size:11px;color:var(--faint);margin:10px 0}
 .lib-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:14px}
 .lib-nolink{font-size:11.5px;color:#b5561f;align-self:center}
+/* mode toggle + wheel */
+.lib-mode-toggle{display:inline-flex;gap:2px;margin-left:8px;border:1px solid var(--hair);border-radius:9px;padding:2px;background:var(--fill)}
+.lib-mode{border:none;background:none;color:var(--muted);border-radius:7px;padding:4px 9px;font:750 11px var(--font);cursor:pointer}
+.lib-mode.on{background:var(--card);color:var(--navy);box-shadow:0 1px 4px rgba(10,16,24,.08)}
+.lib-wheel{display:flex;flex-direction:column;align-items:center}
+.wheel-bar{display:flex;align-items:center;gap:10px;width:100%;margin-bottom:6px}
+.wheel-crumb{font-size:11.5px;font-weight:750;color:var(--muted)}
+.wheel-crumb.link{border:none;background:none;color:var(--teal);cursor:pointer;padding:0;font:750 11.5px var(--font)}
+.wheel-bar .btn{margin-left:auto}
+.wheel-svg{width:100%;max-width:360px;height:auto;display:block;margin:0 auto}
+.wheel-seg path{transition:transform .12s;transform-origin:center}
+.wheel-seg:hover path{filter:brightness(1.07)}
+.wheel-seg-t{fill:#fff;font:800 11px var(--font);text-anchor:middle;pointer-events:none}
+.wheel-seg-n{fill:rgba(255,255,255,.85);font:700 9.5px var(--font);text-anchor:middle;pointer-events:none}
+.wheel-center-t{fill:var(--ink);font:800 15px var(--font);text-anchor:middle}
+.wheel-center-s{fill:var(--faint);font:700 10px var(--font);text-anchor:middle}
+.wheel-dot circle{transition:r .1s}
+.wheel-dot:hover circle{r:8}
+.wheel-centre-label{height:80px;display:flex;align-items:center;justify-content:center;text-align:center;font:750 12.5px var(--font);color:var(--ink);line-height:1.3;overflow:hidden}
+.wheel-hint{color:var(--faint);font-size:11px;margin:6px 0 0;text-align:center}
+@media(max-width:820px){.wheel-svg{max-width:300px}}
 @media(max-width:820px){.lib-shell{grid-template-columns:1fr}.lib-detail{position:static}.lib-list{max-height:none}}
 .cl-toolbar{display:flex;gap:10px;align-items:center;margin-bottom:12px}
 .cl-search{flex:1;border:1px solid var(--hair);background:var(--card);color:var(--ink);border-radius:11px;padding:9px 12px;font:500 13px var(--font)}

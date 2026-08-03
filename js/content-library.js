@@ -130,7 +130,12 @@ const LIB_TYPES = ["Courses","Videos","Visuals","Recipes & Job aids","Launch","T
 function ensureHubState(){
   if(!state.contentHub) state.contentHub = { records:[], editor:false, loadedAt:0, loading:false, error:null };
   if(!state.contentSel) state.contentSel = null;
-  if(!state.contentFilter) state.contentFilter = { type:"", role:"", programme:"", q:"", view:"all" };
+  if(!state.contentFilter) state.contentFilter = { type:"", role:"", programme:"", q:"", view:"all", mode:"wheel" };
+  const cf = state.contentFilter;
+  if(!cf.mode) cf.mode = "wheel";
+  if(!cf.view) cf.view = "all";
+  if(cf.type===undefined) cf.type = "";
+  if(state.wheelCat === undefined) state.wheelCat = null;
   return state.contentHub;
 }
 async function loadContentHub(force){
@@ -236,8 +241,11 @@ function renderContentTab(){
     '<div class="lib-filters"><div class="lib-chips">'+typeChips+'</div><div class="lib-selects">'+roleSel+progSel+'</div></div>'+
     '<div class="lib-views">'+
       ['all','needs','archived'].map(v=>'<button class="lib-view'+(f.view===v?' on':'')+'" data-lib-view="'+v+'">'+(v==="all"?"All":v==="needs"?"Needs attention":"Archived")+'</button>').join("")+
+      '<span class="lib-mode-toggle"><button class="lib-mode'+(f.mode==="wheel"?' on':'')+'" data-lib-mode="wheel">◎ Wheel</button><button class="lib-mode'+(f.mode==="list"?' on':'')+'" data-lib-mode="list">☰ List</button></span>'+
       '<span class="lib-meta">'+esc(meta)+'</span></div>'+
-    '<div class="lib-shell"><div class="lib-list">'+rows+'</div><div class="lib-detail" id="libDetail">'+libDetailHTML(sel)+'</div></div>';
+    '<div class="lib-shell">'+
+      (f.mode==="wheel" ? '<div class="lib-wheel">'+contentWheelHTML(recs)+'</div>' : '<div class="lib-list">'+rows+'</div>')+
+      '<div class="lib-detail" id="libDetail">'+libDetailHTML(sel)+'</div></div>';
 
   const search = document.getElementById("libSearch");
   if(search) search.oninput = e => { f.q = e.target.value; clearTimeout(search._t); search._t = setTimeout(renderContentTab,180); };
@@ -248,7 +256,9 @@ function renderContentTab(){
   document.getElementById("libRefresh").onclick=()=>loadContentHub(true);
   document.getElementById("libAdd").onclick=()=>openContentEditor(null);
   box.querySelectorAll("[data-lib-row]").forEach(el=>el.onclick=()=>{ state.contentSel=el.dataset.libRow; renderContentTab(); });
+  document.querySelectorAll("[data-lib-mode]").forEach(b=>b.onclick=()=>{ f.mode=b.dataset.libMode; renderContentTab(); });
   wireLibDetail();
+  wireContentWheel(recs);
 }
 function libRowHTML(r,sel){
   const on = sel && String(sel.id)===String(r.id);
@@ -286,6 +296,72 @@ function wireLibDetail(){
   document.querySelectorAll("[data-lib-copy]").forEach(b=>b.onclick=()=>navigator.clipboard.writeText(b.dataset.libCopy).then(()=>toast("Link copied")));
   document.querySelectorAll("[data-lib-editlocal]").forEach(b=>b.onclick=()=>openContentEditor(b.dataset.libEditlocal));
   document.querySelectorAll("[data-lib-mods]").forEach(b=>b.onclick=()=>toggleContentModules(b.dataset.libMods));
+}
+/* ---- the Content Wheel ---- */
+const WHEEL_COLORS = {"Sushi":"#0A3D62","Dishes & drinks":"#E4784D","Prep skills":"#2FA36B","Business & Ops":"#7A5FB0","Systems & Pilot":"#3A7D9A","Launch & Seasonal":"#C64B8C","Courses":"#66499a","Videos":"#b5561f","Visuals":"#287f7b","Recipes & Job aids":"#B5651D","Templates":"#8E44AD","Launch":"#C64B8C","Other":"#7A8B99"};
+function wheelCatOf(r){ return (r.source==="videos" ? r.programme : r.type) || "Other"; }
+function wheelColor(cat){ return WHEEL_COLORS[cat] || "#0A3D62"; }
+function polar(cx,cy,r,ang){ return [cx+r*Math.cos(ang), cy+r*Math.sin(ang)]; }
+function donutSeg(cx,cy,ri,ro,a0,a1,color,cat,count){
+  const [x0o,y0o]=polar(cx,cy,ro,a0),[x1o,y1o]=polar(cx,cy,ro,a1);
+  const [x0i,y0i]=polar(cx,cy,ri,a1),[x1i,y1i]=polar(cx,cy,ri,a0);
+  const large=(a1-a0)>Math.PI?1:0;
+  const d=`M ${x0o} ${y0o} A ${ro} ${ro} 0 ${large} 1 ${x1o} ${y1o} L ${x0i} ${y0i} A ${ri} ${ri} 0 ${large} 0 ${x1i} ${y1i} Z`;
+  const mid=(a0+a1)/2, [lx,ly]=polar(cx,cy,(ri+ro)/2,mid);
+  const short=cat.length>13?cat.split(" ")[0]:cat;
+  return '<g class="wheel-seg" data-wheel-cat="'+esc(cat)+'" style="cursor:pointer"><title>'+esc(cat)+' · '+count+'</title>'+
+    '<path d="'+d+'" fill="'+color+'" stroke="var(--card)" stroke-width="2"/>'+
+    '<text x="'+lx+'" y="'+(ly-2)+'" class="wheel-seg-t">'+esc(short)+'</text>'+
+    '<text x="'+lx+'" y="'+(ly+12)+'" class="wheel-seg-n">'+count+'</text></g>';
+}
+function contentWheelHTML(recs){
+  const cx=190, cy=190, ro=175, ri=92;
+  if(!recs.length) return '<div class="empty" style="padding:60px 0">Nothing to show on the wheel — clear a filter.</div>';
+  if(!state.wheelCat){
+    const groups={}; recs.forEach(r=>{ const c=wheelCatOf(r); (groups[c]=groups[c]||[]).push(r); });
+    const cats=Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length);
+    const total=recs.length; let a0=-Math.PI/2, segs="";
+    cats.forEach(cat=>{ const frac=Math.max(groups[cat].length/total,0.04); const a1=a0+frac*Math.PI*2; segs+=donutSeg(cx,cy,ri,ro,a0,a1,wheelColor(cat),cat,groups[cat].length); a0=a1; });
+    return '<div class="wheel-bar"><span class="wheel-crumb">All categories</span><button class="btn ghost sm" id="wheelSurprise">🎡 Surprise me</button></div>'+
+      '<svg viewBox="0 0 380 380" class="wheel-svg">'+segs+
+      '<circle cx="'+cx+'" cy="'+cy+'" r="'+(ri-4)+'" fill="var(--card)" stroke="var(--hair)"/>'+
+      '<text x="'+cx+'" y="'+(cy-4)+'" class="wheel-center-t">Content</text>'+
+      '<text x="'+cx+'" y="'+(cy+16)+'" class="wheel-center-s">'+total+' items</text></svg>'+
+      '<p class="wheel-hint">Click a slice to spin out its videos.</p>';
+  }
+  // level 2 — the category's items as a ring of dots
+  const items=recs.filter(r=>wheelCatOf(r)===state.wheelCat);
+  const col=wheelColor(state.wheelCat), n=items.length;
+  const rNode = n>40?150:135;
+  const dots=items.map((r,i)=>{
+    const ang=-Math.PI/2 + (i/n)*Math.PI*2; const [x,y]=polar(cx,cy,rNode,ang);
+    const on=String(state.contentSel)===String(r.id);
+    return '<g class="wheel-dot'+(on?' on':'')+'" data-wheel-item="'+esc(String(r.id))+'" style="cursor:pointer"><title>'+esc(r.name)+'</title>'+
+      '<circle cx="'+x+'" cy="'+y+'" r="'+(on?8:5.5)+'" fill="'+col+'"'+(on?' stroke="var(--ink)" stroke-width="2"':'')+'/></g>';
+  }).join("");
+  const selRec=items.find(r=>String(r.id)===String(state.contentSel));
+  const centreName = selRec ? selRec.name : state.wheelCat;
+  return '<div class="wheel-bar"><button class="wheel-crumb link" id="wheelBack">← All categories</button><span class="wheel-crumb">'+esc(state.wheelCat)+' · '+n+'</span><button class="btn ghost sm" id="wheelSurprise">🎡 Surprise me</button></div>'+
+    '<svg viewBox="0 0 380 380" class="wheel-svg">'+
+      '<circle cx="'+cx+'" cy="'+cy+'" r="'+rNode+'" fill="none" stroke="var(--hair)" stroke-dasharray="2 4"/>'+
+      dots+
+      '<circle cx="'+cx+'" cy="'+cy+'" r="86" fill="var(--card)" stroke="'+col+'" stroke-width="2"/>'+
+      '<foreignObject x="'+(cx-78)+'" y="'+(cy-40)+'" width="156" height="80"><div xmlns="http://www.w3.org/1999/xhtml" class="wheel-centre-label">'+esc(centreName)+'</div></foreignObject>'+
+    '</svg>'+
+    '<p class="wheel-hint">Hover a dot for the title · click to open it.</p>';
+}
+function wireContentWheel(recs){
+  document.querySelectorAll("[data-wheel-cat]").forEach(g=>g.onclick=()=>{ state.wheelCat=g.dataset.wheelCat; state.contentSel=null; renderContentTab(); });
+  document.querySelectorAll("[data-wheel-item]").forEach(g=>g.onclick=()=>{ state.contentSel=g.dataset.wheelItem; renderContentTab(); });
+  const back=document.getElementById("wheelBack"); if(back) back.onclick=()=>{ state.wheelCat=null; renderContentTab(); };
+  const surprise=document.getElementById("wheelSurprise");
+  if(surprise) surprise.onclick=()=>{
+    const scope = state.wheelCat ? recs.filter(r=>wheelCatOf(r)===state.wheelCat) : recs;
+    if(!scope.length) return;
+    const pick = scope[Math.floor(Math.random()*scope.length)];
+    state.wheelCat = wheelCatOf(pick); state.contentSel = pick.id;
+    renderContentTab(); toast("🎡 "+pick.name);
+  };
 }
 async function toggleContentModules(id){
   if(!state.contentModules) state.contentModules={};
