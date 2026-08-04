@@ -171,7 +171,7 @@ async function suggestForShoot(gid){
     active_or_upcoming_campaigns:camps};
   try{
     const res=await askAI(
-      "You plan training content for Ocean Basket Academy (learning & development for restaurant crew — NOT consumer marketing). Suggest exactly 3 concrete, specific video ideas to capture on this shoot day. Build on the team's source material and brainstorm where provided — extend their thinking, never repeat an idea already planned. Each idea must tie clearly to the source material, the OB Fit curriculum focus, an active campaign, or the shoot's notes — no generic ideas. One short punchy line each. Return only 3 bullet lines starting with '•'.",
+      "You plan training content for Ocean Basket Academy (learning & development for restaurant crew — NOT consumer marketing). Work backwards from the behaviour we want on shift (action mapping): each idea should make it obvious what the crew must be able to DO differently afterwards. Suggest exactly 3 concrete, specific video ideas to capture on this shoot day. Build on the team's source material and brainstorm where provided — extend their thinking, never repeat an idea already planned. Each idea must tie clearly to the source material, the OB Fit curriculum focus, an active campaign, or the shoot's notes — no generic ideas. One short punchy line each. Return only 3 bullet lines starting with '•'.",
       [payload]);
     const text=typeof res==="string"?res:(res.text||JSON.stringify(res));
     const ideas=text.split("\n").map(l=>l.replace(/^\s*[•\-\*\d.\)]+\s*/,"").trim()).filter(l=>l.length>2);
@@ -652,6 +652,8 @@ const SB_PROJECT="1214196027560535";   // Skills Boosters board (also used by th
 function isBooster(t){ return /^\s*(?:\[[^\]]*\]\s*)?skills?\s*booster\b/i.test(t.name||""); }
 
 function renderCurriculum(){
+  renderPlaybook();
+  renderRecipe();
   const grid=document.getElementById("curriculumGrid");
   const link=document.getElementById("curLink");
   if(link) link.href=CURRICULUM_URL;
@@ -669,6 +671,59 @@ function renderCurriculum(){
     const ed=document.getElementById("curEdit"); if(ed) ed.onclick=()=>openSettings();
   }
   renderBoosters(); wireBoosterAdd(); wireMaxDigest();
+}
+
+/* ---- Layer A: the strategy cheat sheet (collapsed by default) ---- */
+function renderPlaybook(){
+  const el=document.getElementById("curPlaybook"); if(!el || typeof OB_STRATEGY==="undefined") return;
+  const s=OB_STRATEGY;
+  const block=(title,inner)=>'<div class="pb-block"><h5>'+esc(title)+'</h5><div class="pb-row">'+inner+'</div></div>';
+  const chips=arr=>arr.map(x=>'<span class="pb-chip"><b>'+esc(x.k)+'</b> '+esc(x.v)+'</span>').join("");
+  el.innerHTML=
+    '<details class="pb-det">'+
+      '<summary class="pb-sum"><span class="pb-eyebrow">The cheat sheet</span> How we do things'+
+        '<span class="pb-note"> — mission, method &amp; the two streams</span></summary>'+
+      '<div class="pb-body">'+
+        '<p class="pb-mission">'+esc(s.mission)+'</p>'+
+        block("The learning model", chips(s.model))+
+        block("When we teach — the TEACH method", chips(s.teach))+
+        block("How we design — build backwards", s.actionMapping.map((x,i)=>
+          '<span class="pb-step"><i>'+(i+1)+'</i>'+esc(x)+'</span>').join(""))+
+        block("Our strategy — diagnose · train · connect", chips(s.strategy))+
+        '<div class="pb-streams">'+s.streams.map(st=>
+          '<div class="pb-stream"><div class="pb-stream-h">'+esc(st.k)+'</div>'+
+          '<div class="pb-stream-tag">'+esc(st.tag)+'</div>'+
+          '<div class="pb-stream-v">'+esc(st.v)+'</div>'+
+          '<div class="pb-stream-out">→ '+esc(st.out)+'</div></div>').join("")+'</div>'+
+        '<div class="pb-principles">'+esc(s.principles)+'</div>'+
+      '</div>'+
+    '</details>';
+}
+
+/* ---- Layer B: OB Fit — the recipe per role ---- */
+let _recipeRole = (typeof OBFIT_RECIPES!=="undefined" && OBFIT_RECIPES[0]) ? OBFIT_RECIPES[0].role : "";
+function renderRecipe(){
+  const el=document.getElementById("curRecipe"); if(!el || typeof OBFIT_RECIPES==="undefined") return;
+  const groups=[...new Set(OBFIT_RECIPES.map(r=>r.group))];
+  const picker=groups.map(g=>
+    '<div class="rc-group"><div class="rc-group-h">'+esc(g)+'</div><div class="rc-chips">'+
+      OBFIT_RECIPES.filter(r=>r.group===g).map(r=>
+        '<button class="rc-chip'+(r.role===_recipeRole?' on':'')+'" data-role="'+esc(r.role)+'">'+esc(r.role)+'</button>'
+      ).join("")+
+    '</div></div>').join("");
+  const r=OBFIT_RECIPES.find(x=>x.role===_recipeRole)||OBFIT_RECIPES[0];
+  const col=(title,cls,note,arr)=>
+    '<div class="rc-col '+cls+'"><div class="rc-col-h">'+esc(title)+'<span>'+esc(note)+'</span></div><ol>'+
+      arr.map(x=>'<li>'+esc(x)+'</li>').join("")+'</ol></div>';
+  el.innerHTML=
+    '<div class="rc-pick">'+picker+'</div>'+
+    '<div class="rc-card"><div class="rc-card-h">'+esc(r.role)+'</div><div class="rc-cols">'+
+      col("Knowledge","k","builds confidence",r.knowledge)+
+      col("Skills","s","builds performance",r.skills)+
+      col("Soft skills","sf","shape the experience",r.soft)+
+      col("Business impact","im","why it matters",r.impact)+
+    '</div></div>';
+  el.querySelectorAll(".rc-chip").forEach(b=>b.onclick=()=>{ _recipeRole=b.dataset.role; renderRecipe(); });
 }
 
 function renderBoosters(){
@@ -696,7 +751,8 @@ async function shipBooster(gid,box){
   try{
     const board=await ensureMsgBoard(); if(!board){ toast("Connect a Communities board first"); return; }
     const secMap=await ensureWASections();
-    const msg={name:"New Skills Booster: "+nm+" 💪", project_id:board, notes:"#purpose:practice\nFrom the curriculum — Skills Booster for "+esc(c.name)};
+    const why=(typeof COMMUNITY_PURPOSE!=="undefined" && COMMUNITY_PURPOSE[cKey]) ? "\nWhy it matters: "+COMMUNITY_PURPOSE[cKey] : "";
+    const msg={name:"New Skills Booster: "+nm+" 💪", project_id:board, notes:"#purpose:practice\nFrom the curriculum — Skills Booster for "+esc(c.name)+why};
     if(secMap&&secMap[c.name]) msg.section_id=secMap[c.name]; else msg.name="["+c.name+"] "+msg.name;
     await call("create_tasks",{tasks:[msg]});
     toast("Shipped to "+c.name+" — drafted in Communities"); confetti(); loadAll();

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A3D62">
 <title>Academy Command Center</title>
-<link rel="stylesheet" href="/styles.css?v=20260724d">
+<link rel="stylesheet" href="/styles.css?v=20260804a">
 </head>
 <body>
 <!--
@@ -216,9 +216,18 @@
 
   <!-- ============ CURRICULUM ============ -->
   <section id="tab-curriculum" class="tabpane">
-    <p class="hint">Where courses get planned and edited. The <b>OB Fit</b> marathon and <b>Skills Boosters</b> live here — Boosters can ship straight to a WhatsApp community. Curriculum edits sync with the Asana Curriculum board.</p>
+    <p class="hint">Our whole training world in one place — how we work, what every role needs, and when it ships. <b>Stream 1</b> is the per-role OB Fit recipe; <b>Stream 2</b> is the business-driven year (the marathon + campaigns). Skills Boosters can ship straight to a WhatsApp community. Marathon edits sync with the Asana Curriculum board.</p>
 
-    <div class="stud-h"><span>OB Fit — the year</span>
+    <!-- Layer A: the strategy cheat sheet, collapsed by default -->
+    <div id="curPlaybook" class="playbook"></div>
+
+    <!-- Layer B: OB Fit — the recipe per role -->
+    <div class="stud-h"><span>Stream 1 · OB Fit — the recipe per role</span></div>
+    <p class="hint">Every role is a recipe: <b>Knowledge</b> builds confidence · <b>Skills</b> build performance · <b>Soft skills</b> shape the experience · <b>Impact</b> shows why it matters. Pick a role to see its recipe — this is what we build backwards from.</p>
+    <div id="curRecipe" class="recipe"></div>
+
+    <!-- Layer C: OB Fit — the year (the marathon) -->
+    <div class="stud-h"><span>Stream 2 · OB Fit — the year</span>
       <a class="btn ghost sm" id="curLink" target="_blank">Open in Asana ↗</a>
     </div>
     <div id="curriculumGrid" class="cur-grid"></div>
@@ -342,7 +351,7 @@
 
   <!-- ============ REPORTS ============ -->
   <section id="tab-reports" class="tabpane">
-    <p class="hint">Our reporting dashboards, live from Asana data. These open in a new tab. Deeper in-app metrics can come later.</p>
+    <p class="hint">This is the <b>Connect</b> step — linking completion to business outcomes to prove impact. Remember: completions are the input, behaviour change is the goal (we don't train for completions). Live from Asana data; these open in a new tab.</p>
     <div class="reports-grid">
       <a class="report-card" href="https://oceanbasketacademy.com/leaderboard/" target="_blank" rel="noopener">
         <span class="report-icon">🏆</span>
@@ -370,22 +379,22 @@
 <div id="fridayWrap"></div>
 <div id="runWrap"></div>
 
-<script src="/js/data.js?v=20260724d"></script>
-<script src="/js/core.js?v=20260724d"></script>
-<script src="/js/demo.js?v=20260724d"></script>
-<script src="/js/calendar.js?v=20260724d"></script>
-<script src="/js/campaigns.js?v=20260724d"></script>
-<script src="/js/people.js?v=20260724d"></script>
-<script src="/js/content.js?v=20260724d"></script>
-<script src="/js/events.js?v=20260724d"></script>
-<script src="/js/videos.js?v=20260724d"></script>
-<script src="/js/content-library.js?v=20260724d"></script>
-<script src="/js/communities.js?v=20260724d"></script>
-<script src="/js/drawer.js?v=20260724d"></script>
-<script src="/js/stores.js?v=20260724d"></script>
-<script src="/js/platform.js?v=20260724d"></script>
-<script src="/js/pr.js?v=20260724d"></script>
-<script src="/js/friday.js?v=20260724d"></script>
-<script src="/js/news.js?v=20260724d"></script>
+<script src="/js/data.js?v=20260804a"></script>
+<script src="/js/core.js?v=20260804a"></script>
+<script src="/js/demo.js?v=20260804a"></script>
+<script src="/js/calendar.js?v=20260804a"></script>
+<script src="/js/campaigns.js?v=20260804a"></script>
+<script src="/js/people.js?v=20260804a"></script>
+<script src="/js/content.js?v=20260804a"></script>
+<script src="/js/events.js?v=20260804a"></script>
+<script src="/js/videos.js?v=20260804a"></script>
+<script src="/js/content-library.js?v=20260804a"></script>
+<script src="/js/communities.js?v=20260804a"></script>
+<script src="/js/drawer.js?v=20260804a"></script>
+<script src="/js/stores.js?v=20260804a"></script>
+<script src="/js/platform.js?v=20260804a"></script>
+<script src="/js/pr.js?v=20260804a"></script>
+<script src="/js/friday.js?v=20260804a"></script>
+<script src="/js/news.js?v=20260804a"></script>
 </body>
 </html>

@@ -97,6 +97,123 @@ const CURRICULUM_DEFAULT = [
   {t:"THE DECEMBER MARATHON", d:"Peak playbook · live peak execution · final observation checklist", q:"Final Assessment — Peak Live"}
 ];
 
+// ---- OB Academy strategy — "The Cheat Sheet: how we do things" --------
+// The yearly strategy, distilled from the 2026 Plans & Processes doc. This is
+// the "why & what" layer that sits above the marathon (the "when"). Rendered as
+// the collapsible playbook banner at the top of the Curriculum tab.
+const OB_STRATEGY = {
+  mission:
+    "We create good people by giving them the knowledge, skills and coaching they need to succeed in their role. We do not train for completions — we train for behaviour change that delivers business results.",
+  model: [
+    {k:"Educate",   v:"Give knowledge"},
+    {k:"Experience",v:"Practise it"},
+    {k:"Expertise", v:"Coach to mastery"}
+  ],
+  teach: [
+    {k:"T", v:"Tell them what & why"},
+    {k:"E", v:"Explain / demo"},
+    {k:"A", v:"Ask them to try it"},
+    {k:"C", v:"Coach & correct"},
+    {k:"H", v:"Hold accountable"}
+  ],
+  actionMapping: [
+    "What behaviour do we want?",
+    "What must the learner do?",
+    "What must they know?",
+    "What activity builds confidence?",
+    "What workplace activity reinforces it?"
+  ],
+  strategy: [
+    {k:"Diagnose", v:"Build a role recipe & assess each crew member. See exactly where the gaps are."},
+    {k:"Train",    v:"Deliver training on WhatsApp — the platform the crew already live on."},
+    {k:"Connect",  v:"Link completion to business outcomes to prove impact & add value."}
+  ],
+  streams: [
+    {k:"Stream 1 — OB Fit Programme", tag:"Building the person for the role",
+     v:"Every role has a recipe of Knowledge, Skills, Soft Skills and Business Impact. Assess, find the gaps, build a personalised programme.",
+     out:"More capable people · Better performance · Career growth"},
+    {k:"Stream 2 — Short Courses", tag:"Running the business through the year",
+     v:"Business-driven training everyone needs, regardless of role, because the business is always evolving.",
+     out:"Menu Launches · Loyalty App · Focus Packs · Campaigns"}
+  ],
+  principles: "Delivered on WhatsApp · Simple · Practical · Relevant · Measurable"
+};
+
+// ---- OB Fit — the recipe per role ------------------------------------
+// Verbatim from the 2026 strategy. Every role is a recipe of four columns:
+// Knowledge builds confidence · Skills build performance · Soft skills shape
+// the experience · Impact shows why it matters. Static reference (no Asana
+// dependency) so it renders live and in demo.
+const OBFIT_RECIPES = [
+  {group:"Leadership, Management & Coordination", role:"Franchise Operator",
+   knowledge:["Brand strategy, standards & operating model","Financial performance & profitability drivers","People structure, labour & succession","Customer experience & reputation","Local area marketing & sales growth","Compliance, risk & governance"],
+   skills:["Set direction & hold teams accountable","Commercial decision making","Build a strong leadership team","Analyse performance & take action","Drive brand consistency across the business","Create ownership & guest focus"],
+   soft:["Strategic thinking","Accountability","Commercial confidence","Influence & alignment","Resilience","Relationship building"],
+   impact:["Increased profitability & sustainable growth","Stronger brand consistency","Improved guest loyalty & reputation","Better leadership pipeline","Stronger execution of campaigns","Reduced business risk through compliance"]},
+  {group:"Leadership, Management & Coordination", role:"Restaurant / GM",
+   knowledge:["Financials: sales, labour, GP, food cost, spend","Product, menu & campaign knowledge","Operational & brand standards","People management","Customer experience & complaint process","Business strategy, targets & priorities"],
+   skills:["Coach and develop people","Lead with accountability","Communicate shift direction clearly","Solve problems under pressure","Make decisions using facts & standards","Manage performance and follow up"],
+   soft:["Leadership presence","Calm under pressure","Fairness & consistency","Problem-solving mindset","Clear communication","Coaching mindset"],
+   impact:["Improved profitability & cost control","Better team performance & accountability","Stronger operational consistency","Improved guest experience scores","Better execution of campaigns","Lower staff turnover"]},
+  {group:"Leadership, Management & Coordination", role:"FOH Manager",
+   knowledge:["Service sequence & guest experience standards","Waiter, host & runner role expectations","Sales, app sign-up & upselling priorities","Table management & floor flow","Complaint handling & guest recovery","POS, payment & cash-up"],
+   skills:["Lead the floor during service","Coach waiters in the moment","Drive upselling & app sign-ups","Manage table turns & guest flow","Handle complaints calmly & confidently","Communicate priorities before & during shift"],
+   soft:["Energy & presence","Guest empathy","Composure","Influence","Situational awareness","Encouraging others"],
+   impact:["Improved guest satisfaction","Higher sales & average spend","More app sign-ups","Better service consistency","Faster table turns","Improved waiter performance & confidence"]},
+  {group:"Leadership, Management & Coordination", role:"Kitchen Manager",
+   knowledge:["Kitchen systems, recipes & prep standards","Food safety & compliance","Stock, ordering & waste control","Labour planning & section productivity","Equipment maintenance & safety","Menu launches, campaigns & priorities"],
+   skills:["Lead kitchen execution during service","Coach BOH team members","Plan prep & manage readiness","Control quality, portions & waste","Solve bottlenecks quickly","Communicate clearly with FOH & management"],
+   soft:["Calm authority","Attention to detail","Discipline","Team leadership","Decision making under pressure","Constructive feedback"],
+   impact:["Reduced food cost & wastage","Improved kitchen productivity","Better food quality & consistency","Faster order turnaround times","Improved audit & compliance results","Stronger BOH team performance"]},
+  {group:"Leadership, Management & Coordination", role:"Coordinator / Pass",
+   knowledge:["Full menu, recipes & plate builds","Ticket reading, sequencing & priority rules","Grill, fryer and line section flow","Plating standards & pass quality checks","Kitchen communication & handover language","Service timing & guest wait expectations"],
+   skills:["Call tickets clearly and accurately","Sequence and pace orders during rush","Direct grill, fryer and line sections","Plate, check and organise food at the pass","Spot bottlenecks and redirect quickly","Keep calm, clear communication under pressure"],
+   soft:["Confidence","Clear voice & communication","Calm under pressure","Focus & urgency","Team direction","Situational awareness"],
+   impact:["Faster ticket times","Smoother grill and fryer flow at peak","Fewer missing items and remake errors","More consistent plate presentation","Better FOH and BOH communication","Improved guest satisfaction through faster food"]},
+  {group:"Crew & Station", role:"Waiter",
+   knowledge:["Product & menu knowledge","Promotion, LTO & app offer knowledge","Allergy & food safety","Ocean Basket service standards","POS, payments & order process","Upselling: pairings & add-ons"],
+   skills:["Guest engagement & rapport building","Confident upselling & recommendations","Clear menu communication","Accurate order taking & follow-through","Time management across tables","Problem resolution & service recovery"],
+   soft:["Warmth","Confidence","Listening","Patience","Sales courage","Positive energy"],
+   impact:["Higher average spend per transaction","Improved guest satisfaction & returns","Fewer order errors & reduced waste","Stronger app sign-up conversion","Faster, smoother table service","Better service recovery"]},
+  {group:"Crew & Station", role:"Hostess",
+   knowledge:["Guest greeting & seating standards","Table layout & floor plan","Booking, waitlist & guest flow","Menu, promotion & app basics","Service sequence & handover expectations","Guest complaint escalation process"],
+   skills:["Create a warm first impression","Manage guest flow & wait times","Communicate clearly with FOH team","Read the floor & seat smartly","Handle guest pressure calmly","Set the tone for the guest experience"],
+   soft:["Warmth","Patience","Confidence","Clear communication","Awareness","Grace under pressure"],
+   impact:["Strong first impression for guests","Reduced waiting frustration","Improved table turns","Better guest handover to waiters","Improved guest satisfaction","Increased likelihood of return visits"]},
+  {group:"Crew & Station", role:"Sushi Chef",
+   knowledge:["Sushi menu & recipe knowledge","Fish, rice & ingredient quality standards","Food safety, cold chain & allergens","Portioning, costing & waste control","Presentation & plating standards","Sushi timing & order flow"],
+   skills:["Prepare sushi consistently to standard","Knife handling & precision cutting","Manage sushi section speed & quality","Maintain clean, safe mise en place","Control portions & reduce waste","Communicate order delays / pressure"],
+   soft:["Precision","Pride in craft","Focus","Patience","Team communication","Consistency"],
+   impact:["Faster sushi ticket times","Consistent sushi quality & presentation","Reduced wastage & improved food cost","Improved guest satisfaction","Increased sushi sales & repeat purchases","Lower food safety risk"]},
+  {group:"Crew & Station", role:"Griller / Line Cook",
+   knowledge:["Menu, recipe and build knowledge","Grill, fryer and line cooking methods","Portioning, preparation and plating standards","Food safety, allergens and temperature control","Equipment use, cleaning and maintenance basics","Order timing, section flow and pass communication"],
+   skills:["Cook items consistently to OB standard","Control timing, temperature and doneness","Plate cleanly and consistently","Maintain organised mise en place during peaks","Coordinate with the pass and kitchen team","Control portions and reduce waste"],
+   soft:["Sense of urgency","Focus","Consistency","Teamwork","Clean-as-you-go discipline","Resilience under pressure"],
+   impact:["Consistent food quality and presentation","Faster ticket times and smoother service","Fewer remakes, errors and complaints","Reduced waste and improved food cost","Better kitchen flow during peak shifts","Improved guest satisfaction"]},
+  {group:"Crew & Station", role:"Bar / Deli",
+   knowledge:["Beverage, dessert & deli product knowledge","Recipe & portion standards","Stock rotation & expiry dates","Food safety & hygiene standards","Promotion & add-on knowledge","Equipment use & cleaning procedures"],
+   skills:["Prepare drinks & deli items consistently","Work quickly & neatly during peaks","Suggestive selling of drinks & add-ons","Manage stock & communicate shortages","Maintain a clean, guest-ready station","Coordinate timing with FOH & kitchen"],
+   soft:["Neatness","Speed with accuracy","Product pride","Communication","Reliability","Guest focus"],
+   impact:["Increased beverage & dessert sales","Higher average spend per transaction","Improved product consistency","Reduced wastage & stock losses","Faster service during peak times","Better guest experience via complete orders"]},
+  {group:"Crew & Station", role:"Sculler",
+   knowledge:["Cleaning chemical & safe usage","Dishwashing & sanitising standards","Hygiene & food safety basics","Waste separation & disposal standards","Equipment handling & care","Restaurant flow & peak-time priorities"],
+   skills:["Keep wash-up area clean & organised","Work at speed during busy shifts","Prioritise critical items for service","Follow hygiene routines accurately","Communicate shortages / breakages fast","Support the team without being asked"],
+   soft:["Reliability","Pace","Pride in cleanliness","Team support","Discipline","Responsibility"],
+   impact:["Improved hygiene & food safety compliance","Better audit outcomes","Reduced breakages & replacement costs","Faster kitchen & FOH turnaround","Cleaner back-of-house environment","Less service disruption at peak"]}
+];
+
+// One-line "why this matters" per WhatsApp community, drawn from the role
+// recipes' Business Impact column — surfaced when shipping to a community so a
+// message carries its purpose (TEACH: tell them what & WHY).
+const COMMUNITY_PURPOSE = {
+  mgmt: "Better team performance, accountability & campaign execution",
+  foh1: "Higher average spend, more app sign-ups & smoother service",
+  foh2: "Higher average spend, more app sign-ups & smoother service",
+  boh:  "Faster tickets, better food consistency & less waste",
+  bar:  "More beverage & dessert sales, faster peak service",
+  sushi:"Faster sushi tickets, consistent quality & repeat sushi sales"
+};
+
 // ---- WhatsApp communities --------------------------------------------
 // Messages live in the Academy WhatsApp board; each community is a section
 // there (sections are created automatically the first time they're needed).
@@ -180,7 +297,9 @@ const BRIEF_TEMPLATE = `OCEAN BASKET ACADEMY — VIDEO BRIEF
 Shoot: {{SHOOT_NAME}}
 Shoot date: {{SHOOT_DATE}}
 
-1. THE BIG PICTURE
+1. THE BIG PICTURE (build backwards — start with the behaviour)
+   • What behaviour do we want on shift? —
+   • What must the crew be able to DO after this? —
    • What are we making? —
    • The goal —
    • Key message —
