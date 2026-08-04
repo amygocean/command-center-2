@@ -79,6 +79,9 @@ const CONTENT_HUB_PORTFOLIO = "1217016448186385";
 const CONTENT_HUB_PORTFOLIO_URL = "https://app.asana.com/0/portfolio/1217016448186385/1217016082817449";
 const ACADEMY_COURSES_PROJECT = "1214196027650698";
 const ACADEMY_COURSES_URL = "https://app.asana.com/0/1214196027650698";
+// The Videos board inside the Content Hub portfolio (where the individual
+// training videos live). The app can push the bundled video list here.
+const ACADEMY_VIDEOS_PROJECT = "1217016297015963";
 
 // ---- OB Fit marathon (fallback — live copy is read from the Asana
 //      Curriculum board when tasks are named "January: …" etc.) --------

@@ -200,8 +200,20 @@ function libRecords(){
     updated:i.addedAt, type:contentTypeMeta(i.type).label==="Course"?"Courses":(contentTypeMeta(i.type).label==="Video"?"Videos":(contentTypeMeta(i.type).label==="Banner"||contentTypeMeta(i.type).label==="Infographic"?"Visuals":"Other")),
     role:(i.roles||[]).join(", "), programme:"", status:contentStatusMeta(i.status).label, published:i.url, edit:"", archived:false, needs:!i.url
   }));
-  const seed = typeof academyVideoRecords==="function" ? academyVideoRecords() : [];
+  // Bundled videos, minus any already present in Asana (matched by name or
+  // YouTube link) so pushing them to the board doesn't create duplicates here.
+  const asanaNames = new Set(asana.map(r=>String(r.name||"").toLowerCase().trim()));
+  const asanaUrls = new Set(asana.map(r=>String(r.published||"")).filter(Boolean));
+  const seed = (typeof academyVideoRecords==="function" ? academyVideoRecords() : [])
+    .filter(v=>!asanaNames.has(String(v.name).toLowerCase().trim()) && !asanaUrls.has(v.youtube));
   return [...asana, ...seed, ...local];
+}
+// How many bundled videos are NOT yet on the Asana Videos board.
+function unsyncedVideos(){
+  const hub = ensureHubState();
+  const onBoard = new Set((hub.records||[]).map(r=>String(r.name||"").toLowerCase().trim()));
+  return (typeof ACADEMY_VIDEO_SEED!=="undefined"?ACADEMY_VIDEO_SEED:[])
+    .filter(([title])=>!onBoard.has(String(title).toLowerCase().trim()));
 }
 function libFacetValues(recs, key){ return [...new Set(recs.map(r=>r[key]).filter(Boolean))].sort((a,b)=>a.localeCompare(b)); }
 
@@ -234,7 +246,9 @@ function renderContentTab(){
   box.innerHTML =
     '<div class="lib-top">'+
       '<input id="libSearch" class="lib-search" placeholder="Search courses, recipes, videos, campaigns, roles…" value="'+esc(f.q||"")+'">'+
-      '<div class="lib-top-actions"><button class="btn ghost sm" id="libRefresh" title="Refresh from Asana">↻</button><button class="btn primary sm" id="libAdd">+ Add resource</button></div>'+
+      '<div class="lib-top-actions">'+
+        (unsyncedVideos().length?'<button class="btn ghost sm" id="libPushVideos" title="Create one Asana task per bundled video on the Videos board">⇪ Push '+unsyncedVideos().length+' videos to Asana</button>':'')+
+        '<button class="btn ghost sm" id="libRefresh" title="Refresh from Asana">↻</button><button class="btn primary sm" id="libAdd">+ Add resource</button></div>'+
     '</div>'+
     (hub.error?'<div class="mention-warning">'+esc(hub.error)+' · showing what\'s cached.</div>':'')+
     (hub.warning?'<div class="mention-warning">'+esc(hub.warning)+'</div>':'')+
@@ -255,6 +269,7 @@ function renderContentTab(){
   const ps=document.getElementById("libProg"); if(ps) ps.onchange=()=>{ f.programme=ps.value; renderContentTab(); };
   document.getElementById("libRefresh").onclick=()=>loadContentHub(true);
   document.getElementById("libAdd").onclick=()=>openContentEditor(null);
+  const pv=document.getElementById("libPushVideos"); if(pv) pv.onclick=()=>pushVideosToAsana();
   box.querySelectorAll("[data-lib-row]").forEach(el=>el.onclick=()=>{ state.contentSel=el.dataset.libRow; renderContentTab(); });
   document.querySelectorAll("[data-lib-mode]").forEach(b=>b.onclick=()=>{ f.mode=b.dataset.libMode; renderContentTab(); });
   wireLibDetail();
@@ -297,6 +312,38 @@ function wireLibDetail(){
   document.querySelectorAll("[data-lib-editlocal]").forEach(b=>b.onclick=()=>openContentEditor(b.dataset.libEditlocal));
   document.querySelectorAll("[data-lib-mods]").forEach(b=>b.onclick=()=>toggleContentModules(b.dataset.libMods));
 }
+/* ---- push the bundled videos to the Asana Videos board ----
+   One task per video (name + YouTube link in the notes). Idempotent: it reads
+   the board first and only creates videos that aren't already there. */
+async function pushVideosToAsana(){
+  const btn = document.getElementById("libPushVideos");
+  if(typeof ACADEMY_VIDEOS_PROJECT==="undefined"){ toast("No Videos board configured"); return; }
+  // Read what's already on the board so we never duplicate.
+  let existing = new Set();
+  try{
+    const r = await call("get_tasks", { project: ACADEMY_VIDEOS_PROJECT, limit: 100, opt_fields: "name" });
+    (r.data||[]).forEach(t=>existing.add(String(t.name||"").toLowerCase().trim()));
+    let off = r.next_page && r.next_page.offset, guard=0;
+    while(off && guard++<10){ const p = await call("get_tasks", { project: ACADEMY_VIDEOS_PROJECT, limit:100, offset:off, opt_fields:"name" }); (p.data||[]).forEach(t=>existing.add(String(t.name||"").toLowerCase().trim())); off = p.next_page && p.next_page.offset; }
+  }catch(e){ toast("Couldn't read the board: "+e.message); return; }
+
+  const missing = ACADEMY_VIDEO_SEED.filter(([title])=>!existing.has(String(title).toLowerCase().trim()));
+  if(!missing.length){ toast("All videos are already on the board ✓"); return; }
+  if(!confirm("Create "+missing.length+" video task"+(missing.length===1?"":"s")+" on the Asana Videos board? (Already-present videos are skipped.)")) return;
+
+  if(btn) btn.disabled = true;
+  let done = 0, failed = 0;
+  // Create in small chunks so a single serverless call never times out.
+  for(let i=0;i<missing.length;i+=20){
+    const chunk = missing.slice(i,i+20).map(([title,url])=>({ name:title, project_id:ACADEMY_VIDEOS_PROJECT, notes:url }));
+    if(btn) btn.innerHTML = '<span class="spin"></span> '+Math.min(i+20,missing.length)+'/'+missing.length;
+    try{ const r = await call("create_shared_tasks", { tasks: chunk }); done += (r.data||[]).length; failed += (r.failed||[]).length; }
+    catch(e){ failed += chunk.length; }
+  }
+  toast("Added "+done+" video"+(done===1?"":"s")+" to Asana"+(failed?" · "+failed+" failed":"")+" 🎬");
+  if(typeof loadContentHub==="function") await loadContentHub(true); else renderContentTab();
+}
+
 /* ---- the Content Wheel ---- */
 const WHEEL_COLORS = {"Sushi":"#0A3D62","Dishes & drinks":"#E4784D","Prep skills":"#2FA36B","Business & Ops":"#7A5FB0","Systems & Pilot":"#3A7D9A","Launch & Seasonal":"#C64B8C","Courses":"#66499a","Videos":"#b5561f","Visuals":"#287f7b","Recipes & Job aids":"#B5651D","Templates":"#8E44AD","Launch":"#C64B8C","Other":"#7A8B99"};
 function wheelCatOf(r){ return (r.source==="videos" ? r.programme : r.type) || "Other"; }
