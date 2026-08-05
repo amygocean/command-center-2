@@ -1171,14 +1171,17 @@ body.lane-resize-active .girls-board .glane{transition:none}
 .pm-dow{display:grid;grid-template-columns:repeat(7,1fr);padding:4px 0;border-bottom:1px solid var(--hair)}
 .pm-dow span{text-align:center;font-size:9px;font-weight:800;letter-spacing:.4px;color:var(--faint);text-transform:uppercase}
 .pm-grid{display:grid;grid-template-columns:repeat(7,1fr)}
-.pd-cell{min-height:74px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);padding:4px 4px 5px;display:flex;flex-direction:column;gap:2px;overflow:hidden}
+.pd-cell{min-height:74px;border-right:1px solid var(--hair);border-bottom:1px solid var(--hair);padding:4px 4px 5px;display:flex;flex-direction:column;gap:2px}
 .pd-cell:nth-child(7n){border-right:none}
 .pd-num{font-size:11px;font-weight:700;color:var(--muted);line-height:1}
 .pd-cell.dim{background:var(--fill);opacity:.5}
 .pd-cell.dim .pd-num{color:var(--faint)}
 .pd-cell.today{background:rgba(0,168,168,.07);box-shadow:inset 0 0 0 1.5px var(--teal)}
 .pd-camp{font-size:9px;font-weight:700;color:#fff;border-radius:3px;padding:0 4px;line-height:1.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pp{display:inline-flex;align-items:center;gap:1px;font-size:10px;font-weight:650;line-height:1.3;border-radius:4px;padding:1px 4px;background:var(--fill);color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;max-width:100%}
+.pp{display:flex;align-items:flex-start;gap:3px;align-self:stretch;font-size:10px;font-weight:650;line-height:1.3;border-radius:4px;padding:2px 4px;background:var(--fill);color:var(--ink);cursor:pointer;white-space:normal;word-break:break-word;max-width:100%}
+.pp-dot{flex-shrink:0;width:6px;height:6px;border-radius:50%;margin-top:4px}
+.pp.done{opacity:.5}.pp.done:not(.ghosted){text-decoration:line-through}
+.pp .pp-x{margin-left:auto;flex-shrink:0}
 
 /* STACK: big, full-width wall-planner months (the default) */
 .plan-board.stack .plan-month{width:100%}

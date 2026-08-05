@@ -108,11 +108,21 @@ function planMonthHTML(c){
   const today=todayD();
   const P=state.plan, hidden=new Set(planData().hidden);
   const trim=(s,n)=>{ s=String(s||""); return s.length>n?s.slice(0,n-1)+"…":s; };
+  const cleanName=t=>String(t.name||"").replace(/^\[.+?\]\s*/,"");
+  // Every item shows its full name; the cell grows to fit rather than hiding
+  // anything behind a "+N" count.
   const keyPill=(t,icon,cls)=>{
     const isHid=hidden.has(t.gid);
     if(isHid&&!P.showHidden) return "";
-    return '<span class="pp '+cls+(isHid?" ghosted":"")+'" data-gid="'+t.gid+'" title="'+esc(t.name)+'">'+
-      icon+esc(trim(t.name.replace(/^\[.+?\]\s*/,""),18))+
+    return '<span class="pp '+cls+(isHid?" ghosted":"")+(t.completed?" done":"")+'" data-gid="'+t.gid+'" title="'+esc(t.name)+'">'+
+      icon+esc(cleanName(t))+
+      '<b class="pp-x" data-hide="'+t.gid+'" title="Hide from the plan">×</b></span>';
+  };
+  const taskPill=t=>{
+    const isHid=hidden.has(t.gid);
+    if(isHid&&!P.showHidden) return "";
+    return '<span class="pp task'+(isHid?" ghosted":"")+(t.completed?" done":"")+'" data-gid="'+t.gid+'" title="'+esc(t.name)+'">'+
+      '<i class="pp-dot" style="background:'+(t.projectColor||"#6B7A8F")+'"></i>'+esc(cleanName(t))+
       '<b class="pp-x" data-hide="'+t.gid+'" title="Hide from the plan">×</b></span>';
   };
   let cells="";
@@ -127,7 +137,7 @@ function planMonthHTML(c){
     shoots.forEach(t=>inner+=keyPill(t,"🎬 ","shoot"));
     events.forEach(t=>inner+=keyPill(t,"⭐ ","event"));
     stores.forEach(t=>{ if(t.isOpening) inner+=keyPill(t,"📍 ","store"); });
-    if(others.length) inner+='<span class="pd-more" data-day="'+iso(dt)+'" title="'+others.length+' more task(s) — open in the calendar">• '+others.length+' task'+(others.length>1?"s":"")+'</span>';
+    others.forEach(t=>inner+=taskPill(t));
     cells+='<div class="pd-cell'+(dim?" dim":"")+(isToday?" today":"")+'" data-date="'+iso(dt)+'">'+inner+'</div>';
   }
   return '<div class="plan-month"><div class="pm-h">'+MO[m]+' <span>'+y+'</span></div>'+
