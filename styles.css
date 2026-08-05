@@ -1795,3 +1795,23 @@ body.lane-resize-active .girls-board .glane{transition:none}
   .mention-foot span{display:none}
 }
 @media (prefers-reduced-motion:reduce){#btnAt.mention-pop{animation:none}}
+
+/* ================= touch / smartboard: no hover to reveal ============
+   On an interactive whiteboard or touchscreen there is no mouse hover, so
+   controls that normally appear only on :hover would stay hidden from the
+   pen. Reveal them permanently on hover-less pointers. (Scrims, trays and
+   animation fades are opacity-0 for other reasons and are left alone.) */
+@media (hover: none), (pointer: coarse){
+  .card .ctick,
+  .warow .wa-sent,
+  .news-row .news-go,
+  .lane.pool .gcard .c-acts, .gcard .c-acts,
+  .sticky .sticky-x,
+  .campaign-task .campaign-sub-btn,
+  .pp .pp-x,
+  .plan-stamp .ps-x,
+  .lane-it .li-asana, .lane-it .li-x{
+    opacity:1 !important;
+    transform:none !important;
+  }
+}
