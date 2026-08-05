@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#0A3D62">
 <title>Academy Command Center</title>
-<link rel="stylesheet" href="/styles.css?v=20260724e">
+<link rel="stylesheet" href="/styles.css?v=20260805a">
 </head>
 <body>
 <!--
@@ -79,6 +79,7 @@
       <button class="tab" data-tab="communities">Communities</button>
       <button class="tab" data-tab="content">Content</button>
       <button class="tab" data-tab="curriculum">Curriculum</button>
+      <button class="tab" data-tab="plan">90-Day Plan</button>
     </div>
     <div class="tab-row tab-row-2">
       <button class="tab" data-tab="stores">Training &amp; New Stores</button>
@@ -248,6 +249,19 @@
     <div id="maxOut" style="margin-top:14px;display:none"></div>
   </section>
 
+  <!-- ============ 90-DAY PLAN ============ -->
+  <section id="tab-plan" class="tabpane">
+    <p class="hint">The next 90 days on one wall — three months side by side with your real campaigns, shoots, events and store openings. Plan right on top: drop <b>sticky notes</b> & <b>stamps</b>, fill the <b>goal lanes</b>, scribble with the <b>pen</b>, and <b>push</b> agreed items straight into Asana. Everything saves for the whole team, live.</p>
+    <div id="planToolbar" class="plan-toolbar"></div>
+    <div id="planWrap" class="plan-wrap mode-select">
+      <div id="planBoard" class="plan-board"></div>
+      <svg id="planInk" class="plan-ink" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div id="planNotes" class="plan-notes"></div>
+    </div>
+    <div class="stud-h"><span>Goal lanes — what we want to achieve in 90 days</span></div>
+    <div id="planLanes" class="plan-lanes"></div>
+  </section>
+
   <!-- ============ COMMUNITIES ============ -->
   <section id="tab-communities" class="tabpane">
     <div id="msgSetup" style="display:none"></div>
@@ -379,22 +393,23 @@
 <div id="fridayWrap"></div>
 <div id="runWrap"></div>
 
-<script src="/js/data.js?v=20260724e"></script>
-<script src="/js/core.js?v=20260724e"></script>
-<script src="/js/demo.js?v=20260724e"></script>
-<script src="/js/calendar.js?v=20260724e"></script>
-<script src="/js/campaigns.js?v=20260724e"></script>
-<script src="/js/people.js?v=20260724e"></script>
-<script src="/js/content.js?v=20260724e"></script>
-<script src="/js/events.js?v=20260724e"></script>
-<script src="/js/videos.js?v=20260724e"></script>
-<script src="/js/content-library.js?v=20260724e"></script>
-<script src="/js/communities.js?v=20260724e"></script>
-<script src="/js/drawer.js?v=20260724e"></script>
-<script src="/js/stores.js?v=20260724e"></script>
-<script src="/js/platform.js?v=20260724e"></script>
-<script src="/js/pr.js?v=20260724e"></script>
-<script src="/js/friday.js?v=20260724e"></script>
-<script src="/js/news.js?v=20260724e"></script>
+<script src="/js/data.js?v=20260805a"></script>
+<script src="/js/core.js?v=20260805a"></script>
+<script src="/js/demo.js?v=20260805a"></script>
+<script src="/js/calendar.js?v=20260805a"></script>
+<script src="/js/campaigns.js?v=20260805a"></script>
+<script src="/js/people.js?v=20260805a"></script>
+<script src="/js/content.js?v=20260805a"></script>
+<script src="/js/events.js?v=20260805a"></script>
+<script src="/js/videos.js?v=20260805a"></script>
+<script src="/js/content-library.js?v=20260805a"></script>
+<script src="/js/communities.js?v=20260805a"></script>
+<script src="/js/drawer.js?v=20260805a"></script>
+<script src="/js/stores.js?v=20260805a"></script>
+<script src="/js/platform.js?v=20260805a"></script>
+<script src="/js/pr.js?v=20260805a"></script>
+<script src="/js/friday.js?v=20260805a"></script>
+<script src="/js/news.js?v=20260805a"></script>
+<script src="/js/plan.js?v=20260805a"></script>
 </body>
 </html>

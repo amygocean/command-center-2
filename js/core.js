@@ -374,6 +374,7 @@ function normaliseKeeper(raw){
   if(!k.ideas||typeof k.ideas!=="object") k.ideas={};
   if(!k.fuel||typeof k.fuel!=="object") k.fuel={};
   if(!k.boards||typeof k.boards!=="object") k.boards={};
+  if(!k.plan||typeof k.plan!=="object") k.plan={notes:[],ink:[],hidden:[],lanes:{}};
   if(!k._meta||typeof k._meta!=="object") k._meta={updatedAt:0};
   return k;
 }
@@ -864,6 +865,8 @@ function switchTab(name){
   moveTabInk();
   if(name==="people"&&typeof clampCorkNotes==="function")
     requestAnimationFrame(()=>clampCorkNotes(true));
+  if(name==="plan"&&typeof renderPlan==="function")
+    requestAnimationFrame(()=>renderPlan());
 }
 function moveTabInk(){
   const bar=document.querySelector(".tabs"), act=document.querySelector(".tab.active"), ink=document.getElementById("tabInk");
@@ -875,6 +878,7 @@ function renderAll(){
   renderSub(); renderGreeting(); renderChips(); renderPersonToggles(); renderTrainerToggles();
   renderCalendar(); renderGirls(); renderCampaigns(); renderStudio(); renderCurriculum(); renderCommunities();
   renderStores(); renderPlatform(); prTabVisibility(); renderMentionBadge();
+  if(typeof renderPlan==="function") renderPlan();
   if(typeof renderEventsTab==="function") renderEventsTab();
   if(typeof renderContentTab==="function") renderContentTab();
   computeSuggestions();
